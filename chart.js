@@ -1,56 +1,54 @@
 const chart = LightweightCharts.createChart(document.getElementById('chart'), {
-    width: window.innerWidth,
-    height: window.innerHeight,
-    layout: {
-        background: { color: '#000000' },
-        textColor: '#ffffff',
-    },
-    grid: {
-        vertLines: { color: '#444' },
-        horzLines: { color: '#444' },
-    },
-    timeScale: {
-        timeVisible: true,
-    },
+  width: window.innerWidth,
+  height: window.innerHeight,
+  layout: {
+    backgroundColor: '#000000',
+    textColor: '#ffffff',
+  },
+  grid: {
+    vertLines: { color: '#444' },
+    horzLines: { color: '#444' },
+  },
+  timeScale: {
+    timeVisible: true,
+    secondsVisible: false,
+  },
 });
-
-const candleSeries = chart.addCandlestickSeries({
-    upColor: '#26a69a',
-    downColor: '#ef5350',
-    borderVisible: false,
-    wickUpColor: '#26a69a',
-    wickDownColor: '#ef5350',
-});
-
-const line50 = chart.addLineSeries({ color: 'white', lineWidth: 2 });
-const line100 = chart.addLineSeries({ color: 'gold', lineWidth: 2 });
-const line200 = chart.addLineSeries({ color: 'hotpink', lineWidth: 2 });
 
 async function fetchData() {
-    try {
-        const response = await fetch('https://btc-spread-test-pipeline.onrender.com/output.json'); // Replace this
-        const data = await response.json();
+  try {
+    const response = await fetch('https://btc-spread-test-pipeline.onrender.com/output.json');
+    const data = await response.json();
 
-        const candles = data.map(d => ({
-            time: d.time,
-            open: d.open,
-            high: d.high,
-            low: d.low,
-            close: d.close,
-        }));
+    const priceSeries = chart.addLineSeries({ color: '#00ffff', lineWidth: 2 });
+    const ma50Series = chart.addLineSeries({ color: '#ffffff', lineWidth: 1 });
+    const ma100Series = chart.addLineSeries({ color: '#ffd700', lineWidth: 1 });
+    const ma200Series = chart.addLineSeries({ color: '#ff69b4', lineWidth: 1 });
 
-        const ma50 = data.map(d => ({ time: d.time, value: d.sma_50 }));
-        const ma100 = data.map(d => ({ time: d.time, value: d.sma_100 }));
-        const ma200 = data.map(d => ({ time: d.time, value: d.sma_200 }));
+    const formattedPrice = data.map(item => ({
+      time: Math.floor(new Date(item.time).getTime() / 1000),
+      value: item.price,
+    }));
+    const formattedMA50 = data.map(item => ({
+      time: Math.floor(new Date(item.time).getTime() / 1000),
+      value: item.ma_50,
+    }));
+    const formattedMA100 = data.map(item => ({
+      time: Math.floor(new Date(item.time).getTime() / 1000),
+      value: item.ma_100,
+    }));
+    const formattedMA200 = data.map(item => ({
+      time: Math.floor(new Date(item.time).getTime() / 1000),
+      value: item.ma_200,
+    }));
 
-        candleSeries.setData(candles);
-        line50.setData(ma50);
-        line100.setData(ma100);
-        line200.setData(ma200);
-    } catch (e) {
-        document.getElementById('error').textContent = 'Failed to load chart data.';
-        console.error(e);
-    }
+    priceSeries.setData(formattedPrice);
+    ma50Series.setData(formattedMA50);
+    ma100Series.setData(formattedMA100);
+    ma200Series.setData(formattedMA200);
+  } catch (error) {
+    document.getElementById('error').textContent = 'Error loading data: ' + error;
+  }
 }
 
 fetchData();
