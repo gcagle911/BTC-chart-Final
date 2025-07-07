@@ -45,6 +45,15 @@ async function drawMA() {
   drawLine(ma50, "ma_50", "white");
   drawLine(ma100, "ma_100", "gold");
   drawLine(ma200, "ma_200", "deeppink");
+  // TEMP: Show test line to verify canvas is drawing
+const testData = [
+  { ma_50: 0.001 },
+  { ma_50: 0.0015 },
+  { ma_50: 0.002 },
+  { ma_50: 0.0017 },
+  { ma_50: 0.0019 },
+];
+drawLine(testData, "ma_50", "white");
 }
 
 setInterval(drawMA, 60000); // redraw every minute
