@@ -38,9 +38,14 @@ async function drawMA() {
     const ma200 = data.filter(d => d.ma_200 != null);
     log(`📊 ma50: ${ma50.length}, ma100: ${ma100.length}, ma200: ${ma200.length}`);
 
-    const scaleY = val => {
-      return canvas.height - (val * 100000); // crude vertical scale
-    };
+    // Dynamically scale based on min/max of all MAs
+const values = data.flatMap(d => [d.ma_50, d.ma_100, d.ma_200]).filter(v => v != null);
+const min = Math.min(...values);
+const max = Math.max(...values);
+
+const scaleY = val => {
+  return canvas.height - ((val - min) / (max - min)) * canvas.height;
+};
 
     const scaleX = (index, total) => {
       return (index / total) * canvas.width;
