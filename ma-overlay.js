@@ -1,4 +1,4 @@
-// Create the canvas and overlay it on top of the chart
+// Add overlay canvas
 const canvas = document.createElement("canvas");
 canvas.style.position = "absolute";
 canvas.style.top = "0";
@@ -7,58 +7,79 @@ canvas.style.width = "100%";
 canvas.style.height = "100%";
 canvas.style.pointerEvents = "none";
 canvas.style.zIndex = "9999";
-document.body.appendChild(canvas);  // ✅ Attach to body, not chart div
+document.getElementById("tradingview_chart").appendChild(canvas);
 
 const ctx = canvas.getContext("2d");
 
-// Async function to fetch and draw MAs
+// ⬇️ Add screen logging (mobile-friendly)
+function log(msg) {
+  const logDiv = document.createElement("div");
+  logDiv.style.position = "absolute";
+  logDiv.style.bottom = "0";
+  logDiv.style.left = "0";
+  logDiv.style.color = "lime";
+  logDiv.style.fontSize = "12px";
+  logDiv.style.backgroundColor = "rgba(0, 0, 0, 0.6)";
+  logDiv.style.padding = "4px";
+  logDiv.innerText = msg;
+  document.body.appendChild(logDiv);
+}
+
+// Draw MAs from JSON
 async function drawMA() {
   try {
+    log("🟡 Fetching JSON...");
     const res = await fetch("https://btc-spread-test-pipeline.onrender.com/output.json");
     const data = await res.json();
+    log("✅ JSON fetched");
 
-    // Filter out bad values
-    const ma50 = data.filter(d => d.ma_50 !== null && d.ma_50 !== undefined);
-    const ma100 = data.filter(d => d.ma_100 !== null && d.ma_100 !== undefined);
-    const ma200 = data.filter(d => d.ma_200 !== null && d.ma_200 !== undefined);
+    const ma50 = data.filter(d => d.ma_50 != null);
+    const ma100 = data.filter(d => d.ma_100 != null);
+    const ma200 = data.filter(d => d.ma_200 != null);
+    log(`📊 ma50: ${ma50.length}, ma100: ${ma100.length}, ma200: ${ma200.length}`);
 
-    // Clear old lines
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const scaleY = val => {
+      return canvas.height - (val * 100000); // crude vertical scale
+    };
 
-    // Rescale Y based on value (adjust multiplier if needed)
-    const scaleY = (val) => canvas.height - (val * 100000); // adjust for visual height
-    const scaleX = (index, total) => (index / total) * canvas.width;
+    const scaleX = (index, total) => {
+      return (index / total) * canvas.width;
+    };
 
-    // Generic line drawer
-    function drawLine(data, key, color) {
+    // Drawing function
+    function drawLine(points, color) {
+      if (points.length === 0) return;
       ctx.beginPath();
       ctx.strokeStyle = color;
       ctx.lineWidth = 2;
 
-      data.forEach((point, i) => {
-        const x = scaleX(i, data.length);
-        const y = scaleY(point[key]);
-        if (i === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
-        }
+      points.forEach((pt, i) => {
+        const x = scaleX(i, points.length);
+        const y = scaleY(pt.value);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
       });
 
       ctx.stroke();
     }
 
-    // Draw all 3 lines
-    drawLine(ma50, "ma_50", "white");
-    drawLine(ma100, "ma_100", "gold");
-    drawLine(ma200, "ma_200", "deeppink");
+    // Convert each MA array to drawable format
+    const ma50Points = ma50.map(d => ({ value: d.ma_50 }));
+    const ma100Points = ma100.map(d => ({ value: d.ma_100 }));
+    const ma200Points = ma200.map(d => ({ value: d.ma_200 }));
+
+    // Clear canvas first
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    drawLine(ma50Points, "white");
+    drawLine(ma100Points, "gold");
+    drawLine(ma200Points, "hotpink");
+    log("✅ Lines drawn");
 
   } catch (err) {
-    console.error("Error drawing MAs:", err);
+    log("❌ Error loading JSON or drawing: " + err.message);
   }
 }
 
-// Redraw every minute
-setInterval(drawMA, 60000);
-window.addEventListener("resize", drawMA);
-drawMA();  // Initial call
+// Wait for TradingView to fully render, then draw
+setTimeout(drawMA, 3000);
