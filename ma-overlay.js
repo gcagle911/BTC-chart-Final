@@ -11,7 +11,7 @@ document.body.appendChild(canvas);
 const ctx = canvas.getContext("2d");
 
 async function drawMA() {
-  const res = await fetch("https://d-test-pipeline.onrender.com/output.json");
+  const res = await fetch("https://btc-spread-test-pipeline.onrender.com/output.json");
   const data = await res.json();
 
   const ma50 = data.filter(d => d.ma_50 !== null);
