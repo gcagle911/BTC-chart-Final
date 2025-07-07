@@ -2,38 +2,21 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>BTC + Spread MAs</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BTC + Spread MAs Chart</title>
   <style>
-    html, body {
+    body {
       margin: 0;
-      padding: 0;
-      background-color: black;
-      color: white;
-      height: 100%;
-      width: 100%;
-      font-family: sans-serif;
+      background-color: #131722;
     }
     #chart {
       width: 100vw;
       height: 100vh;
     }
-    #error {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      color: red;
-      background: rgba(0, 0, 0, 0.7);
-      padding: 5px 10px;
-      font-size: 14px;
-      z-index: 1000;
-    }
   </style>
 </head>
 <body>
   <div id="chart"></div>
-  <div id="error"></div>
-
   <script src="https://unpkg.com/lightweight-charts@4.0.0/dist/lightweight-charts.standalone.production.js"></script>
   <script src="chart.js"></script>
 </body>
