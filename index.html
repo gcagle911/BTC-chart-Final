@@ -2,31 +2,25 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BTC + Spread MA Chart</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>BTC Price with Spread MAs</title>
   <style>
-    body {
+    html, body {
       margin: 0;
-      background-color: #000;
+      padding: 0;
+      background-color: black;
+      color: white;
+      height: 100%;
+      width: 100%;
     }
-    #chart-container {
-      display: flex;
-      flex-direction: column;
+    #chart {
       height: 100vh;
-    }
-    #main-chart {
-      height: 70%;
-    }
-    #zscore-chart {
-      height: 30%;
+      width: 100vw;
     }
   </style>
 </head>
 <body>
-  <div id="chart-container">
-    <div id="main-chart"></div>
-    <div id="zscore-chart"></div>
-  </div>
+  <div id="chart"></div>
   <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
   <script src="chart.js"></script>
 </body>
