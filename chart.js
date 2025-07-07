@@ -1,62 +1,52 @@
-const mainChart = LightweightCharts.createChart(document.getElementById('main-chart'), {
-  layout: { background: { color: '#000' }, textColor: '#DDD' },
-  grid: { vertLines: { color: '#222' }, horzLines: { color: '#222' } },
-  timeScale: { timeVisible: true, secondsVisible: false },
-  crosshair: { mode: 0 },
-});
-const zChart = LightweightCharts.createChart(document.getElementById('zscore-chart'), {
-  layout: { background: { color: '#000' }, textColor: '#DDD' },
-  grid: { vertLines: { color: '#222' }, horzLines: { color: '#222' } },
-  timeScale: { timeVisible: true, secondsVisible: false },
-  crosshair: { mode: 0 },
-});
+async function fetchData() {
+  const res = await fetch("https://btc-spread-test-pipeline.onrender.com/output.json");
+  if (!res.ok) throw new Error("Failed to load JSON");
+  return await res.json();
+}
 
-// Candle chart
-const candleSeries = mainChart.addCandlestickSeries();
-const ma50 = mainChart.addLineSeries({ color: 'white', lineWidth: 2 });
-const ma100 = mainChart.addLineSeries({ color: 'gold', lineWidth: 2 });
-const ma200 = mainChart.addLineSeries({ color: 'pink', lineWidth: 2 });
+function showError(msg) {
+  document.getElementById("error").textContent = msg;
+}
 
-// Z-score (bottom panel)
-const zSeries = zChart.addLineSeries({ color: 'cyan', lineWidth: 2 });
+fetchData().then(data => {
+  const chart = LightweightCharts.createChart(document.getElementById("chart"), {
+    layout: { background: { color: 'black' }, textColor: 'white' },
+    grid: { vertLines: { color: '#222' }, horzLines: { color: '#222' } },
+    timeScale: { timeVisible: true, secondsVisible: false },
+    rightPriceScale: { borderColor: "#71649C" },
+  });
 
-fetch('https://btc-spread-test-pipeline.onrender.com/output.json')
-  .then(response => response.json())
-  .then(data => {
-    const candles = [];
-    const line50 = [];
-    const line100 = [];
-    const line200 = [];
-    const zscore = [];
+  const candlestickSeries = chart.addCandlestickSeries();
+  const ma50 = chart.addLineSeries({ color: "white", lineWidth: 2 });
+  const ma100 = chart.addLineSeries({ color: "gold", lineWidth: 2 });
+  const ma200 = chart.addLineSeries({ color: "pink", lineWidth: 2 });
 
-    data.forEach(entry => {
-      const timestamp = Math.floor(new Date(entry.time).getTime() / 1000);
-      const price = entry.price;
+  // Prepare the candle and line data
+  const candles = [];
+  const ma50Data = [];
+  const ma100Data = [];
+  const ma200Data = [];
 
-      // Fake OHLC from price (flat candle for now)
-      candles.push({
-        time: timestamp,
-        open: price,
-        high: price,
-        low: price,
-        close: price,
-      });
+  for (const d of data) {
+    const t = Math.floor(new Date(d.time).getTime() / 1000);
 
-      line50.push({ time: timestamp, value: entry.ma_50 });
-      line100.push({ time: timestamp, value: entry.ma_100 });
-      line200.push({ time: timestamp, value: entry.ma_200 });
-
-      // Optional: z-score = (spread - ma_200) / std (placeholder)
-      const z = (entry.spread_avg_L20_pct - entry.ma_200) / 0.0025;
-      zscore.push({ time: timestamp, value: z });
+    // Mock candle from single price point
+    candles.push({
+      time: t,
+      open: d.price,
+      high: d.price,
+      low: d.price,
+      close: d.price
     });
 
-    candleSeries.setData(candles);
-    ma50.setData(line50);
-    ma100.setData(line100);
-    ma200.setData(line200);
-    zSeries.setData(zscore);
-  })
-  .catch(err => {
-    console.error('Failed to load data:', err);
-  });
+    ma50Data.push({ time: t, value: d.ma_50 });
+    ma100Data.push({ time: t, value: d.ma_100 });
+    ma200Data.push({ time: t, value: d.ma_200 });
+  }
+
+  candlestickSeries.setData(candles);
+  ma50.setData(ma50Data);
+  ma100.setData(ma100Data);
+  ma200.setData(ma200Data);
+})
+.catch(err => showError(err.message));
