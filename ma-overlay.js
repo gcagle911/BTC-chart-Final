@@ -1,3 +1,4 @@
+// Create the canvas and overlay it on top of the chart
 const canvas = document.createElement("canvas");
 canvas.style.position = "absolute";
 canvas.style.top = "0";
@@ -6,57 +7,58 @@ canvas.style.width = "100%";
 canvas.style.height = "100%";
 canvas.style.pointerEvents = "none";
 canvas.style.zIndex = "9999";
-document.body.appendChild(canvas);
+document.body.appendChild(canvas);  // ✅ Attach to body, not chart div
 
 const ctx = canvas.getContext("2d");
 
+// Async function to fetch and draw MAs
 async function drawMA() {
-  const res = await fetch("https://btc-spread-test-pipeline.onrender.com/output.json");
-  const data = await res.json();
+  try {
+    const res = await fetch("https://btc-spread-test-pipeline.onrender.com/output.json");
+    const data = await res.json();
 
-  const ma50 = data.filter(d => d.ma_50 !== null);
-  const ma100 = data.filter(d => d.ma_100 !== null);
-  const ma200 = data.filter(d => d.ma_200 !== null);
+    // Filter out bad values
+    const ma50 = data.filter(d => d.ma_50 !== null && d.ma_50 !== undefined);
+    const ma100 = data.filter(d => d.ma_100 !== null && d.ma_100 !== undefined);
+    const ma200 = data.filter(d => d.ma_200 !== null && d.ma_200 !== undefined);
 
-  function scaleY(val) {
-  return canvas.height - (val * 100000); 
-}  // Adjust to compress/spread line scale
+    // Clear old lines
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Rescale Y based on value (adjust multiplier if needed)
+    const scaleY = (val) => canvas.height - (val * 100000); // adjust for visual height
+    const scaleX = (index, total) => (index / total) * canvas.width;
+
+    // Generic line drawer
+    function drawLine(data, key, color) {
+      ctx.beginPath();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+
+      data.forEach((point, i) => {
+        const x = scaleX(i, data.length);
+        const y = scaleY(point[key]);
+        if (i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      });
+
+      ctx.stroke();
+    }
+
+    // Draw all 3 lines
+    drawLine(ma50, "ma_50", "white");
+    drawLine(ma100, "ma_100", "gold");
+    drawLine(ma200, "ma_200", "deeppink");
+
+  } catch (err) {
+    console.error("Error drawing MAs:", err);
   }
-
-  function scaleX(index, total) {
-    return (index / total) * canvas.width;
-  }
-
-  function drawLine(data, key, color) {
-    ctx.beginPath();
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
-
-    data.forEach((point, i) => {
-      const x = scaleX(i, data.length);
-      const y = scaleY(point[key]);
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-
-    ctx.stroke();
-  }
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  drawLine(ma50, "ma_50", "white");
-  drawLine(ma100, "ma_100", "gold");
-  drawLine(ma200, "ma_200", "deeppink");
-  // TEMP: Show test line to verify canvas is drawing
-const testData = [
-  { ma_50: 0.001 },
-  { ma_50: 0.0015 },
-  { ma_50: 0.002 },
-  { ma_50: 0.0017 },
-  { ma_50: 0.0019 },
-];
-drawLine(testData, "ma_50", "white");
 }
 
-setInterval(drawMA, 60000); // redraw every minute
-window.addEventListener("resize", () => drawMA());
-drawMA();
+// Redraw every minute
+setInterval(drawMA, 60000);
+window.addEventListener("resize", drawMA);
+drawMA();  // Initial call
