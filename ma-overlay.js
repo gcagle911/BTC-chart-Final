@@ -6,7 +6,7 @@ canvas.style.width = "100%";
 canvas.style.height = "100%";
 canvas.style.pointerEvents = "none";
 canvas.style.zIndex = "9999";
-document.body.appendChild(canvas);
+document.getElementById("tradingview_chart").appendChild(canvas);
 
 const ctx = canvas.getContext("2d");
 
