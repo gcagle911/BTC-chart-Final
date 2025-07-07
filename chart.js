@@ -1,6 +1,4 @@
-import { createChart } from 'lightweight-charts';
-
-const chart = createChart(document.getElementById('chart'), {
+const chart = LightweightCharts.createChart(document.getElementById('chart'), {
     width: window.innerWidth,
     height: window.innerHeight,
     layout: {
@@ -11,12 +9,8 @@ const chart = createChart(document.getElementById('chart'), {
         vertLines: { color: '#444' },
         horzLines: { color: '#444' },
     },
-    crosshair: {
-        mode: 0,
-    },
     timeScale: {
         timeVisible: true,
-        secondsVisible: false,
     },
 });
 
@@ -34,29 +28,28 @@ const line200 = chart.addLineSeries({ color: 'hotpink', lineWidth: 2 });
 
 async function fetchData() {
     try {
-        const response = await fetch('https://btc-spread-test-pipeline.onrender.com/output.json'); // UPDATE THIS
+        const response = await fetch('https://btc-spread-test-pipeline.onrender.com/output.json'); // Replace this
         const data = await response.json();
 
-        const candles = data.map(item => ({
-            time: item.time,
-            open: item.open,
-            high: item.high,
-            low: item.low,
-            close: item.close,
+        const candles = data.map(d => ({
+            time: d.time,
+            open: d.open,
+            high: d.high,
+            low: d.low,
+            close: d.close,
         }));
 
-        const ma50 = data.map(item => ({ time: item.time, value: item.sma_50 }));
-        const ma100 = data.map(item => ({ time: item.time, value: item.sma_100 }));
-        const ma200 = data.map(item => ({ time: item.time, value: item.sma_200 }));
+        const ma50 = data.map(d => ({ time: d.time, value: d.sma_50 }));
+        const ma100 = data.map(d => ({ time: d.time, value: d.sma_100 }));
+        const ma200 = data.map(d => ({ time: d.time, value: d.sma_200 }));
 
         candleSeries.setData(candles);
         line50.setData(ma50);
         line100.setData(ma100);
         line200.setData(ma200);
-
-    } catch (err) {
-        document.getElementById('error').textContent = 'Failed to load data.';
-        console.error('Fetch error:', err);
+    } catch (e) {
+        document.getElementById('error').textContent = 'Failed to load chart data.';
+        console.error(e);
     }
 }
 
