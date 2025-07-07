@@ -17,7 +17,12 @@ fetch("https://btc-spread-test-pipeline.onrender.com/output.json")
     canvas.style.height = "100%";
     canvas.style.pointerEvents = "none";
     canvas.style.zIndex = "99";
-    document.body.appendChild(canvas);
+    const container = document.getElementById("tradingview_chart");
+if (container) {
+  container.appendChild(canvas);
+} else {
+  console.error("🟥 TradingView container not found.");
+}
 
     const ctx = canvas.getContext("2d");
 
