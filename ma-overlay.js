@@ -44,8 +44,8 @@ const min = Math.min(...values);
 const max = Math.max(...values);
 
 const scaleY = val => {
-  return canvas.height - ((val - min) / (max - min)) * canvas.height;
-};
+  const amplified = val * 1_000_000;
+return canvas.height - ((amplified - min * 1_000_000) / ((max - min) * 1_000_000)) * canvas.height;
 
     const scaleX = (index, total) => {
       return (index / total) * canvas.width;
