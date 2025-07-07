@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>BTC Price with Spread MAs</title>
+  <title>BTC + Spread MAs</title>
   <style>
     html, body {
       margin: 0;
@@ -12,15 +12,28 @@
       color: white;
       height: 100%;
       width: 100%;
+      font-family: sans-serif;
     }
     #chart {
-      height: 100vh;
       width: 100vw;
+      height: 100vh;
+    }
+    #error {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: red;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 5px 10px;
+      font-size: 14px;
+      z-index: 1000;
     }
   </style>
 </head>
 <body>
   <div id="chart"></div>
+  <div id="error"></div>
+
   <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
   <script src="chart.js"></script>
 </body>
