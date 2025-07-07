@@ -1,54 +1,82 @@
-const chart = LightweightCharts.createChart(document.getElementById('chart'), {
-  width: window.innerWidth,
-  height: window.innerHeight,
-  layout: {
-    backgroundColor: '#000000',
-    textColor: '#ffffff',
-  },
-  grid: {
-    vertLines: { color: '#444' },
-    horzLines: { color: '#444' },
-  },
-  timeScale: {
-    timeVisible: true,
-    secondsVisible: false,
-  },
-});
-
 async function fetchData() {
-  try {
-    const response = await fetch('https://btc-spread-test-pipeline.onrender.com/output.json');
-    const data = await response.json();
-
-    const priceSeries = chart.addLineSeries({ color: '#00ffff', lineWidth: 2 });
-    const ma50Series = chart.addLineSeries({ color: '#ffffff', lineWidth: 1 });
-    const ma100Series = chart.addLineSeries({ color: '#ffd700', lineWidth: 1 });
-    const ma200Series = chart.addLineSeries({ color: '#ff69b4', lineWidth: 1 });
-
-    const formattedPrice = data.map(item => ({
-      time: Math.floor(new Date(item.time).getTime() / 1000),
-      value: item.price,
-    }));
-    const formattedMA50 = data.map(item => ({
-      time: Math.floor(new Date(item.time).getTime() / 1000),
-      value: item.ma_50,
-    }));
-    const formattedMA100 = data.map(item => ({
-      time: Math.floor(new Date(item.time).getTime() / 1000),
-      value: item.ma_100,
-    }));
-    const formattedMA200 = data.map(item => ({
-      time: Math.floor(new Date(item.time).getTime() / 1000),
-      value: item.ma_200,
-    }));
-
-    priceSeries.setData(formattedPrice);
-    ma50Series.setData(formattedMA50);
-    ma100Series.setData(formattedMA100);
-    ma200Series.setData(formattedMA200);
-  } catch (error) {
-    document.getElementById('error').textContent = 'Error loading data: ' + error;
-  }
+  const response = await fetch('https://btc-spread-test-pipeline.onrender.com/output.json');
+  return await response.json();
 }
 
-fetchData();
+function toUnixTimestamp(dateStr) {
+  return Math.floor(new Date(dateStr).getTime() / 1000);
+}
+
+function setupChart(data) {
+  const chart = LightweightCharts.createChart(document.getElementById('chart'), {
+    layout: {
+      background: { color: '#131722' },
+      textColor: '#D1D4DC',
+    },
+    grid: {
+      vertLines: { color: '#2B2B43' },
+      horzLines: { color: '#2B2B43' },
+    },
+    rightPriceScale: {
+      visible: true,
+    },
+    leftPriceScale: {
+      visible: true,
+    },
+    timeScale: {
+      timeVisible: true,
+      secondsVisible: false,
+    }
+  });
+
+  const priceSeries = chart.addLineSeries({
+    priceScaleId: 'right',
+    color: '#00ffff',
+    lineWidth: 2,
+  });
+
+  const ma50 = chart.addLineSeries({
+    priceScaleId: 'left',
+    color: '#ffffff',
+    lineWidth: 1,
+  });
+
+  const ma100 = chart.addLineSeries({
+    priceScaleId: 'left',
+    color: '#ffd700',
+    lineWidth: 1,
+  });
+
+  const ma200 = chart.addLineSeries({
+    priceScaleId: 'left',
+    color: '#ff69b4',
+    lineWidth: 1,
+  });
+
+  const priceData = data.map(d => ({
+    time: toUnixTimestamp(d.time),
+    value: d.price,
+  }));
+
+  const ma50Data = data.map(d => ({
+    time: toUnixTimestamp(d.time),
+    value: d.ma_50,
+  }));
+
+  const ma100Data = data.map(d => ({
+    time: toUnixTimestamp(d.time),
+    value: d.ma_100,
+  }));
+
+  const ma200Data = data.map(d => ({
+    time: toUnixTimestamp(d.time),
+    value: d.ma_200,
+  }));
+
+  priceSeries.setData(priceData);
+  ma50.setData(ma50Data);
+  ma100.setData(ma100Data);
+  ma200.setData(ma200Data);
+}
+
+fetchData().then(setupChart);
