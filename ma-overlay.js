@@ -19,7 +19,8 @@ async function drawMA() {
   const ma200 = data.filter(d => d.ma_200 !== null);
 
   function scaleY(val) {
-    return canvas.height - ((val - 1.5) * 500);  // Adjust to compress/spread line scale
+  return canvas.height - (val * 100000); 
+}  // Adjust to compress/spread line scale
   }
 
   function scaleX(index, total) {
