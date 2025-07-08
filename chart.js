@@ -1,5 +1,5 @@
 async function fetchData() {
-  const response = await fetch('https://btc-spread-test-pipeline.onrender.com/output.json');
+  const response = await fetch('https://btc-spread-test-pipeline.onrender.com/output-latest.json');
   return await response.json();
 }
 
