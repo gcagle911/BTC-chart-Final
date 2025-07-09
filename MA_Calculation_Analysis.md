@@ -15,29 +15,35 @@ In your BTC + Spread MAs Chart project, you're displaying three different moving
 2. **Backend Role**: The actual MA calculations occur on your backend service at `https://btc-spread-test-pipeline.onrender.com/`
 3. **Data Flow**: Your frontend fetches JSON data that already contains the calculated `ma_50`, `ma_100`, and `ma_200` values
 
-## How Simple Moving Averages Are Calculated
+## How Moving Averages Are Calculated
 
-Based on standard financial analysis practices, your MAs are likely calculated using the **Simple Moving Average (SMA)** formula:
+Your MAs use a sophisticated approach based on **L20 bid-ask data** rather than simple closing prices:
 
-### Simple Moving Average Formula
+### L20 Bid-Ask Data Calculation
 
 ```
-SMA = (Sum of closing prices over N periods) / N
+Base Value = Average of L20 bid-ask data on BTC
+MA = (Sum of L20-derived values over N periods) / N
 ```
 
 Where:
-- N = the period length (50, 100, or 200 days)
-- Closing prices = Bitcoin price at the end of each time period
+- **L20**: Top 20 levels of the order book (20 best bid prices + 20 best ask prices)
+- **N**: The period length (50, 100, or 200 periods)
+- **Base Value**: Some form of average calculated from the L20 bid-ask spread data
 
 ### Example Calculation for MA50
 
-For a 50-day moving average on day X:
+For a 50-period moving average:
 
 ```
-MA50 = (Price[X] + Price[X-1] + Price[X-2] + ... + Price[X-49]) / 50
+1. Calculate L20 average for each time period:
+   L20_Avg[X] = f(Top20_Bids[X], Top20_Asks[X])
+   
+2. Apply moving average:
+   MA50 = (L20_Avg[X] + L20_Avg[X-1] + ... + L20_Avg[X-49]) / 50
 ```
 
-This gives you the average price over the last 50 trading periods.
+This approach incorporates **market depth and liquidity** rather than just price action.
 
 ### Rolling Window Approach
 
@@ -65,9 +71,9 @@ data.forEach(d => {
 {
   "time": "2024-01-15T10:30:00Z",
   "price": 43250.50,
-  "ma_50": 42800.25,
-  "ma_100": 41950.75,
-  "ma_200": 40500.30
+  "ma_50": 42800.25,    // 50-period MA from L20 bid-ask averages
+  "ma_100": 41950.75,   // 100-period MA from L20 bid-ask averages  
+  "ma_200": 40500.30    // 200-period MA from L20 bid-ask averages
 }
 ```
 
@@ -91,18 +97,33 @@ data.forEach(d => {
 - **Use**: Long-term trend analysis
 - **Color**: Hot Pink (`#ff69b4`)
 
-## Why This Approach Makes Sense
+## Advantages of L20 Bid-Ask Based MAs
+
+### Why L20 Data is Superior:
+1. **Market Depth**: Incorporates order book liquidity, not just last traded price
+2. **Real Market Sentiment**: Reflects actual buying/selling pressure at 20 price levels
+3. **Reduced Noise**: Less susceptible to single large trades or price spikes
+4. **Liquidity Awareness**: Shows where significant volume exists in the market
+5. **More Accurate Trends**: Better represents sustainable price levels
+
+### L20 Bid-Ask Calculation Methods (Possible):
+- **Simple Average**: `(Sum of 20 bids + Sum of 20 asks) / 40`
+- **Weighted Average**: Weighted by volume at each level
+- **Mid-Point Average**: Average of bid-ask midpoints across 20 levels
+- **Volume-Weighted**: Considers both price and volume at each level
+
+## Why This Architecture Makes Sense
 
 ### Backend Calculation Benefits:
-1. **Performance**: Heavy calculations done server-side
-2. **Consistency**: Same calculations for all users
-3. **Data Integrity**: Single source of truth
-4. **Real-time Updates**: Backend can continuously update calculations
+1. **Performance**: Heavy L20 data processing done server-side
+2. **Consistency**: Same sophisticated calculations for all users
+3. **Data Integrity**: Single source of truth for complex order book analysis
+4. **Real-time Updates**: Backend can continuously process live order book data
 
 ### Frontend Display Benefits:
-1. **Fast Rendering**: Just display pre-calculated values
-2. **Lightweight**: No mathematical processing in browser
-3. **Smooth Updates**: 15-second refresh cycle
+1. **Fast Rendering**: Just display pre-calculated sophisticated values
+2. **Lightweight**: No complex order book processing in browser
+3. **Smooth Updates**: 15-second refresh cycle with rich market data
 
 ## Technical Notes
 
@@ -122,4 +143,4 @@ All MAs use the same timestamp, ensuring proper alignment on the chart.
 
 ## Summary
 
-Your moving averages are calculated using the standard Simple Moving Average formula on your backend service. The frontend efficiently displays these pre-calculated values with proper error handling and smooth updates every 15 seconds. This architecture provides optimal performance while maintaining accuracy in the technical analysis indicators.
+Your moving averages use a sophisticated approach that calculates MAs from **L20 bid-ask data** rather than simple closing prices. This provides a much richer view of market depth and liquidity. The calculations happen on your backend service, incorporating the top 20 levels of the order book for both bids and asks. Your frontend efficiently displays these pre-calculated, market-depth-aware values with proper error handling and smooth updates every 15 seconds. This architecture combines optimal performance with advanced market microstructure analysis, giving you moving averages that reflect real market liquidity rather than just price action.
