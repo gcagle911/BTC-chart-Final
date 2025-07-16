@@ -90,46 +90,62 @@ class TimeframeManager {
     });
   }
 
-  // Aggregate 1-minute data to higher timeframes
+  // Aggregate 1-minute data to higher timeframes with high precision
   aggregateData(data, timeframeSeconds) {
     if (timeframeSeconds === 60) return data; // 1m data, no aggregation needed
 
     const aggregated = [];
     const buckets = new Map();
 
-    data.forEach(item => {
+    // Sort data by timestamp to ensure proper ordering
+    const sortedData = data.sort((a, b) => new Date(a.time) - new Date(b.time));
+
+    sortedData.forEach(item => {
       const timestamp = this.toUnixTimestamp(item.time);
       const bucketTime = Math.floor(timestamp / timeframeSeconds) * timeframeSeconds;
       
       if (!buckets.has(bucketTime)) {
         buckets.set(bucketTime, {
           timestamp: bucketTime,
-          prices: [],
-          ma_50_values: [],
-          ma_100_values: [],
-          ma_200_values: []
+          dataPoints: []
         });
       }
 
-      const bucket = buckets.get(bucketTime);
-      bucket.prices.push(item.price);
-      if (item.ma_50 !== null) bucket.ma_50_values.push(item.ma_50);
-      if (item.ma_100 !== null) bucket.ma_100_values.push(item.ma_100);
-      if (item.ma_200 !== null) bucket.ma_200_values.push(item.ma_200);
+      buckets.get(bucketTime).dataPoints.push({
+        timestamp: timestamp,
+        price: item.price,
+        ma_50: item.ma_50,
+        ma_100: item.ma_100,
+        ma_200: item.ma_200
+      });
     });
 
-    // Convert buckets to aggregated data points
+    // Convert buckets to aggregated data points using last values (most precise)
     for (const [bucketTime, bucket] of buckets) {
-      if (bucket.prices.length > 0) {
+      if (bucket.dataPoints.length > 0) {
+        // Sort by timestamp and take the last (most recent) values in each bucket
+        bucket.dataPoints.sort((a, b) => a.timestamp - b.timestamp);
+        const lastPoint = bucket.dataPoints[bucket.dataPoints.length - 1];
+        
+        // For higher precision, we could also calculate OHLC if needed
+        const openPoint = bucket.dataPoints[0];
+        const highPrice = Math.max(...bucket.dataPoints.map(p => p.price));
+        const lowPrice = Math.min(...bucket.dataPoints.map(p => p.price));
+        
         aggregated.push({
           time: new Date(bucketTime * 1000).toISOString(),
-          price: bucket.prices[bucket.prices.length - 1], // Close price (last price in bucket)
-          ma_50: bucket.ma_50_values.length > 0 ? 
-            bucket.ma_50_values.reduce((a, b) => a + b, 0) / bucket.ma_50_values.length : null,
-          ma_100: bucket.ma_100_values.length > 0 ? 
-            bucket.ma_100_values.reduce((a, b) => a + b, 0) / bucket.ma_100_values.length : null,
-          ma_200: bucket.ma_200_values.length > 0 ? 
-            bucket.ma_200_values.reduce((a, b) => a + b, 0) / bucket.ma_200_values.length : null
+          // Use the close price (last in bucket) for maximum precision
+          price: lastPoint.price,
+          // Use the last MA values in the bucket to maintain precision
+          // This is how professional trading platforms handle MA aggregation
+          ma_50: lastPoint.ma_50,
+          ma_100: lastPoint.ma_100,
+          ma_200: lastPoint.ma_200,
+          // Store OHLC data for potential future use
+          open: openPoint.price,
+          high: highPrice,
+          low: lowPrice,
+          close: lastPoint.price
         });
       }
     }
@@ -137,7 +153,7 @@ class TimeframeManager {
     return aggregated.sort((a, b) => new Date(a.time) - new Date(b.time));
   }
 
-  // Process and set chart data
+  // Process and set chart data with high precision
   processAndSetData(data, isUpdate = false) {
     const timeframeSeconds = this.timeframes[this.currentTimeframe].seconds;
     const aggregatedData = this.aggregateData(data, timeframeSeconds);
@@ -153,26 +169,59 @@ class TimeframeManager {
       // For updates, only add new data
       if (isUpdate && t <= this.lastTimestamp) return;
       
-      priceData.push({ time: t, value: d.price });
-      if (d.ma_50 !== null) ma50Data.push({ time: t, value: d.ma_50 });
-      if (d.ma_100 !== null) ma100Data.push({ time: t, value: d.ma_100 });
-      if (d.ma_200 !== null) ma200Data.push({ time: t, value: d.ma_200 });
+      // Maintain full precision by not rounding values
+      priceData.push({ 
+        time: t, 
+        value: parseFloat(d.price) // Ensure numeric precision
+      });
+      
+      if (d.ma_50 !== null && d.ma_50 !== undefined) {
+        ma50Data.push({ 
+          time: t, 
+          value: parseFloat(d.ma_50) 
+        });
+      }
+      
+      if (d.ma_100 !== null && d.ma_100 !== undefined) {
+        ma100Data.push({ 
+          time: t, 
+          value: parseFloat(d.ma_100) 
+        });
+      }
+      
+      if (d.ma_200 !== null && d.ma_200 !== undefined) {
+        ma200Data.push({ 
+          time: t, 
+          value: parseFloat(d.ma_200) 
+        });
+      }
       
       if (t > this.lastTimestamp) this.lastTimestamp = t;
     });
 
     if (isUpdate) {
-      // Add new data points
+      // Add new data points with precision
       priceData.forEach(p => priceSeries.update(p));
       ma50Data.forEach(p => ma50.update(p));
       ma100Data.forEach(p => ma100.update(p));
       ma200Data.forEach(p => ma200.update(p));
     } else {
-      // Set complete dataset
+      // Set complete dataset with precision
       priceSeries.setData(priceData);
       ma50.setData(ma50Data);
       ma100.setData(ma100Data);
       ma200.setData(ma200Data);
+    }
+
+    // Log precision info for debugging
+    if (aggregatedData.length > 0) {
+      const sample = aggregatedData[aggregatedData.length - 1];
+      console.log(`📊 ${this.currentTimeframe} precision sample:`, {
+        price: sample.price,
+        ma_50: sample.ma_50,
+        ma_100: sample.ma_100,
+        ma_200: sample.ma_200
+      });
     }
   }
 
