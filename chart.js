@@ -303,17 +303,33 @@ class TimeframeManager {
         });
       }
       
-      // Always calculate indicator data to ensure perfect time sync
-      const indicatorValue = this.calculateCustomIndicator(d);
-      if (indicatorValue !== null) {
-        indicatorData.push({ 
-          time: t, // Use exact same timestamp as price data
-          value: indicatorValue
-        });
+      // CRITICAL: Only add indicator data if we have price data for this timestamp
+      // This ensures perfect alignment
+      if (priceData.length > 0 && priceData[priceData.length - 1].time === t) {
+        const indicatorValue = this.calculateCustomIndicator(d);
+        if (indicatorValue !== null) {
+          indicatorData.push({ 
+            time: t, // Use exact same timestamp as price data
+            value: indicatorValue
+          });
+        }
       }
       
       if (t > this.lastTimestamp) this.lastTimestamp = t;
     });
+
+    // Log timestamp alignment for debugging
+    if (priceData.length > 0 && indicatorData.length > 0) {
+      const priceStart = priceData[0].time;
+      const priceEnd = priceData[priceData.length - 1].time;
+      const indicatorStart = indicatorData[0].time;
+      const indicatorEnd = indicatorData[indicatorData.length - 1].time;
+      
+      console.log('🕐 Timestamp Alignment Check:');
+      console.log(`   Price: ${new Date(priceStart * 1000).toISOString()} → ${new Date(priceEnd * 1000).toISOString()}`);
+      console.log(`   Indicator: ${new Date(indicatorStart * 1000).toISOString()} → ${new Date(indicatorEnd * 1000).toISOString()}`);
+      console.log(`   Alignment: ${priceStart === indicatorStart && priceEnd === indicatorEnd ? '✅ PERFECT' : '❌ MISALIGNED'}`);
+    }
 
     // Clear loading flag
     this.isInitialLoad = false;
@@ -329,14 +345,14 @@ class TimeframeManager {
       if (customIndicatorSeries && indicatorData.length > 0) {
         indicatorData.forEach(p => customIndicatorSeries.update(p));
         
-        // Update reference lines to maintain sync
-        if (topReferenceLine) {
+        // Update reference lines with exact same timestamps
+        if (topReferenceLine && indicatorData.length > 0) {
           indicatorData.forEach(p => topReferenceLine.update({ time: p.time, value: 1.0 }));
         }
-        if (middleReferenceLine) {
+        if (middleReferenceLine && indicatorData.length > 0) {
           indicatorData.forEach(p => middleReferenceLine.update({ time: p.time, value: 0.5 }));
         }
-        if (bottomReferenceLine) {
+        if (bottomReferenceLine && indicatorData.length > 0) {
           indicatorData.forEach(p => bottomReferenceLine.update({ time: p.time, value: 0.0 }));
         }
       }
@@ -361,31 +377,53 @@ class TimeframeManager {
       this.updateSpreadStatus(aggregatedData);
     }
     
-    // Force immediate time scale sync
+    // Force immediate and aggressive time scale sync
     setTimeout(() => {
       this.syncTimeScales();
-      console.log('🔗 Charts should now be synchronized');
-    }, 100);
+      
+      // Double-check alignment with visible ranges
+      const mainRange = chart.timeScale().getVisibleTimeRange();
+      const indicatorRange = indicatorChart.timeScale().getVisibleTimeRange();
+      
+      if (mainRange && indicatorRange) {
+        console.log('🔍 Time Range Check:');
+        console.log(`   Main: ${new Date(mainRange.from * 1000).toISOString()} → ${new Date(mainRange.to * 1000).toISOString()}`);
+        console.log(`   Indicator: ${new Date(indicatorRange.from * 1000).toISOString()} → ${new Date(indicatorRange.to * 1000).toISOString()}`);
+        
+        // Force perfect alignment if they don't match
+        if (Math.abs(mainRange.from - indicatorRange.from) > 1 || Math.abs(mainRange.to - indicatorRange.to) > 1) {
+          console.log('❌ Time ranges misaligned - forcing correction');
+          indicatorChart.timeScale().setVisibleTimeRange(mainRange);
+        } else {
+          console.log('✅ Time ranges perfectly aligned');
+        }
+      }
+      
+      console.log('🔗 Charts synchronized and aligned');
+    }, 200);
   }
 
-  // Helper to set reference lines only once
+  // Helper to set reference lines using exact same timestamps as indicator
   setReferenceLinesOnce(indicatorData) {
-    if (this.referenceLinesSet) return;
+    if (this.referenceLinesSet || indicatorData.length === 0) return;
     
-    if (topReferenceLine && indicatorData.length > 0) {
+    console.log(`🎯 Setting reference lines with ${indicatorData.length} aligned timestamps`);
+    
+    if (topReferenceLine) {
       const refData = indicatorData.map(d => ({ time: d.time, value: 1.0 }));
       topReferenceLine.setData(refData);
     }
-    if (middleReferenceLine && indicatorData.length > 0) {
+    if (middleReferenceLine) {
       const refData = indicatorData.map(d => ({ time: d.time, value: 0.5 }));
       middleReferenceLine.setData(refData);
     }
-    if (bottomReferenceLine && indicatorData.length > 0) {
+    if (bottomReferenceLine) {
       const refData = indicatorData.map(d => ({ time: d.time, value: 0.0 }));
       bottomReferenceLine.setData(refData);
     }
     
     this.referenceLinesSet = true;
+    console.log('✅ Reference lines aligned with indicator timestamps');
   }
 
   // Helper to throttle status updates  
@@ -775,6 +813,26 @@ timeframeManager.initializeChart().then(() => {
     if (logicalRange) {
       indicatorChart.timeScale().setVisibleLogicalRange(logicalRange);
       console.log('🔗 Locked logical range:', logicalRange);
+    }
+    
+    // Final alignment verification and correction
+    const finalMainRange = chart.timeScale().getVisibleTimeRange();
+    const finalIndicatorRange = indicatorChart.timeScale().getVisibleTimeRange();
+    
+    if (finalMainRange && finalIndicatorRange) {
+      console.log('🎯 Final Alignment Check:');
+      console.log(`   Main Chart: ${new Date(finalMainRange.from * 1000).toISOString()} → ${new Date(finalMainRange.to * 1000).toISOString()}`);
+      console.log(`   Indicator: ${new Date(finalIndicatorRange.from * 1000).toISOString()} → ${new Date(finalIndicatorRange.to * 1000).toISOString()}`);
+      
+      // Force absolute perfect alignment
+      indicatorChart.timeScale().setVisibleTimeRange(finalMainRange);
+      
+      setTimeout(() => {
+        const verifyRange = indicatorChart.timeScale().getVisibleTimeRange();
+        if (verifyRange) {
+          console.log(`🔒 Final Sync: ${new Date(verifyRange.from * 1000).toISOString()} → ${new Date(verifyRange.to * 1000).toISOString()}`);
+        }
+      }, 100);
     }
     
     console.log('✅ Charts are now LOCKED TOGETHER!');
