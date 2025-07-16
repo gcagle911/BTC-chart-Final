@@ -276,13 +276,12 @@ class TimeframeManager {
         });
       }
       
-      // Process custom indicator data with color coding
-      const indicatorResult = this.calculateCustomIndicator(d);
-      if (indicatorResult !== null) {
+      // Process custom indicator data (simplified)
+      const indicatorValue = this.calculateCustomIndicator(d);
+      if (indicatorValue !== null) {
         indicatorData.push({ 
           time: t, 
-          value: indicatorResult.value,
-          color: indicatorResult.color
+          value: indicatorValue
         });
       }
       
@@ -310,6 +309,20 @@ class TimeframeManager {
       // Set indicator panel data
       if (customIndicatorSeries && indicatorData.length > 0) {
         customIndicatorSeries.setData(indicatorData);
+        
+        // Set reference lines
+        if (topReferenceLine && indicatorData.length > 0) {
+          const refData = indicatorData.map(d => ({ time: d.time, value: 1.0 }));
+          topReferenceLine.setData(refData);
+        }
+        if (middleReferenceLine && indicatorData.length > 0) {
+          const refData = indicatorData.map(d => ({ time: d.time, value: 0.5 }));
+          middleReferenceLine.setData(refData);
+        }
+        if (bottomReferenceLine && indicatorData.length > 0) {
+          const refData = indicatorData.map(d => ({ time: d.time, value: 0.0 }));
+          bottomReferenceLine.setData(refData);
+        }
       }
     }
 
@@ -335,13 +348,14 @@ class TimeframeManager {
         ma_50: sample.ma_50,
         ma_100: sample.ma_100,
         ma_200: sample.ma_200,
-        spreadThresholds: this.calculateCustomIndicator(sample),
+        indicatorPosition: this.calculateCustomIndicator(sample),
+        spreadColor: this.indicatorState?.lastSpreadColor,
         note: 'MAs maintain full 1-minute calculation accuracy'
       });
     }
   }
 
-  // MA Crossover Momentum Indicator with Spread Threshold Colors
+  // MA Crossover with 20-minute persistence and spread alerts
   calculateCustomIndicator(dataPoint) {
     const { ma_50, ma_100, ma_200 } = dataPoint;
     
@@ -350,88 +364,126 @@ class TimeframeManager {
       return null;
     }
     
-    // Determine current MA positioning relative to MA200
+    // Initialize state tracking if needed
+    if (!this.indicatorState) {
+      this.indicatorState = {
+        currentPosition: 0.5, // Start neutral
+        stateHistory: [], // Track last 20 minutes
+        lastSpreadColor: '#26a69a'
+      };
+    }
+    
+    // Determine current MA positioning
     const ma50AboveMA200 = ma_50 > ma_200;
     const ma100AboveMA200 = ma_100 > ma_200;
     
-    // Calculate position value
-    let positionValue;
+    // Current state based on crossovers
+    let currentState;
     if (ma50AboveMA200 && ma100AboveMA200) {
-      positionValue = 1.0; // Bullish signal - top of range
+      currentState = 'bullish';
     } else if (!ma50AboveMA200 && !ma100AboveMA200) {
-      positionValue = 0.0; // Bearish signal - bottom of range
+      currentState = 'bearish'; 
     } else {
-      positionValue = 0.5; // Mixed/neutral signal - middle
+      currentState = 'mixed';
     }
     
-    // Determine color based on MA50 spread threshold
-    let color;
+    // Add to history (limit to 20 data points = 20 minutes for 1m data)
+    this.indicatorState.stateHistory.push(currentState);
+    if (this.indicatorState.stateHistory.length > 20) {
+      this.indicatorState.stateHistory.shift();
+    }
+    
+    // Check if we have 20 minutes of consistent state
+    let positionValue = this.indicatorState.currentPosition; // Keep current position by default
+    
+    if (this.indicatorState.stateHistory.length >= 20) {
+      const last20 = this.indicatorState.stateHistory.slice(-20);
+      const allBullish = last20.every(state => state === 'bullish');
+      const allBearish = last20.every(state => state === 'bearish');
+      
+      if (allBullish && this.indicatorState.currentPosition !== 1.0) {
+        positionValue = 1.0; // Flick to top
+        this.indicatorState.currentPosition = 1.0;
+        console.log('🚀 BULLISH signal confirmed - 20min persistence!');
+      } else if (allBearish && this.indicatorState.currentPosition !== 0.0) {
+        positionValue = 0.0; // Flick to bottom  
+        this.indicatorState.currentPosition = 0.0;
+        console.log('🔻 BEARISH signal confirmed - 20min persistence!');
+      }
+      // Mixed states don't change position - maintain current
+    }
+    
+    // Determine spread color (simpler logic)
+    let spreadColor;
     if (ma_50 > 0.03) {
-      color = '#ff4444'; // Red - High spread (poor liquidity)
+      spreadColor = '#ff4444'; // Red
     } else if (ma_50 > 0.02) {
-      color = '#ff8800'; // Orange - Elevated spread
+      spreadColor = '#ff8800'; // Orange  
     } else if (ma_50 > 0.01) {
-      color = '#ffcc00'; // Yellow - Moderate spread
+      spreadColor = '#ffcc00'; // Yellow
     } else {
-      color = '#26a69a'; // Green - Low spread (good liquidity)
+      spreadColor = '#26a69a'; // Green
     }
     
-    // Store color info for dynamic updates
-    this.lastIndicatorColor = color;
+    this.indicatorState.lastSpreadColor = spreadColor;
     
-    return {
-      value: positionValue,
-      color: color,
-      spread: ma_50 // For debugging/logging
-    };
+    return positionValue; // Just return the value, keep it simple
   }
 
-  // Update spread status display
+  // Update spread status display (optimized)
   updateSpreadStatus(data) {
-    if (data.length === 0) return;
+    if (data.length === 0 || !this.indicatorState) return;
     
     const latest = data[data.length - 1];
-    const indicatorResult = this.calculateCustomIndicator(latest);
+    const spreadValue = latest.ma_50;
     
-    if (indicatorResult) {
-      const spreadValue = latest.ma_50;
-      const spreadElement = document.getElementById('spread-value');
-      const statusElement = document.getElementById('spread-status-text');
+    // Only update DOM every 5th call to reduce lag
+    if (!this.statusUpdateCounter) this.statusUpdateCounter = 0;
+    this.statusUpdateCounter++;
+    
+    if (this.statusUpdateCounter % 5 !== 0) return; // Skip most updates
+    
+    const spreadElement = document.getElementById('spread-value');
+    const statusElement = document.getElementById('spread-status-text');
+    
+    if (spreadElement && spreadValue !== null) {
+      spreadElement.textContent = spreadValue.toFixed(4);
+      spreadElement.style.color = this.indicatorState.lastSpreadColor;
+    }
+    
+    if (statusElement) {
+      let crossoverStatus;
+      const currentPos = this.indicatorState.currentPosition;
       
-      // Update spread value with proper formatting
-      if (spreadElement) {
-        spreadElement.textContent = spreadValue ? spreadValue.toFixed(4) : '--';
-        spreadElement.style.color = indicatorResult.color;
+      if (currentPos === 1.0) {
+        crossoverStatus = "BULLISH (20m)";
+      } else if (currentPos === 0.0) {
+        crossoverStatus = "BEARISH (20m)";
+      } else {
+        crossoverStatus = "WAITING";
       }
       
-      // Update status text
-      if (statusElement) {
-        let statusText;
-        let crossoverStatus;
-        
-        // Determine crossover status
-        if (indicatorResult.value === 1.0) {
-          crossoverStatus = "BULLISH";
-        } else if (indicatorResult.value === 0.0) {
-          crossoverStatus = "BEARISH";
+      // Show remaining time for confirmation
+      const historyLength = this.indicatorState.stateHistory.length;
+      const remaining = Math.max(0, 20 - historyLength);
+      
+      let statusText;
+      if (remaining > 0) {
+        statusText = `${crossoverStatus} (${remaining}m left)`;
+      } else {
+        // Check current trend
+        const lastState = this.indicatorState.stateHistory[this.indicatorState.stateHistory.length - 1];
+        if (lastState === 'bullish') {
+          statusText = `${crossoverStatus} | BULLISH TREND`;
+        } else if (lastState === 'bearish') {
+          statusText = `${crossoverStatus} | BEARISH TREND`;
         } else {
-          crossoverStatus = "MIXED";
+          statusText = `${crossoverStatus} | MIXED SIGNALS`;
         }
-        
-        // Determine spread level
-        if (spreadValue > 0.03) {
-          statusText = `${crossoverStatus} | HIGH SPREAD`;
-        } else if (spreadValue > 0.02) {
-          statusText = `${crossoverStatus} | ELEVATED`;
-        } else if (spreadValue > 0.01) {
-          statusText = `${crossoverStatus} | MODERATE`;
-        } else {
-          statusText = `${crossoverStatus} | LOW SPREAD`;
-        }
-        
-        statusElement.textContent = statusText;
-        statusElement.style.color = indicatorResult.color;
       }
+      
+      statusElement.textContent = statusText;
+      statusElement.style.color = this.indicatorState.lastSpreadColor;
     }
   }
 
@@ -581,36 +633,51 @@ function setTimeframe(timeframe) {
 
 // Helper function to setup custom indicators
 function setupCustomIndicator(indicatorConfig) {
-  // Remove existing indicator if any
+  // Remove existing series if any
   if (customIndicatorSeries) {
     indicatorChart.removeSeries(customIndicatorSeries);
   }
-
-  // Create new indicator series based on config
-  switch(indicatorConfig.type) {
-    case 'line':
-      customIndicatorSeries = indicatorChart.addLineSeries({
-        color: indicatorConfig.color || '#ffd700',
-        lineWidth: indicatorConfig.lineWidth || 2,
-        title: indicatorConfig.title || 'Custom Indicator'
-      });
-      break;
-    case 'histogram':
-      customIndicatorSeries = indicatorChart.addHistogramSeries({
-        color: indicatorConfig.color || '#26a69a',
-        title: indicatorConfig.title || 'Custom Indicator'
-      });
-      break;
-    case 'area':
-      customIndicatorSeries = indicatorChart.addAreaSeries({
-        lineColor: indicatorConfig.lineColor || '#ffd700',
-        topColor: indicatorConfig.topColor || 'rgba(255, 215, 0, 0.4)',
-        bottomColor: indicatorConfig.bottomColor || 'rgba(255, 215, 0, 0.0)',
-        lineWidth: indicatorConfig.lineWidth || 2,
-        title: indicatorConfig.title || 'Custom Indicator'
-      });
-      break;
+  if (topReferenceLine) {
+    indicatorChart.removeSeries(topReferenceLine);
   }
+  if (middleReferenceLine) {
+    indicatorChart.removeSeries(middleReferenceLine);
+  }
+  if (bottomReferenceLine) {
+    indicatorChart.removeSeries(bottomReferenceLine);
+  }
+
+  // Add reference lines for better visualization
+  topReferenceLine = indicatorChart.addLineSeries({
+    color: '#444444',
+    lineWidth: 1,
+    lineStyle: LightweightCharts.LineStyle.Dashed,
+    priceLineVisible: false,
+    lastValueVisible: false,
+  });
+
+  middleReferenceLine = indicatorChart.addLineSeries({
+    color: '#666666',
+    lineWidth: 1,
+    lineStyle: LightweightCharts.LineStyle.Dotted,
+    priceLineVisible: false,
+    lastValueVisible: false,
+  });
+
+  bottomReferenceLine = indicatorChart.addLineSeries({
+    color: '#444444',
+    lineWidth: 1,
+    lineStyle: LightweightCharts.LineStyle.Dashed,
+    priceLineVisible: false,
+    lastValueVisible: false,
+  });
+
+  // Create main indicator series
+  customIndicatorSeries = indicatorChart.addLineSeries({
+    color: indicatorConfig.color || '#00d4ff',
+    lineWidth: indicatorConfig.lineWidth || 3,
+    title: indicatorConfig.title || 'Custom Indicator'
+  });
 
   // Update the calculation function
   timeframeManager.calculateCustomIndicator = indicatorConfig.calculate;
@@ -645,21 +712,22 @@ timeframeManager.initializeChart().then(() => {
   timeframeManager.startUpdateCycle();
   setupChartSync();
   
-  // Setup the MA Crossover Momentum Indicator with Spread Thresholds
+  // Setup the simplified MA Crossover Indicator
   setupCustomIndicator({
-    type: 'area',
-    title: 'MA Crossover + Spread Alert',
-    lineColor: '#ffffff',
-    topColor: 'rgba(255, 255, 255, 0.3)',
-    bottomColor: 'rgba(255, 255, 255, 0.1)',
-    lineWidth: 2,
+    type: 'line',
+    title: 'MA Crossover (20m persistence)',
+    color: '#00d4ff',
+    lineWidth: 3,
     calculate: timeframeManager.calculateCustomIndicator.bind(timeframeManager)
   });
   
-  console.log('📊 MA Crossover + Spread Alert indicator active!');
+  console.log('📊 MA Crossover (20m persistence) indicator active!');
   console.log('🎯 Indicator Logic:');
-  console.log('   • Position: MA50 & MA100 vs MA200 crossovers');
-  console.log('   • Colors: Green(<0.01) → Yellow(0.01-0.02) → Orange(0.02-0.03) → Red(>0.03)');
-  console.log('   • Status display shows real-time spread and crossover state');
+  console.log('   • Tracks MA50 & MA100 vs MA200 crossovers');
+  console.log('   • Requires 20 minutes of consistent state before flicking');
+  console.log('   • Top (1.0) = 20min+ of both MAs above MA200');
+  console.log('   • Bottom (0.0) = 20min+ of both MAs below MA200');
+  console.log('   • Middle (0.5) = Waiting or mixed signals');
+  console.log('   • Spread color coding: Green→Yellow→Orange→Red (>0.03)');
 });
 
