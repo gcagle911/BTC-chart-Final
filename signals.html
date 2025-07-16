@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MA Crossover Signal Log</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      background-color: #131722;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: #d1d4dc;
+    }
+    
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding: 20px;
+      background: #1e222d;
+      border-radius: 8px;
+    }
+    
+    h1 {
+      margin: 0;
+      color: #ffffff;
+      font-size: 24px;
+    }
+    
+    .nav-link {
+      background: #2962ff;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 6px;
+      text-decoration: none;
+      font-weight: 500;
+      transition: background 0.2s;
+    }
+    
+    .nav-link:hover {
+      background: #1e53e5;
+    }
+    
+    .controls {
+      display: flex;
+      gap: 15px;
+      margin-bottom: 20px;
+      padding: 15px;
+      background: #1e222d;
+      border-radius: 8px;
+      align-items: center;
+    }
+    
+    .status {
+      padding: 8px 16px;
+      border-radius: 4px;
+      font-weight: 500;
+      font-size: 14px;
+    }
+    
+    .status.connected {
+      background: rgba(38, 166, 154, 0.2);
+      color: #26a69a;
+      border: 1px solid #26a69a;
+    }
+    
+    .status.disconnected {
+      background: rgba(239, 83, 80, 0.2);
+      color: #ef5350;
+      border: 1px solid #ef5350;
+    }
+    
+    .clear-btn {
+      background: #ef5350;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    
+    .clear-btn:hover {
+      background: #d32f2f;
+    }
+    
+    .signal-log {
+      background: #1e222d;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    
+    .log-header {
+      background: #2a2e39;
+      padding: 15px 20px;
+      border-bottom: 1px solid #363a45;
+      font-weight: 600;
+      display: grid;
+      grid-template-columns: 120px 80px 120px 150px 1fr;
+      gap: 20px;
+    }
+    
+    .log-entry {
+      padding: 15px 20px;
+      border-bottom: 1px solid #363a45;
+      display: grid;
+      grid-template-columns: 120px 80px 120px 150px 1fr;
+      gap: 20px;
+      align-items: center;
+      transition: background 0.2s;
+    }
+    
+    .log-entry:hover {
+      background: rgba(255, 255, 255, 0.02);
+    }
+    
+    .log-entry:last-child {
+      border-bottom: none;
+    }
+    
+    .signal-type {
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-weight: 600;
+      font-size: 14px;
+      text-align: center;
+    }
+    
+    .signal-buy {
+      background: rgba(38, 166, 154, 0.2);
+      color: #26a69a;
+      border: 1px solid #26a69a;
+    }
+    
+    .signal-sell {
+      background: rgba(239, 83, 80, 0.2);
+      color: #ef5350;
+      border: 1px solid #ef5350;
+    }
+    
+    .price {
+      font-family: 'Courier New', monospace;
+      font-weight: 600;
+      font-size: 16px;
+    }
+    
+    .timestamp {
+      color: #888;
+      font-size: 13px;
+    }
+    
+    .timeframe {
+      color: #2962ff;
+      font-weight: 500;
+      font-size: 12px;
+      background: rgba(41, 98, 255, 0.1);
+      padding: 4px 8px;
+      border-radius: 3px;
+    }
+    
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #888;
+      font-size: 16px;
+    }
+    
+    .signal-count {
+      color: #888;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>MA Crossover Signal Log</h1>
+    <a href="index.html" class="nav-link">← Back to Chart</a>
+  </div>
+  
+  <div class="controls">
+    <div id="connection-status" class="status disconnected">Disconnected</div>
+    <div class="signal-count">Signals: <span id="signal-count">0</span></div>
+    <button onclick="clearSignals()" class="clear-btn">Clear Log</button>
+  </div>
+  
+  <div class="signal-log">
+    <div class="log-header">
+      <div>Time</div>
+      <div>Signal</div>
+      <div>Price</div>
+      <div>Timeframe</div>
+      <div>Notes</div>
+    </div>
+    <div id="signal-entries">
+      <div class="empty-state">
+        Waiting for MA crossover signals...<br>
+        <small>BUY signals when crossover hits 0 (bearish confirmed)<br>
+        SELL signals when crossover hits 1 (bullish confirmed)</small>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Signal logging functionality
+    class SignalLogger {
+      constructor() {
+        this.signals = this.loadSignals();
+        this.lastCrossoverState = null;
+        this.isConnected = false;
+        this.updateInterval = null;
+        this.renderSignals();
+        this.startMonitoring();
+      }
+      
+      // Load signals from localStorage
+      loadSignals() {
+        const saved = localStorage.getItem('ma-crossover-signals');
+        return saved ? JSON.parse(saved) : [];
+      }
+      
+      // Save signals to localStorage
+      saveSignals() {
+        localStorage.setItem('ma-crossover-signals', JSON.stringify(this.signals));
+      }
+      
+      // Start monitoring the main chart data
+      startMonitoring() {
+        console.log('🔍 Starting signal monitoring...');
+        this.updateInterval = setInterval(() => {
+          this.checkForSignals();
+        }, 2000); // Check every 2 seconds
+      }
+      
+      // Check for new signals from the main chart
+      async checkForSignals() {
+        try {
+          // Try to get data from the same source as main chart
+          const response = await fetch('https://btc-spread-test-pipeline.onrender.com/recent.json');
+          const data = await response.json();
+          
+          if (data && data.length > 0) {
+            this.updateConnectionStatus(true);
+            this.processLatestData(data);
+          } else {
+            this.updateConnectionStatus(false);
+          }
+        } catch (error) {
+          console.error('❌ Error fetching signal data:', error);
+          this.updateConnectionStatus(false);
+        }
+      }
+      
+      // Process the latest data to detect crossover signals
+      processLatestData(data) {
+        // Get the most recent data point
+        const latest = data[data.length - 1];
+        if (!latest || !latest.ma_50 || !latest.ma_100 || !latest.ma_200) return;
+        
+        // Calculate current crossover state (same logic as main chart)
+        const ma50AboveMA200 = latest.ma_50 > latest.ma_200;
+        const ma100AboveMA200 = latest.ma_100 > latest.ma_200;
+        
+        let currentState;
+        if (ma50AboveMA200 && ma100AboveMA200) {
+          currentState = 1; // Bullish (both above MA200)
+        } else if (!ma50AboveMA200 && !ma100AboveMA200) {
+          currentState = 0; // Bearish (both below MA200)
+        } else {
+          currentState = 0.5; // Mixed
+        }
+        
+        // Detect state changes (confirmed signals)
+        if (this.lastCrossoverState !== null && this.lastCrossoverState !== currentState) {
+          if (currentState === 0) {
+            // Crossover hit 0 (bearish confirmed) = BUY signal
+            this.addSignal('BUY', latest.price || latest.close, 'Bearish crossover confirmed - both MAs below MA200');
+          } else if (currentState === 1) {
+            // Crossover hit 1 (bullish confirmed) = SELL signal  
+            this.addSignal('SELL', latest.price || latest.close, 'Bullish crossover confirmed - both MAs above MA200');
+          }
+        }
+        
+        this.lastCrossoverState = currentState;
+      }
+      
+      // Add a new signal to the log
+      addSignal(type, price, notes = '') {
+        const signal = {
+          id: Date.now(),
+          timestamp: new Date().toISOString(),
+          type: type,
+          price: price,
+          timeframe: this.getCurrentTimeframe(),
+          notes: notes
+        };
+        
+        this.signals.unshift(signal); // Add to beginning of array
+        this.saveSignals();
+        this.renderSignals();
+        
+        console.log(`📈 New ${type} signal logged: $${price.toFixed(2)}`);
+      }
+      
+      // Get current timeframe (try to detect from URL or default)
+      getCurrentTimeframe() {
+        // Try to get from URL params or default to 1m
+        const params = new URLSearchParams(window.location.search);
+        return params.get('timeframe') || '1m';
+      }
+      
+      // Update connection status display
+      updateConnectionStatus(connected) {
+        this.isConnected = connected;
+        const statusEl = document.getElementById('connection-status');
+        
+        if (connected) {
+          statusEl.textContent = 'Connected';
+          statusEl.className = 'status connected';
+        } else {
+          statusEl.textContent = 'Disconnected';
+          statusEl.className = 'status disconnected';
+        }
+      }
+      
+      // Render all signals in the log
+      renderSignals() {
+        const container = document.getElementById('signal-entries');
+        const countEl = document.getElementById('signal-count');
+        
+        countEl.textContent = this.signals.length;
+        
+        if (this.signals.length === 0) {
+          container.innerHTML = `
+            <div class="empty-state">
+              Waiting for MA crossover signals...<br>
+              <small>BUY signals when crossover hits 0 (bearish confirmed)<br>
+              SELL signals when crossover hits 1 (bullish confirmed)</small>
+            </div>
+          `;
+          return;
+        }
+        
+        container.innerHTML = this.signals.map(signal => `
+          <div class="log-entry">
+            <div class="timestamp">${this.formatTimestamp(signal.timestamp)}</div>
+            <div class="signal-type signal-${signal.type.toLowerCase()}">${signal.type}</div>
+            <div class="price">$${signal.price.toFixed(2)}</div>
+            <div class="timeframe">${signal.timeframe}</div>
+            <div class="notes">${signal.notes}</div>
+          </div>
+        `).join('');
+      }
+      
+      // Format timestamp for display
+      formatTimestamp(isoString) {
+        const date = new Date(isoString);
+        return date.toLocaleString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        });
+      }
+      
+      // Clear all signals
+      clearSignals() {
+        this.signals = [];
+        this.saveSignals();
+        this.renderSignals();
+        console.log('🗑️ Signal log cleared');
+      }
+    }
+    
+    // Global functions
+    function clearSignals() {
+      if (confirm('Clear all signals from the log?')) {
+        signalLogger.clearSignals();
+      }
+    }
+    
+    // Initialize signal logger
+    const signalLogger = new SignalLogger();
+    
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', () => {
+      if (signalLogger.updateInterval) {
+        clearInterval(signalLogger.updateInterval);
+      }
+    });
+  </script>
+</body>
+</html>
