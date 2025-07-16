@@ -148,25 +148,25 @@ class TimeframeManager {
     document.getElementById('loading-indicator').style.display = 'none';
   }
 
-  setActiveButton(timeframe) {
-    document.querySelectorAll('.timeframe-btn').forEach(btn => {
-      btn.classList.remove('active');
-      if (btn.dataset.timeframe === timeframe) {
-        btn.classList.add('active');
-      }
-    });
+  setActiveDropdown(timeframe) {
+    const dropdown = document.getElementById('timeframe-dropdown');
+    if (dropdown) {
+      dropdown.value = timeframe;
+    }
   }
 
-  disableButtons() {
-    document.querySelectorAll('.timeframe-btn').forEach(btn => {
-      btn.disabled = true;
-    });
+  disableDropdown() {
+    const dropdown = document.getElementById('timeframe-dropdown');
+    if (dropdown) {
+      dropdown.disabled = true;
+    }
   }
 
-  enableButtons() {
-    document.querySelectorAll('.timeframe-btn').forEach(btn => {
-      btn.disabled = false;
-    });
+  enableDropdown() {
+    const dropdown = document.getElementById('timeframe-dropdown');
+    if (dropdown) {
+      dropdown.disabled = false;
+    }
   }
 
   // Aggregate data maintaining full MA technical accuracy and create OHLC
@@ -858,13 +858,13 @@ class TimeframeManager {
     if (timeframe === this.currentTimeframe) return;
     
     this.showLoading();
-    this.disableButtons();
+    this.disableDropdown();
     
     console.log(`🔄 Switching to ${timeframe} timeframe - ensuring perfect alignment`);
     
     const oldTimeframe = this.currentTimeframe;
     this.currentTimeframe = timeframe;
-    this.setActiveButton(timeframe);
+    this.setActiveDropdown(timeframe);
     
     // Reset sync state for clean timeframe switch
     this.referenceLinesSet = false;
@@ -913,7 +913,7 @@ class TimeframeManager {
     }, 600);
     
     this.hideLoading();
-    this.enableButtons();
+    this.enableDropdown();
     
     console.log(`✅ Switched to ${this.timeframes[timeframe].label} - Multi-stage sync initiated`);
   }
