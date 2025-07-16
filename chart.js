@@ -458,7 +458,7 @@ class TimeframeManager {
     return false;
   }
 
-  // MA Crossover - Immediate Response (optimized)
+  // MA Crossover - 20 Candle Confirmation Delay
   calculateCustomIndicator(dataPoint) {
     const { ma_50, ma_100, ma_200 } = dataPoint;
     
@@ -472,24 +472,85 @@ class TimeframeManager {
       return 0.5; // Return neutral during loading
     }
     
-    // Initialize state for spread color tracking
+    // Initialize state for crossover tracking with confirmation delay
     if (!this.indicatorState) {
       this.indicatorState = {
-        lastSpreadColor: '#26a69a'
+        lastSpreadColor: '#26a69a',
+        crossoverHistory: [],
+        confirmedState: 0.5, // Start neutral
+        pendingCross: null,
+        candlesSinceCross: 0
       };
     }
     
-    // Determine current MA positioning - immediate response
+    // Determine current MA positioning
     const ma50AboveMA200 = ma_50 > ma_200;
     const ma100AboveMA200 = ma_100 > ma_200;
     
-    let positionValue;
+    // Current raw state (what it would be without delay)
+    let currentRawState;
     if (ma50AboveMA200 && ma100AboveMA200) {
-      positionValue = 1.0; // Both above - top
+      currentRawState = 1.0; // Both above
     } else if (!ma50AboveMA200 && !ma100AboveMA200) {
-      positionValue = 0.0; // Both below - bottom
+      currentRawState = 0.0; // Both below
     } else {
-      positionValue = 0.5; // Mixed - middle
+      currentRawState = 0.5; // Mixed
+    }
+    
+    // Track crossover history to detect changes
+    this.indicatorState.crossoverHistory.push({
+      ma50Above: ma50AboveMA200,
+      ma100Above: ma100AboveMA200,
+      rawState: currentRawState,
+      timestamp: Date.now()
+    });
+    
+    // Keep only recent history (last 50 candles should be enough)
+    if (this.indicatorState.crossoverHistory.length > 50) {
+      this.indicatorState.crossoverHistory.shift();
+    }
+    
+    // Detect if we have a new crossover (change from previous confirmed state)
+    const previousConfirmedState = this.indicatorState.confirmedState;
+    
+    // Check if current raw state is different from confirmed state and we're not already tracking a pending cross
+    if (currentRawState !== previousConfirmedState && currentRawState !== 0.5 && !this.indicatorState.pendingCross) {
+      // New crossover detected - start tracking
+      this.indicatorState.pendingCross = {
+        targetState: currentRawState,
+        startCandle: this.indicatorState.crossoverHistory.length - 1,
+        candlesRequired: 20
+      };
+      this.indicatorState.candlesSinceCross = 1;
+      console.log(`🔄 New crossover detected: ${currentRawState === 1.0 ? 'BULLISH' : 'BEARISH'} - waiting for 20 candle confirmation`);
+    }
+    
+    // If we have a pending crossover, check confirmation progress
+    if (this.indicatorState.pendingCross) {
+      this.indicatorState.candlesSinceCross++;
+      
+      // Check if the crossover is still valid (MAs haven't crossed back)
+      if (currentRawState === this.indicatorState.pendingCross.targetState) {
+        // Crossover still valid, check if we've waited long enough
+        if (this.indicatorState.candlesSinceCross >= this.indicatorState.pendingCross.candlesRequired) {
+          // Confirmation complete - update confirmed state
+          this.indicatorState.confirmedState = this.indicatorState.pendingCross.targetState;
+          console.log(`✅ Crossover CONFIRMED after ${this.indicatorState.candlesSinceCross} candles: ${this.indicatorState.confirmedState === 1.0 ? 'BULLISH' : 'BEARISH'}`);
+          this.indicatorState.pendingCross = null;
+          this.indicatorState.candlesSinceCross = 0;
+        } else {
+          // Still waiting for confirmation
+          const remaining = this.indicatorState.pendingCross.candlesRequired - this.indicatorState.candlesSinceCross;
+          if (remaining % 5 === 0 || remaining <= 3) { // Log every 5 candles or last 3
+            console.log(`⏳ Crossover confirmation: ${this.indicatorState.candlesSinceCross}/${this.indicatorState.pendingCross.candlesRequired} candles (${remaining} remaining)`);
+          }
+        }
+      } else {
+        // Crossover invalidated - MAs crossed back before confirmation
+        console.log(`❌ Crossover INVALIDATED after ${this.indicatorState.candlesSinceCross} candles - MAs crossed back`);
+        this.indicatorState.pendingCross = null;
+        this.indicatorState.candlesSinceCross = 0;
+      }
     }
     
     // Update spread color (for status display)
@@ -503,7 +564,8 @@ class TimeframeManager {
       this.indicatorState.lastSpreadColor = '#26a69a'; // Green
     }
     
-    return positionValue;
+    // Return the confirmed state (not the raw state)
+    return this.indicatorState.confirmedState;
   }
 
   // Update spread status display (ultra-light)
@@ -543,12 +605,21 @@ class TimeframeManager {
         const ma100AboveMA200 = latest.ma_100 > latest.ma_200;
         
         let statusText;
-        if (ma50AboveMA200 && ma100AboveMA200) {
-          statusText = "BULLISH - Both MAs Above";
-        } else if (!ma50AboveMA200 && !ma100AboveMA200) {
-          statusText = "BEARISH - Both MAs Below";
+        
+        // Check if we're in a pending confirmation period
+        if (this.indicatorState.pendingCross) {
+          const remaining = this.indicatorState.pendingCross.candlesRequired - this.indicatorState.candlesSinceCross;
+          const targetDirection = this.indicatorState.pendingCross.targetState === 1.0 ? 'BULLISH' : 'BEARISH';
+          statusText = `CONFIRMING ${targetDirection} (${remaining} candles left)`;
         } else {
-          statusText = "MIXED - MAs Diverging";
+          // Show confirmed state
+          if (ma50AboveMA200 && ma100AboveMA200) {
+            statusText = this.indicatorState.confirmedState === 1.0 ? "CONFIRMED BULLISH" : "BULLISH - Not Confirmed";
+          } else if (!ma50AboveMA200 && !ma100AboveMA200) {
+            statusText = this.indicatorState.confirmedState === 0.0 ? "CONFIRMED BEARISH" : "BEARISH - Not Confirmed";
+          } else {
+            statusText = "MIXED - MAs Diverging";
+          }
         }
         
         statusElement.textContent = statusText;
@@ -899,8 +970,9 @@ timeframeManager.initializeChart().then(() => {
     console.log('📊 Y-axis: Independent (scroll/zoom indicator panel)');
   }, 1000);
   
-  console.log('📊 MA Crossover indicator loaded');
-  console.log('🎯 Logic: Top=Both MAs above MA200 | Bottom=Both below | Middle=Mixed');
+  console.log('📊 MA Crossover indicator loaded (20 candle confirmation delay)');
+  console.log('🎯 Logic: 1.0=Both MAs above MA200 (confirmed after 20 candles) | 0.0=Both below (confirmed after 20 candles) | 0.5=Mixed/Unconfirmed');
+  console.log('⏱️ Confirmation: Waits 20 candles after crossover before confirming signal');
   console.log('🎮 Controls:');
   console.log('   • Horizontal scroll/zoom: Use MAIN chart');
   console.log('   • Vertical scroll/zoom: Use INDICATOR panel');
