@@ -1,5 +1,5 @@
-// Chart setup
-window.chart = LightweightCharts.createChart(document.getElementById('chart'), {
+// Main chart setup
+window.chart = LightweightCharts.createChart(document.getElementById('main-chart'), {
   layout: {
     background: { color: '#131722' },
     textColor: '#D1D4DC',
@@ -60,6 +60,36 @@ const ma200 = chart.addLineSeries({
   color: '#ff69b4',
   lineWidth: 1,
 });
+
+// Indicator panel setup
+window.indicatorChart = LightweightCharts.createChart(document.getElementById('indicator-panel'), {
+  layout: {
+    background: { color: '#131722' },
+    textColor: '#D1D4DC',
+  },
+  grid: {
+    vertLines: { color: '#2B2B43' },
+    horzLines: { color: '#2B2B43' },
+  },
+  rightPriceScale: { 
+    visible: true,
+    scaleMargins: {
+      top: 0.1,
+      bottom: 0.1,
+    },
+    borderVisible: false,
+  },
+  timeScale: { 
+    visible: false, // Hide time scale to sync with main chart
+    borderVisible: false,
+  },
+  crosshair: {
+    mode: LightweightCharts.CrosshairMode.Normal,
+  },
+});
+
+// Custom indicator series (to be configured based on user's requirements)
+let customIndicatorSeries = null;
 
 // Timeframe management
 class TimeframeManager {
@@ -205,6 +235,7 @@ class TimeframeManager {
     const ma50Data = [];
     const ma100Data = [];
     const ma200Data = [];
+    const indicatorData = [];
 
     aggregatedData.forEach(d => {
       const t = this.toUnixTimestamp(d.time);
@@ -242,6 +273,15 @@ class TimeframeManager {
         });
       }
       
+      // Process custom indicator data (will be customized based on user requirements)
+      const indicatorValue = this.calculateCustomIndicator(d);
+      if (indicatorValue !== null) {
+        indicatorData.push({ 
+          time: t, 
+          value: indicatorValue 
+        });
+      }
+      
       if (t > this.lastTimestamp) this.lastTimestamp = t;
     });
 
@@ -251,13 +291,26 @@ class TimeframeManager {
       ma50Data.forEach(p => ma50.update(p));
       ma100Data.forEach(p => ma100.update(p));
       ma200Data.forEach(p => ma200.update(p));
+      
+      // Update indicator panel
+      if (customIndicatorSeries && indicatorData.length > 0) {
+        indicatorData.forEach(p => customIndicatorSeries.update(p));
+      }
     } else {
       // Set complete dataset with precision
       priceSeries.setData(priceData);
       ma50.setData(ma50Data);
       ma100.setData(ma100Data);
       ma200.setData(ma200Data);
+      
+      // Set indicator panel data
+      if (customIndicatorSeries && indicatorData.length > 0) {
+        customIndicatorSeries.setData(indicatorData);
+      }
     }
+
+    // Sync time scales between main chart and indicator panel
+    this.syncTimeScales();
 
     // Log technical accuracy info for debugging
     if (aggregatedData.length > 0) {
@@ -275,8 +328,32 @@ class TimeframeManager {
         ma_50: sample.ma_50,
         ma_100: sample.ma_100,
         ma_200: sample.ma_200,
+        customIndicator: this.calculateCustomIndicator(sample),
         note: 'MAs maintain full 1-minute calculation accuracy'
       });
+    }
+  }
+
+  // Placeholder for custom indicator calculation (to be customized)
+  calculateCustomIndicator(dataPoint) {
+    // This will be replaced with user's specific indicator logic
+    // For now, return null to show the infrastructure is ready
+    return null;
+  }
+
+  // Sync time scales between charts
+  syncTimeScales() {
+    try {
+      const mainTimeScale = chart.timeScale();
+      const indicatorTimeScale = indicatorChart.timeScale();
+      
+      // Get the visible range from main chart
+      const visibleRange = mainTimeScale.getVisibleLogicalRange();
+      if (visibleRange) {
+        indicatorTimeScale.setVisibleLogicalRange(visibleRange);
+      }
+    } catch (err) {
+      // Silent fail for sync issues
     }
   }
 
@@ -408,8 +485,71 @@ function setTimeframe(timeframe) {
   timeframeManager.switchTimeframe(timeframe);
 }
 
+// Helper function to setup custom indicators
+function setupCustomIndicator(indicatorConfig) {
+  // Remove existing indicator if any
+  if (customIndicatorSeries) {
+    indicatorChart.removeSeries(customIndicatorSeries);
+  }
+
+  // Create new indicator series based on config
+  switch(indicatorConfig.type) {
+    case 'line':
+      customIndicatorSeries = indicatorChart.addLineSeries({
+        color: indicatorConfig.color || '#ffd700',
+        lineWidth: indicatorConfig.lineWidth || 2,
+        title: indicatorConfig.title || 'Custom Indicator'
+      });
+      break;
+    case 'histogram':
+      customIndicatorSeries = indicatorChart.addHistogramSeries({
+        color: indicatorConfig.color || '#26a69a',
+        title: indicatorConfig.title || 'Custom Indicator'
+      });
+      break;
+    case 'area':
+      customIndicatorSeries = indicatorChart.addAreaSeries({
+        lineColor: indicatorConfig.lineColor || '#ffd700',
+        topColor: indicatorConfig.topColor || 'rgba(255, 215, 0, 0.4)',
+        bottomColor: indicatorConfig.bottomColor || 'rgba(255, 215, 0, 0.0)',
+        lineWidth: indicatorConfig.lineWidth || 2,
+        title: indicatorConfig.title || 'Custom Indicator'
+      });
+      break;
+  }
+
+  // Update the calculation function
+  timeframeManager.calculateCustomIndicator = indicatorConfig.calculate;
+
+  // Reprocess current data with new indicator
+  timeframeManager.processAndSetData(timeframeManager.rawData);
+
+  console.log(`✅ Custom indicator "${indicatorConfig.title}" configured and active!`);
+}
+
+// Setup chart synchronization
+function setupChartSync() {
+  // Sync from main chart to indicator chart
+  chart.timeScale().subscribeVisibleTimeRangeChange(() => {
+    const mainRange = chart.timeScale().getVisibleTimeRange();
+    if (mainRange) {
+      indicatorChart.timeScale().setVisibleTimeRange(mainRange);
+    }
+  });
+
+  // Sync from indicator chart to main chart
+  indicatorChart.timeScale().subscribeVisibleTimeRangeChange(() => {
+    const indicatorRange = indicatorChart.timeScale().getVisibleTimeRange();
+    if (indicatorRange) {
+      chart.timeScale().setVisibleTimeRange(indicatorRange);
+    }
+  });
+}
+
 // Initialize chart and start update cycle
 timeframeManager.initializeChart().then(() => {
   timeframeManager.startUpdateCycle();
+  setupChartSync();
+  console.log('📊 Custom indicator panel ready! Waiting for indicator configuration...');
 });
 

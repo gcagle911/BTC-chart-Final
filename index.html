@@ -10,9 +10,23 @@
       background-color: #131722;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
-    #chart {
+    #chart-container {
       width: 100vw;
       height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    #main-chart {
+      width: 100%;
+      height: 70%;
+      border-bottom: 1px solid #2a2e39;
+    }
+    
+    #indicator-panel {
+      width: 100%;
+      height: 30%;
+      background: #131722;
     }
     
     #timeframe-selector {
@@ -84,7 +98,10 @@
     Loading chart data...
   </div>
   
-  <div id="chart"></div>
+  <div id="chart-container">
+    <div id="main-chart"></div>
+    <div id="indicator-panel"></div>
+  </div>
   <script src="https://unpkg.com/lightweight-charts@4.0.0/dist/lightweight-charts.standalone.production.js"></script>
   <script src="chart.js"></script>
 </body>
