@@ -190,3 +190,11 @@ setInterval(fetchAndUpdate, 15000);
 // Refresh complete historical data every hour (like backend updates)
 setInterval(refreshHistoricalData, 3600000); // 1 hour = 3600000ms
 
+function set1Min() {
+  chart.timeScale().setBarSpacing(10); // default zoom
+}
+
+function set5Min() {
+  chart.timeScale().setBarSpacing(3); // zoomed out view
+}
+
