@@ -11,16 +11,16 @@ window.chart = LightweightCharts.createChart(document.getElementById('chart'), {
   rightPriceScale: { 
     visible: true,
     scaleMargins: {
-      top: 0.05,
-      bottom: 0.05,
+      top: 0.01,
+      bottom: 0.01,
     },
     borderVisible: false,
   },
   leftPriceScale: { 
     visible: true,
     scaleMargins: {
-      top: 0.05,
-      bottom: 0.05,
+      top: 0.01,
+      bottom: 0.01,
     },
     borderVisible: false,
   },
@@ -34,10 +34,13 @@ window.chart = LightweightCharts.createChart(document.getElementById('chart'), {
   },
 });
 
-const priceSeries = chart.addLineSeries({
+const priceSeries = chart.addCandlestickSeries({
   priceScaleId: 'right',
-  color: '#00ffff',
-  lineWidth: 2,
+  upColor: '#26a69a',
+  downColor: '#ef5350',
+  borderVisible: false,
+  wickUpColor: '#26a69a',
+  wickDownColor: '#ef5350',
 });
 
 const ma50 = chart.addLineSeries({
@@ -111,9 +114,18 @@ class TimeframeManager {
     });
   }
 
-  // Aggregate data maintaining full MA technical accuracy
+  // Aggregate data maintaining full MA technical accuracy and create OHLC
   aggregateData(data, timeframeSeconds) {
-    if (timeframeSeconds === 60) return data; // 1m data, no aggregation needed
+    // For 1-minute data, create OHLC from price data
+    if (timeframeSeconds === 60) {
+      return data.map(item => ({
+        ...item,
+        open: item.open || item.price,
+        high: item.high || item.price,
+        low: item.low || item.price,
+        close: item.close || item.price
+      }));
+    }
 
     const aggregated = [];
     const buckets = new Map();
@@ -200,10 +212,13 @@ class TimeframeManager {
       // For updates, only add new data
       if (isUpdate && t <= this.lastTimestamp) return;
       
-      // Maintain full precision by not rounding values
+      // Maintain full precision OHLC data for candlesticks
       priceData.push({ 
         time: t, 
-        value: parseFloat(d.price) // Ensure numeric precision
+        open: parseFloat(d.open),
+        high: parseFloat(d.high),
+        low: parseFloat(d.low),
+        close: parseFloat(d.close)
       });
       
       if (d.ma_50 !== null && d.ma_50 !== undefined) {
@@ -251,7 +266,12 @@ class TimeframeManager {
       console.log(`📊 ${this.currentTimeframe} Technical Analysis:`, {
         timeframe: this.timeframes[this.currentTimeframe].label,
         totalPeriods: totalPoints,
-        latestClose: sample.price,
+        ohlc: {
+          open: sample.open,
+          high: sample.high,
+          low: sample.low,
+          close: sample.close
+        },
         ma_50: sample.ma_50,
         ma_100: sample.ma_100,
         ma_200: sample.ma_200,
