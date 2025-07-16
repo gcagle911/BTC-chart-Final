@@ -229,8 +229,11 @@ class TimeframeManager {
         // the MA value that best represents the timeframe, but using close time
         // is the standard professional approach
         
+        // CRITICAL: Use consistent bucket timestamp for all timeframes
+        const bucketTimestamp = new Date(bucketTime * 1000).toISOString();
+        
         aggregated.push({
-          time: new Date(bucketTime * 1000).toISOString(),
+          time: bucketTimestamp, // Consistent bucket timestamp
           // OHLC price data
           price: closePoint.price, // Close price for line chart
           open: openPoint.price,
@@ -243,7 +246,11 @@ class TimeframeManager {
           // at the close of each timeframe period
           ma_50: closeMAs.ma_50,
           ma_100: closeMAs.ma_100,
-          ma_200: closeMAs.ma_200
+          ma_200: closeMAs.ma_200,
+          
+          // Store bucket info for debugging
+          bucketStart: bucketTime,
+          dataPoints: bucket.dataPoints.length
         });
       }
     }
@@ -267,56 +274,59 @@ class TimeframeManager {
       this.isInitialLoad = true;
     }
 
-    aggregatedData.forEach(d => {
+    // Process all data points and ensure perfect timestamp alignment
+    for (let i = 0; i < aggregatedData.length; i++) {
+      const d = aggregatedData[i];
       const t = this.toUnixTimestamp(d.time);
       
       // For updates, only add new data
-      if (isUpdate && t <= this.lastTimestamp) return;
+      if (isUpdate && t <= this.lastTimestamp) continue;
       
-      // Maintain full precision OHLC data for candlesticks
+      // CRITICAL: Create all data points with IDENTICAL timestamps
+      const sharedTime = t; // Ensure all series use the exact same timestamp
+      
+      // Price data (main chart)
       priceData.push({ 
-        time: t, 
+        time: sharedTime, 
         open: parseFloat(d.open),
         high: parseFloat(d.high),
         low: parseFloat(d.low),
         close: parseFloat(d.close)
       });
       
+      // MA data (main chart)
       if (d.ma_50 !== null && d.ma_50 !== undefined) {
         ma50Data.push({ 
-          time: t, 
+          time: sharedTime, 
           value: parseFloat(d.ma_50) 
         });
       }
       
       if (d.ma_100 !== null && d.ma_100 !== undefined) {
         ma100Data.push({ 
-          time: t, 
+          time: sharedTime, 
           value: parseFloat(d.ma_100) 
         });
       }
       
       if (d.ma_200 !== null && d.ma_200 !== undefined) {
         ma200Data.push({ 
-          time: t, 
+          time: sharedTime, 
           value: parseFloat(d.ma_200) 
         });
       }
       
-      // CRITICAL: Only add indicator data if we have price data for this timestamp
-      // This ensures perfect alignment
-      if (priceData.length > 0 && priceData[priceData.length - 1].time === t) {
-        const indicatorValue = this.calculateCustomIndicator(d);
-        if (indicatorValue !== null) {
-          indicatorData.push({ 
-            time: t, // Use exact same timestamp as price data
-            value: indicatorValue
-          });
-        }
+      // Indicator data (bottom chart) - MUST use identical timestamp
+      const indicatorValue = this.calculateCustomIndicator(d);
+      if (indicatorValue !== null) {
+        indicatorData.push({ 
+          time: sharedTime, // EXACT same timestamp as price data
+          value: indicatorValue
+        });
       }
       
       if (t > this.lastTimestamp) this.lastTimestamp = t;
-    });
+    }
 
     // Log timestamp alignment for debugging
     if (priceData.length > 0 && indicatorData.length > 0) {
@@ -325,10 +335,21 @@ class TimeframeManager {
       const indicatorStart = indicatorData[0].time;
       const indicatorEnd = indicatorData[indicatorData.length - 1].time;
       
-      console.log('🕐 Timestamp Alignment Check:');
-      console.log(`   Price: ${new Date(priceStart * 1000).toISOString()} → ${new Date(priceEnd * 1000).toISOString()}`);
-      console.log(`   Indicator: ${new Date(indicatorStart * 1000).toISOString()} → ${new Date(indicatorEnd * 1000).toISOString()}`);
-      console.log(`   Alignment: ${priceStart === indicatorStart && priceEnd === indicatorEnd ? '✅ PERFECT' : '❌ MISALIGNED'}`);
+      console.log(`🕐 ${this.currentTimeframe} Timestamp Alignment:`);
+      console.log(`   Price Data: ${priceData.length} points | ${new Date(priceStart * 1000).toISOString()} → ${new Date(priceEnd * 1000).toISOString()}`);
+      console.log(`   Indicator Data: ${indicatorData.length} points | ${new Date(indicatorStart * 1000).toISOString()} → ${new Date(indicatorEnd * 1000).toISOString()}`);
+      console.log(`   Perfect Match: ${priceStart === indicatorStart && priceEnd === indicatorEnd ? '✅ YES' : '❌ NO'}`);
+      
+      // Show sample timestamps for verification
+      if (priceData.length >= 3 && indicatorData.length >= 3) {
+        console.log(`   Sample timestamps:`);
+        for (let i = 0; i < Math.min(3, priceData.length); i++) {
+          const pTime = priceData[i].time;
+          const iTime = indicatorData[i] ? indicatorData[i].time : 'MISSING';
+          const match = pTime === iTime ? '✅' : '❌';
+          console.log(`     [${i}] Price: ${new Date(pTime * 1000).toISOString()} | Indicator: ${iTime !== 'MISSING' ? new Date(iTime * 1000).toISOString() : 'MISSING'} ${match}`);
+        }
+      }
     }
 
     // Clear loading flag
@@ -538,7 +559,7 @@ class TimeframeManager {
     }
   }
 
-  // Force sync indicator chart to main chart
+  // Force sync indicator chart to main chart with full configuration
   syncTimeScales() {
     try {
       const timeRange = chart.timeScale().getVisibleTimeRange();
@@ -552,9 +573,17 @@ class TimeframeManager {
         indicatorChart.timeScale().setVisibleLogicalRange(logicalRange);
       }
       
-      console.log('🔗 Manual sync completed');
+      // Force identical time scale configuration
+      const mainOptions = chart.timeScale().options();
+      indicatorChart.timeScale().applyOptions({
+        rightOffset: mainOptions.rightOffset,
+        barSpacing: mainOptions.barSpacing,
+        minBarSpacing: mainOptions.minBarSpacing,
+      });
+      
+      console.log(`🔗 Sync completed - TF: ${this.currentTimeframe}`);
     } catch (err) {
-      console.error('❌ Manual sync failed:', err);
+      console.error('❌ Sync failed:', err);
     }
   }
 
@@ -646,32 +675,62 @@ class TimeframeManager {
     this.showLoading();
     this.disableButtons();
     
-    console.log(`🔄 Switching to ${timeframe} timeframe with full MA technical accuracy`);
+    console.log(`🔄 Switching to ${timeframe} timeframe - ensuring perfect alignment`);
     
+    const oldTimeframe = this.currentTimeframe;
     this.currentTimeframe = timeframe;
     this.setActiveButton(timeframe);
     
+    // Reset sync state for clean timeframe switch
+    this.referenceLinesSet = false;
+    
     // Reprocess data with new timeframe
-    // Important: MAs maintain their original 1-minute calculation accuracy
-    // We sample the MA values at timeframe close points, not re-calculate them
     this.lastTimestamp = 0; // Reset to reprocess all data
     this.processAndSetData(this.rawData);
     
-    // Force perfect synchronization after timeframe switch
+    // Aggressive multi-stage synchronization after timeframe switch
     setTimeout(() => {
+      console.log(`📊 Stage 1: Initial sync from ${oldTimeframe} to ${timeframe}`);
       this.syncTimeScales();
-      console.log('🔗 Timeframe sync complete');
-    }, 100);
+      
+      // Get ranges for verification
+      const mainRange = chart.timeScale().getVisibleTimeRange();
+      const indicatorRange = indicatorChart.timeScale().getVisibleTimeRange();
+      
+      if (mainRange && indicatorRange) {
+        console.log(`🕐 Post-switch ranges:`);
+        console.log(`   Main: ${new Date(mainRange.from * 1000).toISOString()} → ${new Date(mainRange.to * 1000).toISOString()}`);
+        console.log(`   Indicator: ${new Date(indicatorRange.from * 1000).toISOString()} → ${new Date(indicatorRange.to * 1000).toISOString()}`);
+        
+        // Force exact alignment
+        indicatorChart.timeScale().setVisibleTimeRange(mainRange);
+      }
+    }, 200);
     
-    // Additional sync to ensure lock
+    // Second sync wave
     setTimeout(() => {
+      console.log(`📊 Stage 2: Secondary sync verification`);
       this.syncTimeScales();
-    }, 500);
+      
+      // Final verification
+      const finalMain = chart.timeScale().getVisibleTimeRange();
+      const finalIndicator = indicatorChart.timeScale().getVisibleTimeRange();
+      
+      if (finalMain && finalIndicator) {
+        const timeDiff = Math.abs(finalMain.from - finalIndicator.from);
+        if (timeDiff > 1) {
+          console.log(`❌ Still misaligned by ${timeDiff}s - forcing correction`);
+          indicatorChart.timeScale().setVisibleTimeRange(finalMain);
+        } else {
+          console.log(`✅ Perfect alignment achieved (diff: ${timeDiff}s)`);
+        }
+      }
+    }, 600);
     
     this.hideLoading();
     this.enableButtons();
     
-    console.log(`✅ Switched to ${this.timeframes[timeframe].label} - Charts synchronized`);
+    console.log(`✅ Switched to ${this.timeframes[timeframe].label} - Multi-stage sync initiated`);
   }
 
   startUpdateCycle() {
