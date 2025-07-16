@@ -8,9 +8,30 @@ window.chart = LightweightCharts.createChart(document.getElementById('chart'), {
     vertLines: { color: '#2B2B43' },
     horzLines: { color: '#2B2B43' },
   },
-  rightPriceScale: { visible: true },
-  leftPriceScale: { visible: true },
-  timeScale: { timeVisible: true, secondsVisible: false },
+  rightPriceScale: { 
+    visible: true,
+    scaleMargins: {
+      top: 0.05,
+      bottom: 0.05,
+    },
+    borderVisible: false,
+  },
+  leftPriceScale: { 
+    visible: true,
+    scaleMargins: {
+      top: 0.05,
+      bottom: 0.05,
+    },
+    borderVisible: false,
+  },
+  timeScale: { 
+    timeVisible: true, 
+    secondsVisible: false,
+    borderVisible: false,
+  },
+  crosshair: {
+    mode: LightweightCharts.CrosshairMode.Normal,
+  },
 });
 
 const priceSeries = chart.addLineSeries({
@@ -90,7 +111,7 @@ class TimeframeManager {
     });
   }
 
-  // Aggregate 1-minute data to higher timeframes with high precision
+  // Aggregate data maintaining full MA technical accuracy
   aggregateData(data, timeframeSeconds) {
     if (timeframeSeconds === 60) return data; // 1m data, no aggregation needed
 
@@ -120,32 +141,42 @@ class TimeframeManager {
       });
     });
 
-    // Convert buckets to aggregated data points using last values (most precise)
+    // Convert buckets maintaining MA technical accuracy
     for (const [bucketTime, bucket] of buckets) {
       if (bucket.dataPoints.length > 0) {
-        // Sort by timestamp and take the last (most recent) values in each bucket
+        // Sort by timestamp
         bucket.dataPoints.sort((a, b) => a.timestamp - b.timestamp);
-        const lastPoint = bucket.dataPoints[bucket.dataPoints.length - 1];
         
-        // For higher precision, we could also calculate OHLC if needed
+        // For price: Use proper OHLC aggregation
         const openPoint = bucket.dataPoints[0];
+        const closePoint = bucket.dataPoints[bucket.dataPoints.length - 1];
         const highPrice = Math.max(...bucket.dataPoints.map(p => p.price));
         const lowPrice = Math.min(...bucket.dataPoints.map(p => p.price));
         
+        // For MAs: Use the MA value at the close time of the timeframe period
+        // This maintains the technical accuracy of the MA calculations
+        // The MA at the close represents the true MA value for that timeframe period
+        const closeMAs = closePoint;
+        
+        // Alternative approach: For maximum accuracy, we could interpolate or use
+        // the MA value that best represents the timeframe, but using close time
+        // is the standard professional approach
+        
         aggregated.push({
           time: new Date(bucketTime * 1000).toISOString(),
-          // Use the close price (last in bucket) for maximum precision
-          price: lastPoint.price,
-          // Use the last MA values in the bucket to maintain precision
-          // This is how professional trading platforms handle MA aggregation
-          ma_50: lastPoint.ma_50,
-          ma_100: lastPoint.ma_100,
-          ma_200: lastPoint.ma_200,
-          // Store OHLC data for potential future use
+          // OHLC price data
+          price: closePoint.price, // Close price for line chart
           open: openPoint.price,
           high: highPrice,
           low: lowPrice,
-          close: lastPoint.price
+          close: closePoint.price,
+          
+          // MAs maintain their original technical calculation accuracy
+          // These are the actual MA values calculated from full 1-minute granularity
+          // at the close of each timeframe period
+          ma_50: closeMAs.ma_50,
+          ma_100: closeMAs.ma_100,
+          ma_200: closeMAs.ma_200
         });
       }
     }
@@ -213,14 +244,18 @@ class TimeframeManager {
       ma200.setData(ma200Data);
     }
 
-    // Log precision info for debugging
+    // Log technical accuracy info for debugging
     if (aggregatedData.length > 0) {
       const sample = aggregatedData[aggregatedData.length - 1];
-      console.log(`📊 ${this.currentTimeframe} precision sample:`, {
-        price: sample.price,
+      const totalPoints = aggregatedData.length;
+      console.log(`📊 ${this.currentTimeframe} Technical Analysis:`, {
+        timeframe: this.timeframes[this.currentTimeframe].label,
+        totalPeriods: totalPoints,
+        latestClose: sample.price,
         ma_50: sample.ma_50,
         ma_100: sample.ma_100,
-        ma_200: sample.ma_200
+        ma_200: sample.ma_200,
+        note: 'MAs maintain full 1-minute calculation accuracy'
       });
     }
   }
@@ -315,19 +350,21 @@ class TimeframeManager {
     this.showLoading();
     this.disableButtons();
     
-    console.log(`🔄 Switching to ${timeframe} timeframe`);
+    console.log(`🔄 Switching to ${timeframe} timeframe with full MA technical accuracy`);
     
     this.currentTimeframe = timeframe;
     this.setActiveButton(timeframe);
     
     // Reprocess data with new timeframe
+    // Important: MAs maintain their original 1-minute calculation accuracy
+    // We sample the MA values at timeframe close points, not re-calculate them
     this.lastTimestamp = 0; // Reset to reprocess all data
     this.processAndSetData(this.rawData);
     
     this.hideLoading();
     this.enableButtons();
     
-    console.log(`✅ Switched to ${this.timeframes[timeframe].label} timeframe`);
+    console.log(`✅ Switched to ${this.timeframes[timeframe].label} - MAs preserve technical accuracy`);
   }
 
   startUpdateCycle() {
