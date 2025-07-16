@@ -458,12 +458,12 @@ class TimeframeManager {
     return false;
   }
 
-  // MA Crossover - Immediate Response (optimized)
+  // MA Crossover - Shows the spread between MA50 and MA100 normalized
   calculateCustomIndicator(dataPoint) {
-    const { ma_50, ma_100, ma_200 } = dataPoint;
+    const { ma_50, ma_100, ma_200, price } = dataPoint;
     
     // Quick validation
-    if (ma_50 === null || ma_100 === null || ma_200 === null) {
+    if (ma_50 === null || ma_100 === null || ma_200 === null || price === null) {
       return null;
     }
     
@@ -472,38 +472,63 @@ class TimeframeManager {
       return 0.5; // Return neutral during loading
     }
     
-    // Initialize state for spread color tracking
+    // Initialize state for spread tracking
     if (!this.indicatorState) {
       this.indicatorState = {
-        lastSpreadColor: '#26a69a'
+        lastSpreadColor: '#26a69a',
+        spreadHistory: []
       };
     }
     
-    // Determine current MA positioning - immediate response
-    const ma50AboveMA200 = ma_50 > ma_200;
-    const ma100AboveMA200 = ma_100 > ma_200;
+    // Calculate the actual spread between MA50 and MA100
+    const spread = ma_50 - ma_100;
+    const spreadPercentage = (spread / price) * 100; // Convert to percentage of price
     
-    let positionValue;
-    if (ma50AboveMA200 && ma100AboveMA200) {
-      positionValue = 1.0; // Both above - top
-    } else if (!ma50AboveMA200 && !ma100AboveMA200) {
-      positionValue = 0.0; // Both below - bottom
-    } else {
-      positionValue = 0.5; // Mixed - middle
+    // Store spread history for dynamic scaling (keep last 100 values)
+    this.indicatorState.spreadHistory.push(spreadPercentage);
+    if (this.indicatorState.spreadHistory.length > 100) {
+      this.indicatorState.spreadHistory.shift();
     }
     
-    // Update spread color (for status display)
-    if (ma_50 > 0.03) {
-      this.indicatorState.lastSpreadColor = '#ff4444'; // Red
-    } else if (ma_50 > 0.02) {
-      this.indicatorState.lastSpreadColor = '#ff8800'; // Orange
-    } else if (ma_50 > 0.01) {
-      this.indicatorState.lastSpreadColor = '#ffcc00'; // Yellow
-    } else {
-      this.indicatorState.lastSpreadColor = '#26a69a'; // Green
+    // Calculate dynamic range for normalization
+    const recentSpreads = this.indicatorState.spreadHistory.slice(-50); // Last 50 values
+    const maxSpread = Math.max(...recentSpreads);
+    const minSpread = Math.min(...recentSpreads);
+    const spreadRange = maxSpread - minSpread;
+    
+    // Normalize to 0-1 range with some padding to avoid extremes
+    let normalizedValue = 0.5; // Default to middle
+    if (spreadRange > 0) {
+      normalizedValue = (spreadPercentage - minSpread) / spreadRange;
+      // Add some padding to prevent hitting exact 0 or 1
+      normalizedValue = Math.max(0.05, Math.min(0.95, normalizedValue));
     }
     
-    return positionValue;
+    // Determine color based on MA50 vs MA100 relationship and trend strength
+    if (spread > 0) {
+      // MA50 above MA100 - bullish
+      if (spreadPercentage > 0.1) {
+        this.indicatorState.lastSpreadColor = '#00ff00'; // Strong green
+      } else if (spreadPercentage > 0.05) {
+        this.indicatorState.lastSpreadColor = '#26a69a'; // Medium green
+      } else {
+        this.indicatorState.lastSpreadColor = '#66bb6a'; // Light green
+      }
+    } else {
+      // MA50 below MA100 - bearish
+      if (spreadPercentage < -0.1) {
+        this.indicatorState.lastSpreadColor = '#ff4444'; // Strong red
+      } else if (spreadPercentage < -0.05) {
+        this.indicatorState.lastSpreadColor = '#ef5350'; // Medium red
+      } else {
+        this.indicatorState.lastSpreadColor = '#ffab91'; // Light red
+      }
+    }
+    
+    // Store the actual spread value for status display
+    this.indicatorState.currentSpread = spreadPercentage;
+    
+    return normalizedValue;
   }
 
   // Update spread status display (ultra-light)
@@ -513,8 +538,8 @@ class TimeframeManager {
     // Skip during heavy processing
     if (data.length > 5000) return;
     
-    const latest = data[data.length - 1];
-    const spreadValue = latest.ma_50;
+    // Use the actual calculated spread value
+    const spreadValue = this.indicatorState.currentSpread;
     
     // Use requestAnimationFrame for smooth DOM updates
     if (!this.pendingStatusUpdate) {
@@ -530,8 +555,10 @@ class TimeframeManager {
     const spreadElement = document.getElementById('spread-value');
     const statusElement = document.getElementById('spread-status-text');
     
-    if (spreadElement && spreadValue !== null) {
-      spreadElement.textContent = spreadValue.toFixed(4);
+    if (spreadElement && spreadValue !== null && spreadValue !== undefined) {
+      // Show spread as percentage with proper sign
+      const sign = spreadValue >= 0 ? '+' : '';
+      spreadElement.textContent = `${sign}${spreadValue.toFixed(3)}%`;
       spreadElement.style.color = this.indicatorState.lastSpreadColor;
     }
     
@@ -539,16 +566,25 @@ class TimeframeManager {
       // Get latest MA data to determine current status
       const latest = this.rawData[this.rawData.length - 1];
       if (latest && latest.ma_50 !== null && latest.ma_100 !== null && latest.ma_200 !== null) {
-        const ma50AboveMA200 = latest.ma_50 > latest.ma_200;
-        const ma100AboveMA200 = latest.ma_100 > latest.ma_200;
+        const spread = latest.ma_50 - latest.ma_100;
         
         let statusText;
-        if (ma50AboveMA200 && ma100AboveMA200) {
-          statusText = "BULLISH - Both MAs Above";
-        } else if (!ma50AboveMA200 && !ma100AboveMA200) {
-          statusText = "BEARISH - Both MAs Below";
+        if (spread > 0) {
+          if (spreadValue > 0.1) {
+            statusText = "STRONG BULLISH - MA50 >> MA100";
+          } else if (spreadValue > 0.05) {
+            statusText = "BULLISH - MA50 > MA100";
+          } else {
+            statusText = "WEAK BULLISH - MA50 ≈ MA100";
+          }
         } else {
-          statusText = "MIXED - MAs Diverging";
+          if (spreadValue < -0.1) {
+            statusText = "STRONG BEARISH - MA50 << MA100";
+          } else if (spreadValue < -0.05) {
+            statusText = "BEARISH - MA50 < MA100";
+          } else {
+            statusText = "WEAK BEARISH - MA50 ≈ MA100";
+          }
         }
         
         statusElement.textContent = statusText;
@@ -847,10 +883,10 @@ function setupChartSync() {
 timeframeManager.initializeChart().then(() => {
   timeframeManager.startUpdateCycle();
   
-  // Setup the immediate MA Crossover Indicator
+  // Setup the MA50-MA100 Spread Indicator
   setupCustomIndicator({
     type: 'line',
-    title: 'MA Crossover (Immediate)',
+    title: 'MA50-MA100 Spread',
     color: '#00d4ff',
     lineWidth: 3,
     calculate: timeframeManager.calculateCustomIndicator.bind(timeframeManager)
@@ -899,8 +935,9 @@ timeframeManager.initializeChart().then(() => {
     console.log('📊 Y-axis: Independent (scroll/zoom indicator panel)');
   }, 1000);
   
-  console.log('📊 MA Crossover indicator loaded');
-  console.log('🎯 Logic: Top=Both MAs above MA200 | Bottom=Both below | Middle=Mixed');
+  console.log('📊 MA50-MA100 Spread indicator loaded');
+  console.log('🎯 Logic: Shows normalized spread between MA50 and MA100');
+  console.log('🎯 Above middle = MA50 > MA100 (Bullish) | Below middle = MA50 < MA100 (Bearish)');
   console.log('🎮 Controls:');
   console.log('   • Horizontal scroll/zoom: Use MAIN chart');
   console.log('   • Vertical scroll/zoom: Use INDICATOR panel');
