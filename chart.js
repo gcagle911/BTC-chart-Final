@@ -80,7 +80,7 @@ window.indicatorChart = LightweightCharts.createChart(document.getElementById('i
     borderVisible: false,
   },
   timeScale: { 
-    visible: false, // Hide time scale to sync with main chart
+    visible: false, // Hide to avoid duplication - sync with main chart
     borderVisible: false,
   },
   crosshair: {
@@ -305,9 +305,20 @@ class TimeframeManager {
       ma100Data.forEach(p => ma100.update(p));
       ma200Data.forEach(p => ma200.update(p));
       
-      // Update indicator panel (only if we have data)
+      // Update indicator panel with perfect time sync
       if (customIndicatorSeries && indicatorData.length > 0) {
         indicatorData.forEach(p => customIndicatorSeries.update(p));
+        
+        // Update reference lines to maintain sync
+        if (topReferenceLine) {
+          indicatorData.forEach(p => topReferenceLine.update({ time: p.time, value: 1.0 }));
+        }
+        if (middleReferenceLine) {
+          indicatorData.forEach(p => middleReferenceLine.update({ time: p.time, value: 0.5 }));
+        }
+        if (bottomReferenceLine) {
+          indicatorData.forEach(p => bottomReferenceLine.update({ time: p.time, value: 0.0 }));
+        }
       }
     } else {
       // Set complete dataset
@@ -330,11 +341,8 @@ class TimeframeManager {
       this.updateSpreadStatus(aggregatedData);
     }
     
-    // Sync time scales (throttled)
-    if (!this.lastSyncTime || Date.now() - this.lastSyncTime > 2000) {
-      this.syncTimeScales();
-      this.lastSyncTime = Date.now();
-    }
+    // Force time scale sync for perfect alignment
+    this.syncTimeScales();
   }
 
   // Helper to set reference lines only once
@@ -469,17 +477,32 @@ class TimeframeManager {
     }
   }
 
-  // Sync time scales between charts
+  // Sync time scales between charts for perfect alignment
   syncTimeScales() {
     try {
       const mainTimeScale = chart.timeScale();
       const indicatorTimeScale = indicatorChart.timeScale();
       
-      // Get the visible range from main chart
-      const visibleRange = mainTimeScale.getVisibleLogicalRange();
-      if (visibleRange) {
-        indicatorTimeScale.setVisibleLogicalRange(visibleRange);
+      // Sync both logical and time ranges for perfect alignment
+      const visibleLogicalRange = mainTimeScale.getVisibleLogicalRange();
+      const visibleTimeRange = mainTimeScale.getVisibleTimeRange();
+      
+      if (visibleLogicalRange) {
+        indicatorTimeScale.setVisibleLogicalRange(visibleLogicalRange);
       }
+      
+      if (visibleTimeRange) {
+        indicatorTimeScale.setVisibleTimeRange(visibleTimeRange);
+      }
+      
+      // Ensure both charts have the same time scale settings
+      indicatorTimeScale.applyOptions({
+        timeVisible: false,
+        borderVisible: false,
+        rightOffset: mainTimeScale.options().rightOffset || 0,
+        barSpacing: mainTimeScale.options().barSpacing || undefined
+      });
+      
     } catch (err) {
       // Silent fail for sync issues
     }
@@ -584,10 +607,16 @@ class TimeframeManager {
     this.lastTimestamp = 0; // Reset to reprocess all data
     this.processAndSetData(this.rawData);
     
+    // Force perfect synchronization after timeframe switch
+    setTimeout(() => {
+      this.syncTimeScales();
+      console.log('🔗 Timeframe sync complete');
+    }, 200);
+    
     this.hideLoading();
     this.enableButtons();
     
-    console.log(`✅ Switched to ${this.timeframes[timeframe].label} - MAs preserve technical accuracy`);
+    console.log(`✅ Switched to ${this.timeframes[timeframe].label} - Charts synchronized`);
   }
 
   startUpdateCycle() {
@@ -668,26 +697,43 @@ function setupCustomIndicator(indicatorConfig) {
   console.log(`✅ Custom indicator "${indicatorConfig.title}" configured and active!`);
 }
 
-// Setup lightweight chart synchronization
+// Setup perfect chart synchronization
 function setupChartSync() {
-  let syncInProgress = false;
-  
-  // Throttled sync from main chart to indicator chart
+  // Sync main chart to indicator chart
   chart.timeScale().subscribeVisibleTimeRangeChange(() => {
-    if (syncInProgress) return;
-    syncInProgress = true;
-    
-    setTimeout(() => {
-      try {
-        const mainRange = chart.timeScale().getVisibleTimeRange();
-        if (mainRange) {
-          indicatorChart.timeScale().setVisibleTimeRange(mainRange);
-        }
-      } catch (e) {
-        // Silent fail
+    try {
+      const mainRange = chart.timeScale().getVisibleTimeRange();
+      if (mainRange) {
+        indicatorChart.timeScale().setVisibleTimeRange(mainRange);
       }
-      syncInProgress = false;
-    }, 50); // 50ms throttle
+    } catch (e) {
+      // Silent fail
+    }
+  });
+
+  // Sync indicator chart to main chart  
+  indicatorChart.timeScale().subscribeVisibleTimeRangeChange(() => {
+    try {
+      const indicatorRange = indicatorChart.timeScale().getVisibleTimeRange();
+      if (indicatorRange) {
+        chart.timeScale().setVisibleTimeRange(indicatorRange);
+      }
+    } catch (e) {
+      // Silent fail
+    }
+  });
+
+  // Sync crosshair movements
+  chart.subscribeCrosshairMove((param) => {
+    if (param.time) {
+      indicatorChart.setCrosshairPosition(param.point?.x || 0, param.time, true);
+    }
+  });
+
+  indicatorChart.subscribeCrosshairMove((param) => {
+    if (param.time) {
+      chart.setCrosshairPosition(param.point?.x || 0, param.time, true);
+    }
   });
 }
 
@@ -704,6 +750,12 @@ timeframeManager.initializeChart().then(() => {
     lineWidth: 3,
     calculate: timeframeManager.calculateCustomIndicator.bind(timeframeManager)
   });
+  
+  // Force initial synchronization
+  setTimeout(() => {
+    timeframeManager.syncTimeScales();
+    console.log('🔗 Charts synchronized for correlation analysis');
+  }, 500);
   
   console.log('📊 Immediate MA Crossover indicator active!');
   console.log('🎯 Logic: Top(1.0)=Both MAs above MA200 | Bottom(0.0)=Both below | Middle(0.5)=Mixed');
