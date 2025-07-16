@@ -1,4 +1,4 @@
-const chart = LightweightCharts.createChart(document.getElementById('chart'), {
+window.chart = LightweightCharts.createChart(document.getElementById('chart'), {
   layout: {
     background: { color: '#131722' },
     textColor: '#D1D4DC',
