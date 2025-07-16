@@ -1,3 +1,4 @@
+// Chart setup
 window.chart = LightweightCharts.createChart(document.getElementById('chart'), {
   layout: {
     background: { color: '#131722' },
@@ -36,179 +37,273 @@ const ma200 = chart.addLineSeries({
   lineWidth: 1,
 });
 
-function toUnixTimestamp(dateStr) {
-  return Math.floor(new Date(dateStr).getTime() / 1000);
-}
-
-let lastTimestamp = 0;
-let isFullDataLoaded = false;
-
-// Helper function to process and set chart data
-function processAndSetData(data, isUpdate = false) {
-  const priceData = [];
-  const ma50Data = [];
-  const ma100Data = [];
-  const ma200Data = [];
-
-  data.forEach(d => {
-    const t = toUnixTimestamp(d.time);
+// Timeframe management
+class TimeframeManager {
+  constructor() {
+    this.currentTimeframe = '1m';
+    this.rawData = [];
+    this.lastTimestamp = 0;
+    this.isFullDataLoaded = false;
+    this.updateInterval = null;
+    this.refreshInterval = null;
     
-    // For updates, only add new data
-    if (isUpdate && t <= lastTimestamp) return;
-    
-    priceData.push({ time: t, value: d.price });
-    if (d.ma_50 !== null) ma50Data.push({ time: t, value: d.ma_50 });
-    if (d.ma_100 !== null) ma100Data.push({ time: t, value: d.ma_100 });
-    if (d.ma_200 !== null) ma200Data.push({ time: t, value: d.ma_200 });
-    
-    if (t > lastTimestamp) lastTimestamp = t;
-  });
-
-  if (isUpdate) {
-    // Add new data points
-    priceData.forEach(p => priceSeries.update(p));
-    ma50Data.forEach(p => ma50.update(p));
-    ma100Data.forEach(p => ma100.update(p));
-    ma200Data.forEach(p => ma200.update(p));
-  } else {
-    // Set complete dataset
-    priceSeries.setData(priceData);
-    ma50.setData(ma50Data);
-    ma100.setData(ma100Data);
-    ma200.setData(ma200Data);
+    this.timeframes = {
+      '1m': { seconds: 60, label: '1 Minute' },
+      '5m': { seconds: 300, label: '5 Minutes' },
+      '15m': { seconds: 900, label: '15 Minutes' },
+      '1h': { seconds: 3600, label: '1 Hour' },
+      '4h': { seconds: 14400, label: '4 Hours' },
+      '1d': { seconds: 86400, label: '1 Day' }
+    };
   }
-}
 
-// TradingView-style hybrid initialization
-async function initializeChart() {
-  try {
-    console.log('🚀 Starting TradingView-style chart initialization...');
-    
-    // Phase 1: Load recent data first (instant chart display)
-    console.log('⚡ Loading recent data for fast startup...');
-    const recentRes = await fetch('https://btc-spread-test-pipeline.onrender.com/recent.json');
-    const recentData = await recentRes.json();
-    
-    // Display recent data immediately (fast user experience)
-    processAndSetData(recentData);
-    console.log(`✅ Chart loaded with ${recentData.length} recent data points`);
-    
-    // Phase 2: Load complete historical data in background
-    console.log('📚 Loading complete historical data...');
-    const historicalRes = await fetch('https://btc-spread-test-pipeline.onrender.com/historical.json');
-    const historicalData = await historicalRes.json();
-    
-    // Replace with complete dataset (full historical context)
-    processAndSetData(historicalData);
-    isFullDataLoaded = true;
-    console.log(`🎉 Chart updated with complete ${historicalData.length} historical data points`);
-    
-  } catch (err) {
-    console.error('❌ Error during chart initialization:', err);
-    
-    // Fallback to old endpoint if new system fails
-    console.log('🔄 Falling back to legacy endpoint...');
-    try {
-      const fallbackRes = await fetch('https://btc-spread-test-pipeline.onrender.com/output-latest.json');
-      const fallbackData = await fallbackRes.json();
-      processAndSetData(fallbackData);
-      console.log('✅ Fallback successful');
-    } catch (fallbackErr) {
-      console.error('❌ Fallback also failed:', fallbackErr);
-    }
+  toUnixTimestamp(dateStr) {
+    return Math.floor(new Date(dateStr).getTime() / 1000);
   }
-}
 
-// Updated fetch function - uses recent data for performance
-async function fetchAndUpdate() {
-  try {
-    // Use recent endpoint for fast updates (last 24 hours)
-    const res = await fetch('https://btc-spread-test-pipeline.onrender.com/recent.json');
-    const data = await res.json();
+  showLoading() {
+    document.getElementById('loading-indicator').style.display = 'block';
+  }
 
-    const newPrice = [];
-    const new50 = [];
-    const new100 = [];
-    const new200 = [];
+  hideLoading() {
+    document.getElementById('loading-indicator').style.display = 'none';
+  }
 
-    data.forEach(d => {
-      const t = toUnixTimestamp(d.time);
-      if (t > lastTimestamp) {
-        newPrice.push({ time: t, value: d.price });
-        if (d.ma_50 !== null) new50.push({ time: t, value: d.ma_50 });
-        if (d.ma_100 !== null) new100.push({ time: t, value: d.ma_100 });
-        if (d.ma_200 !== null) new200.push({ time: t, value: d.ma_200 });
-        lastTimestamp = t;
+  setActiveButton(timeframe) {
+    document.querySelectorAll('.timeframe-btn').forEach(btn => {
+      btn.classList.remove('active');
+      if (btn.dataset.timeframe === timeframe) {
+        btn.classList.add('active');
       }
     });
+  }
 
-    // Only update if we have new data
-    if (newPrice.length > 0) {
-      newPrice.forEach(p => priceSeries.update(p));
-      new50.forEach(p => ma50.update(p));
-      new100.forEach(p => ma100.update(p));
-      new200.forEach(p => ma200.update(p));
+  disableButtons() {
+    document.querySelectorAll('.timeframe-btn').forEach(btn => {
+      btn.disabled = true;
+    });
+  }
+
+  enableButtons() {
+    document.querySelectorAll('.timeframe-btn').forEach(btn => {
+      btn.disabled = false;
+    });
+  }
+
+  // Aggregate 1-minute data to higher timeframes
+  aggregateData(data, timeframeSeconds) {
+    if (timeframeSeconds === 60) return data; // 1m data, no aggregation needed
+
+    const aggregated = [];
+    const buckets = new Map();
+
+    data.forEach(item => {
+      const timestamp = this.toUnixTimestamp(item.time);
+      const bucketTime = Math.floor(timestamp / timeframeSeconds) * timeframeSeconds;
       
-      console.log(`📈 Updated chart with ${newPrice.length} new data points`);
+      if (!buckets.has(bucketTime)) {
+        buckets.set(bucketTime, {
+          timestamp: bucketTime,
+          prices: [],
+          ma_50_values: [],
+          ma_100_values: [],
+          ma_200_values: []
+        });
+      }
+
+      const bucket = buckets.get(bucketTime);
+      bucket.prices.push(item.price);
+      if (item.ma_50 !== null) bucket.ma_50_values.push(item.ma_50);
+      if (item.ma_100 !== null) bucket.ma_100_values.push(item.ma_100);
+      if (item.ma_200 !== null) bucket.ma_200_values.push(item.ma_200);
+    });
+
+    // Convert buckets to aggregated data points
+    for (const [bucketTime, bucket] of buckets) {
+      if (bucket.prices.length > 0) {
+        aggregated.push({
+          time: new Date(bucketTime * 1000).toISOString(),
+          price: bucket.prices[bucket.prices.length - 1], // Close price (last price in bucket)
+          ma_50: bucket.ma_50_values.length > 0 ? 
+            bucket.ma_50_values.reduce((a, b) => a + b, 0) / bucket.ma_50_values.length : null,
+          ma_100: bucket.ma_100_values.length > 0 ? 
+            bucket.ma_100_values.reduce((a, b) => a + b, 0) / bucket.ma_100_values.length : null,
+          ma_200: bucket.ma_200_values.length > 0 ? 
+            bucket.ma_200_values.reduce((a, b) => a + b, 0) / bucket.ma_200_values.length : null
+        });
+      }
     }
 
-  } catch (err) {
-    console.error('❌ Fetch/update error:', err);
-    
-    // Fallback to old endpoint
+    return aggregated.sort((a, b) => new Date(a.time) - new Date(b.time));
+  }
+
+  // Process and set chart data
+  processAndSetData(data, isUpdate = false) {
+    const timeframeSeconds = this.timeframes[this.currentTimeframe].seconds;
+    const aggregatedData = this.aggregateData(data, timeframeSeconds);
+
+    const priceData = [];
+    const ma50Data = [];
+    const ma100Data = [];
+    const ma200Data = [];
+
+    aggregatedData.forEach(d => {
+      const t = this.toUnixTimestamp(d.time);
+      
+      // For updates, only add new data
+      if (isUpdate && t <= this.lastTimestamp) return;
+      
+      priceData.push({ time: t, value: d.price });
+      if (d.ma_50 !== null) ma50Data.push({ time: t, value: d.ma_50 });
+      if (d.ma_100 !== null) ma100Data.push({ time: t, value: d.ma_100 });
+      if (d.ma_200 !== null) ma200Data.push({ time: t, value: d.ma_200 });
+      
+      if (t > this.lastTimestamp) this.lastTimestamp = t;
+    });
+
+    if (isUpdate) {
+      // Add new data points
+      priceData.forEach(p => priceSeries.update(p));
+      ma50Data.forEach(p => ma50.update(p));
+      ma100Data.forEach(p => ma100.update(p));
+      ma200Data.forEach(p => ma200.update(p));
+    } else {
+      // Set complete dataset
+      priceSeries.setData(priceData);
+      ma50.setData(ma50Data);
+      ma100.setData(ma100Data);
+      ma200.setData(ma200Data);
+    }
+  }
+
+  async initializeChart() {
     try {
-      const res = await fetch('https://btc-spread-test-pipeline.onrender.com/output-latest.json');
-      const data = await res.json();
-      processAndSetData(data, true);
-    } catch (fallbackErr) {
-      console.error('❌ Update fallback failed:', fallbackErr);
+      this.showLoading();
+      console.log('🚀 Starting chart initialization...');
+      
+      // Phase 1: Load recent data first
+      console.log('⚡ Loading recent data...');
+      const recentRes = await fetch('https://btc-spread-test-pipeline.onrender.com/recent.json');
+      const recentData = await recentRes.json();
+      
+      this.rawData = recentData;
+      this.processAndSetData(recentData);
+      console.log(`✅ Chart loaded with ${recentData.length} recent data points`);
+      
+      // Phase 2: Load complete historical data in background
+      console.log('📚 Loading complete historical data...');
+      const historicalRes = await fetch('https://btc-spread-test-pipeline.onrender.com/historical.json');
+      const historicalData = await historicalRes.json();
+      
+      this.rawData = historicalData;
+      this.processAndSetData(historicalData);
+      this.isFullDataLoaded = true;
+      console.log(`🎉 Chart updated with complete ${historicalData.length} historical data points`);
+      
+    } catch (err) {
+      console.error('❌ Error during chart initialization:', err);
+      
+      // Fallback to old endpoint
+      try {
+        const fallbackRes = await fetch('https://btc-spread-test-pipeline.onrender.com/output-latest.json');
+        const fallbackData = await fallbackRes.json();
+        this.rawData = fallbackData;
+        this.processAndSetData(fallbackData);
+        console.log('✅ Fallback successful');
+      } catch (fallbackErr) {
+        console.error('❌ Fallback also failed:', fallbackErr);
+      }
+    } finally {
+      this.hideLoading();
     }
   }
-}
 
-// Refresh full historical data every hour (like the backend)
-async function refreshHistoricalData() {
-  if (!isFullDataLoaded) return; // Skip if initial load hasn't completed
-  
-  try {
-    console.log('🔄 Refreshing historical data (hourly)...');
-    const res = await fetch('https://btc-spread-test-pipeline.onrender.com/historical.json');
-    const data = await res.json();
-    processAndSetData(data);
-    console.log(`✅ Historical data refreshed: ${data.length} total points`);
-  } catch (err) {
-    console.error('❌ Historical refresh failed:', err);
+  async fetchAndUpdate() {
+    try {
+      const res = await fetch('https://btc-spread-test-pipeline.onrender.com/recent.json');
+      const data = await res.json();
+
+      // Find new data points
+      const newData = data.filter(d => {
+        const t = this.toUnixTimestamp(d.time);
+        return t > this.lastTimestamp;
+      });
+
+      if (newData.length > 0) {
+        // Add new data to our raw data store
+        this.rawData = [...this.rawData, ...newData].sort((a, b) => 
+          new Date(a.time) - new Date(b.time)
+        );
+
+        // Process and update chart with new data
+        this.processAndSetData(newData, true);
+        console.log(`📈 Updated chart with ${newData.length} new data points`);
+      }
+
+    } catch (err) {
+      console.error('❌ Fetch/update error:', err);
+    }
+  }
+
+  async refreshHistoricalData() {
+    if (!this.isFullDataLoaded) return;
+    
+    try {
+      console.log('🔄 Refreshing historical data...');
+      const res = await fetch('https://btc-spread-test-pipeline.onrender.com/historical.json');
+      const data = await res.json();
+      this.rawData = data;
+      this.processAndSetData(data);
+      console.log(`✅ Historical data refreshed: ${data.length} total points`);
+    } catch (err) {
+      console.error('❌ Historical refresh failed:', err);
+    }
+  }
+
+  switchTimeframe(timeframe) {
+    if (timeframe === this.currentTimeframe) return;
+    
+    this.showLoading();
+    this.disableButtons();
+    
+    console.log(`🔄 Switching to ${timeframe} timeframe`);
+    
+    this.currentTimeframe = timeframe;
+    this.setActiveButton(timeframe);
+    
+    // Reprocess data with new timeframe
+    this.lastTimestamp = 0; // Reset to reprocess all data
+    this.processAndSetData(this.rawData);
+    
+    this.hideLoading();
+    this.enableButtons();
+    
+    console.log(`✅ Switched to ${this.timeframes[timeframe].label} timeframe`);
+  }
+
+  startUpdateCycle() {
+    // Clear existing intervals
+    if (this.updateInterval) clearInterval(this.updateInterval);
+    if (this.refreshInterval) clearInterval(this.refreshInterval);
+
+    // Update with recent data every 15 seconds
+    this.updateInterval = setInterval(() => this.fetchAndUpdate(), 15000);
+
+    // Refresh complete historical data every hour
+    this.refreshInterval = setInterval(() => this.refreshHistoricalData(), 3600000);
   }
 }
 
-// Initialize chart with hybrid loading
-initializeChart();
+// Global timeframe manager instance
+const timeframeManager = new TimeframeManager();
 
-// Update with recent data every 15 seconds (fast)
-setInterval(fetchAndUpdate, 15000);
-
-// Refresh complete historical data every hour (like backend updates)
-setInterval(refreshHistoricalData, 3600000); // 1 hour = 3600000ms
-
-function set1Min() {
-  console.log("1m clicked");
-  const range = chart.timeScale().getVisibleLogicalRange();
-  if (range) {
-    chart.timeScale().setVisibleLogicalRange({
-      from: range.from,
-      to: range.from + 60 // show 60 bars (~1 hour of 1m data)
-    });
-  }
+// Global function for timeframe buttons
+function setTimeframe(timeframe) {
+  timeframeManager.switchTimeframe(timeframe);
 }
 
-function set5Min() {
-  console.log("5m clicked");
-  const range = chart.timeScale().getVisibleLogicalRange();
-  if (range) {
-    chart.timeScale().setVisibleLogicalRange({
-      from: range.from,
-      to: range.from + 300 // show 300 bars (~5 hours of 1m data)
-    });
-  }
-}
+// Initialize chart and start update cycle
+timeframeManager.initializeChart().then(() => {
+  timeframeManager.startUpdateCycle();
+});
 
