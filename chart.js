@@ -61,7 +61,7 @@ const ma200 = chart.addLineSeries({
   lineWidth: 1,
 });
 
-// Indicator panel setup
+// Indicator panel setup - locked to main chart
 window.indicatorChart = LightweightCharts.createChart(document.getElementById('indicator-panel'), {
   layout: {
     background: { color: '#131722' },
@@ -80,14 +80,14 @@ window.indicatorChart = LightweightCharts.createChart(document.getElementById('i
     borderVisible: false,
   },
   timeScale: { 
-    visible: true, // Show time scale to verify sync
+    visible: false, // Hide to avoid confusion - follows main chart
     borderVisible: false,
-    timeVisible: true,
-    secondsVisible: false,
   },
   crosshair: {
     mode: LightweightCharts.CrosshairMode.Normal,
   },
+  handleScroll: false, // Disable scrolling
+  handleScale: false,  // Disable scaling
 });
 
 // Custom indicator series and reference lines
@@ -480,16 +480,23 @@ class TimeframeManager {
     }
   }
 
-  // Sync time scales between charts
+  // Force sync indicator chart to main chart
   syncTimeScales() {
     try {
-      const mainRange = chart.timeScale().getVisibleTimeRange();
-      if (mainRange) {
-        indicatorChart.timeScale().setVisibleTimeRange(mainRange);
-        console.log('📅 Time scales synced:', mainRange);
+      const timeRange = chart.timeScale().getVisibleTimeRange();
+      const logicalRange = chart.timeScale().getVisibleLogicalRange();
+      
+      if (timeRange) {
+        indicatorChart.timeScale().setVisibleTimeRange(timeRange);
       }
+      
+      if (logicalRange) {
+        indicatorChart.timeScale().setVisibleLogicalRange(logicalRange);
+      }
+      
+      console.log('🔗 Manual sync completed');
     } catch (err) {
-      console.log('❌ Sync failed:', err);
+      console.error('❌ Manual sync failed:', err);
     }
   }
 
@@ -596,7 +603,12 @@ class TimeframeManager {
     setTimeout(() => {
       this.syncTimeScales();
       console.log('🔗 Timeframe sync complete');
-    }, 200);
+    }, 100);
+    
+    // Additional sync to ensure lock
+    setTimeout(() => {
+      this.syncTimeScales();
+    }, 500);
     
     this.hideLoading();
     this.enableButtons();
@@ -682,48 +694,41 @@ function setupCustomIndicator(indicatorConfig) {
   console.log(`✅ Custom indicator "${indicatorConfig.title}" configured and active!`);
 }
 
-// Setup chart synchronization
+// Setup chart synchronization - main chart controls indicator
 function setupChartSync() {
-  let isMainChartMoving = false;
-  let isIndicatorChartMoving = false;
-
-  // Sync main chart to indicator chart (primary direction)
+  console.log('🔗 Setting up chart synchronization...');
+  
+  // Only sync FROM main chart TO indicator chart (one-way)
   chart.timeScale().subscribeVisibleTimeRangeChange(() => {
-    if (isIndicatorChartMoving) return;
-    
-    isMainChartMoving = true;
     try {
       const range = chart.timeScale().getVisibleTimeRange();
       if (range) {
         indicatorChart.timeScale().setVisibleTimeRange(range);
+        console.log('📅 Synced to range:', range);
       }
     } catch (e) {
-      console.log('Sync error:', e);
+      console.error('❌ Sync error:', e);
     }
-    isMainChartMoving = false;
   });
 
-  // Sync indicator chart to main chart (secondary direction)  
-  indicatorChart.timeScale().subscribeVisibleTimeRangeChange(() => {
-    if (isMainChartMoving) return;
-    
-    isIndicatorChartMoving = true;
+  // Also sync logical range for zoom levels
+  chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
     try {
-      const range = indicatorChart.timeScale().getVisibleTimeRange();
-      if (range) {
-        chart.timeScale().setVisibleTimeRange(range);
+      const logicalRange = chart.timeScale().getVisibleLogicalRange();
+      if (logicalRange) {
+        indicatorChart.timeScale().setVisibleLogicalRange(logicalRange);
       }
     } catch (e) {
-      console.log('Sync error:', e);
+      console.error('❌ Logical sync error:', e);
     }
-    isIndicatorChartMoving = false;
   });
+
+  console.log('✅ Chart sync listeners attached');
 }
 
 // Initialize chart and start update cycle
 timeframeManager.initializeChart().then(() => {
   timeframeManager.startUpdateCycle();
-  setupChartSync();
   
   // Setup the immediate MA Crossover Indicator
   setupCustomIndicator({
@@ -734,23 +739,29 @@ timeframeManager.initializeChart().then(() => {
     calculate: timeframeManager.calculateCustomIndicator.bind(timeframeManager)
   });
   
-  // Force initial synchronization multiple times to ensure it works
+  // Setup synchronization AFTER all data is loaded
   setTimeout(() => {
-    timeframeManager.syncTimeScales();
-    console.log('🔗 Initial sync attempt 1');
-  }, 200);
-  
-  setTimeout(() => {
-    timeframeManager.syncTimeScales();
-    console.log('🔗 Initial sync attempt 2'); 
+    setupChartSync();
+    
+    // Force immediate lock
+    const timeRange = chart.timeScale().getVisibleTimeRange();
+    const logicalRange = chart.timeScale().getVisibleLogicalRange();
+    
+    if (timeRange) {
+      indicatorChart.timeScale().setVisibleTimeRange(timeRange);
+      console.log('🔗 Locked time range:', timeRange);
+    }
+    
+    if (logicalRange) {
+      indicatorChart.timeScale().setVisibleLogicalRange(logicalRange);
+      console.log('🔗 Locked logical range:', logicalRange);
+    }
+    
+    console.log('✅ Charts are now LOCKED TOGETHER!');
+    console.log('📊 Try scrolling the main chart - indicator should follow');
   }, 1000);
   
-  setTimeout(() => {
-    timeframeManager.syncTimeScales();
-    console.log('🔗 Final sync - charts should be aligned');
-  }, 2000);
-  
-  console.log('📊 Immediate MA Crossover indicator active!');
-  console.log('🎯 Logic: Top(1.0)=Both MAs above MA200 | Bottom(0.0)=Both below | Middle(0.5)=Mixed');
+  console.log('📊 MA Crossover indicator loaded');
+  console.log('🎯 Logic: Top=Both MAs above MA200 | Bottom=Both below | Middle=Mixed');
 });
 
