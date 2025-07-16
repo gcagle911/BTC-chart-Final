@@ -88,8 +88,11 @@ window.indicatorChart = LightweightCharts.createChart(document.getElementById('i
   },
 });
 
-// Custom indicator series (to be configured based on user's requirements)
+// Custom indicator series and reference lines
 let customIndicatorSeries = null;
+let topReferenceLine = null;
+let middleReferenceLine = null;
+let bottomReferenceLine = null;
 
 // Timeframe management
 class TimeframeManager {
@@ -273,12 +276,13 @@ class TimeframeManager {
         });
       }
       
-      // Process custom indicator data (will be customized based on user requirements)
-      const indicatorValue = this.calculateCustomIndicator(d);
-      if (indicatorValue !== null) {
+      // Process custom indicator data with color coding
+      const indicatorResult = this.calculateCustomIndicator(d);
+      if (indicatorResult !== null) {
         indicatorData.push({ 
           time: t, 
-          value: indicatorValue 
+          value: indicatorResult.value,
+          color: indicatorResult.color
         });
       }
       
@@ -309,6 +313,9 @@ class TimeframeManager {
       }
     }
 
+    // Update spread status display
+    this.updateSpreadStatus(aggregatedData);
+    
     // Sync time scales between main chart and indicator panel
     this.syncTimeScales();
 
@@ -328,13 +335,13 @@ class TimeframeManager {
         ma_50: sample.ma_50,
         ma_100: sample.ma_100,
         ma_200: sample.ma_200,
-        customIndicator: this.calculateCustomIndicator(sample),
+        spreadThresholds: this.calculateCustomIndicator(sample),
         note: 'MAs maintain full 1-minute calculation accuracy'
       });
     }
   }
 
-  // MA Crossover Momentum Indicator (Stochastic-style)
+  // MA Crossover Momentum Indicator with Spread Threshold Colors
   calculateCustomIndicator(dataPoint) {
     const { ma_50, ma_100, ma_200 } = dataPoint;
     
@@ -347,17 +354,84 @@ class TimeframeManager {
     const ma50AboveMA200 = ma_50 > ma_200;
     const ma100AboveMA200 = ma_100 > ma_200;
     
-    // Signal logic:
-    // 1.0 (top) = Both MA50 and MA100 are above MA200 (bullish)
-    // 0.0 (bottom) = Both MA50 and MA100 are below MA200 (bearish)
-    // 0.5 (middle) = Mixed signals (one above, one below)
-    
+    // Calculate position value
+    let positionValue;
     if (ma50AboveMA200 && ma100AboveMA200) {
-      return 1.0; // Bullish signal - top of range
+      positionValue = 1.0; // Bullish signal - top of range
     } else if (!ma50AboveMA200 && !ma100AboveMA200) {
-      return 0.0; // Bearish signal - bottom of range
+      positionValue = 0.0; // Bearish signal - bottom of range
     } else {
-      return 0.5; // Mixed/neutral signal - middle
+      positionValue = 0.5; // Mixed/neutral signal - middle
+    }
+    
+    // Determine color based on MA50 spread threshold
+    let color;
+    if (ma_50 > 0.03) {
+      color = '#ff4444'; // Red - High spread (poor liquidity)
+    } else if (ma_50 > 0.02) {
+      color = '#ff8800'; // Orange - Elevated spread
+    } else if (ma_50 > 0.01) {
+      color = '#ffcc00'; // Yellow - Moderate spread
+    } else {
+      color = '#26a69a'; // Green - Low spread (good liquidity)
+    }
+    
+    // Store color info for dynamic updates
+    this.lastIndicatorColor = color;
+    
+    return {
+      value: positionValue,
+      color: color,
+      spread: ma_50 // For debugging/logging
+    };
+  }
+
+  // Update spread status display
+  updateSpreadStatus(data) {
+    if (data.length === 0) return;
+    
+    const latest = data[data.length - 1];
+    const indicatorResult = this.calculateCustomIndicator(latest);
+    
+    if (indicatorResult) {
+      const spreadValue = latest.ma_50;
+      const spreadElement = document.getElementById('spread-value');
+      const statusElement = document.getElementById('spread-status-text');
+      
+      // Update spread value with proper formatting
+      if (spreadElement) {
+        spreadElement.textContent = spreadValue ? spreadValue.toFixed(4) : '--';
+        spreadElement.style.color = indicatorResult.color;
+      }
+      
+      // Update status text
+      if (statusElement) {
+        let statusText;
+        let crossoverStatus;
+        
+        // Determine crossover status
+        if (indicatorResult.value === 1.0) {
+          crossoverStatus = "BULLISH";
+        } else if (indicatorResult.value === 0.0) {
+          crossoverStatus = "BEARISH";
+        } else {
+          crossoverStatus = "MIXED";
+        }
+        
+        // Determine spread level
+        if (spreadValue > 0.03) {
+          statusText = `${crossoverStatus} | HIGH SPREAD`;
+        } else if (spreadValue > 0.02) {
+          statusText = `${crossoverStatus} | ELEVATED`;
+        } else if (spreadValue > 0.01) {
+          statusText = `${crossoverStatus} | MODERATE`;
+        } else {
+          statusText = `${crossoverStatus} | LOW SPREAD`;
+        }
+        
+        statusElement.textContent = statusText;
+        statusElement.style.color = indicatorResult.color;
+      }
     }
   }
 
@@ -571,15 +645,21 @@ timeframeManager.initializeChart().then(() => {
   timeframeManager.startUpdateCycle();
   setupChartSync();
   
-  // Setup the MA Crossover Momentum Indicator
+  // Setup the MA Crossover Momentum Indicator with Spread Thresholds
   setupCustomIndicator({
-    type: 'line',
-    title: 'MA Crossover Momentum',
-    color: '#ff6b35',
+    type: 'area',
+    title: 'MA Crossover + Spread Alert',
+    lineColor: '#ffffff',
+    topColor: 'rgba(255, 255, 255, 0.3)',
+    bottomColor: 'rgba(255, 255, 255, 0.1)',
     lineWidth: 2,
     calculate: timeframeManager.calculateCustomIndicator.bind(timeframeManager)
   });
   
-  console.log('📊 MA Crossover Momentum indicator active!');
+  console.log('📊 MA Crossover + Spread Alert indicator active!');
+  console.log('🎯 Indicator Logic:');
+  console.log('   • Position: MA50 & MA100 vs MA200 crossovers');
+  console.log('   • Colors: Green(<0.01) → Yellow(0.01-0.02) → Orange(0.02-0.03) → Red(>0.03)');
+  console.log('   • Status display shows real-time spread and crossover state');
 });
 

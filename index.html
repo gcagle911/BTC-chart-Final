@@ -82,6 +82,26 @@
       font-size: 12px;
       display: none;
     }
+    
+    #spread-status {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 10;
+      background: rgba(25, 28, 35, 0.8);
+      color: #d1d4dc;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      backdrop-filter: blur(10px);
+      min-width: 120px;
+    }
+    
+    .spread-value {
+      font-family: 'Courier New', monospace;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
@@ -96,6 +116,11 @@
   
   <div id="loading-indicator">
     Loading chart data...
+  </div>
+  
+  <div id="spread-status">
+    <div>Spread MA50: <span class="spread-value" id="spread-value">--</span></div>
+    <div>Status: <span id="spread-status-text">Loading...</span></div>
   </div>
   
   <div id="chart-container">
