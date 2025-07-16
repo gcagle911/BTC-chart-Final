@@ -368,7 +368,7 @@ class TimeframeManager {
     return false;
   }
 
-  // MA Crossover with 20-minute persistence (optimized)
+  // MA Crossover - Immediate Response (optimized)
   calculateCustomIndicator(dataPoint) {
     const { ma_50, ma_100, ma_200 } = dataPoint;
     
@@ -382,67 +382,38 @@ class TimeframeManager {
       return 0.5; // Return neutral during loading
     }
     
-    // Initialize state tracking if needed
+    // Initialize state for spread color tracking
     if (!this.indicatorState) {
       this.indicatorState = {
-        currentPosition: 0.5,
-        stateHistory: [],
-        lastSpreadColor: '#26a69a',
-        lastUpdate: 0
+        lastSpreadColor: '#26a69a'
       };
     }
     
-    // Only process every few calls to reduce load
-    const now = Date.now();
-    if (now - this.indicatorState.lastUpdate < 5000) { // 5 second throttle
-      return this.indicatorState.currentPosition;
-    }
-    this.indicatorState.lastUpdate = now;
-    
-    // Determine current state
+    // Determine current MA positioning - immediate response
     const ma50AboveMA200 = ma_50 > ma_200;
     const ma100AboveMA200 = ma_100 > ma_200;
     
-    let currentState;
+    let positionValue;
     if (ma50AboveMA200 && ma100AboveMA200) {
-      currentState = 'bullish';
+      positionValue = 1.0; // Both above - top
     } else if (!ma50AboveMA200 && !ma100AboveMA200) {
-      currentState = 'bearish'; 
+      positionValue = 0.0; // Both below - bottom
     } else {
-      currentState = 'mixed';
+      positionValue = 0.5; // Mixed - middle
     }
     
-    // Add to history (efficient)
-    this.indicatorState.stateHistory.push(currentState);
-    if (this.indicatorState.stateHistory.length > 20) {
-      this.indicatorState.stateHistory.shift();
-    }
-    
-    // Check for position changes only when we have enough history
-    if (this.indicatorState.stateHistory.length >= 20) {
-      const last20 = this.indicatorState.stateHistory.slice(-20);
-      const allBullish = last20.every(state => state === 'bullish');
-      const allBearish = last20.every(state => state === 'bearish');
-      
-      if (allBullish && this.indicatorState.currentPosition !== 1.0) {
-        this.indicatorState.currentPosition = 1.0;
-      } else if (allBearish && this.indicatorState.currentPosition !== 0.0) {
-        this.indicatorState.currentPosition = 0.0;
-      }
-    }
-    
-    // Update spread color (cached)
+    // Update spread color (for status display)
     if (ma_50 > 0.03) {
-      this.indicatorState.lastSpreadColor = '#ff4444';
+      this.indicatorState.lastSpreadColor = '#ff4444'; // Red
     } else if (ma_50 > 0.02) {
-      this.indicatorState.lastSpreadColor = '#ff8800';
+      this.indicatorState.lastSpreadColor = '#ff8800'; // Orange
     } else if (ma_50 > 0.01) {
-      this.indicatorState.lastSpreadColor = '#ffcc00';
+      this.indicatorState.lastSpreadColor = '#ffcc00'; // Yellow
     } else {
-      this.indicatorState.lastSpreadColor = '#26a69a';
+      this.indicatorState.lastSpreadColor = '#26a69a'; // Green
     }
     
-    return this.indicatorState.currentPosition;
+    return positionValue;
   }
 
   // Update spread status display (ultra-light)
@@ -474,27 +445,27 @@ class TimeframeManager {
       spreadElement.style.color = this.indicatorState.lastSpreadColor;
     }
     
-    if (statusElement && this.indicatorState) {
-      let statusText = "LOADING...";
-      
-      if (this.indicatorState.stateHistory.length > 0) {
-        const currentPos = this.indicatorState.currentPosition;
-        const historyLength = this.indicatorState.stateHistory.length;
-        const remaining = Math.max(0, 20 - historyLength);
+    if (statusElement && this.indicatorState && this.rawData.length > 0) {
+      // Get latest MA data to determine current status
+      const latest = this.rawData[this.rawData.length - 1];
+      if (latest && latest.ma_50 !== null && latest.ma_100 !== null && latest.ma_200 !== null) {
+        const ma50AboveMA200 = latest.ma_50 > latest.ma_200;
+        const ma100AboveMA200 = latest.ma_100 > latest.ma_200;
         
-        if (currentPos === 1.0) {
-          statusText = "BULLISH (20m)";
-        } else if (currentPos === 0.0) {
-          statusText = "BEARISH (20m)";
-        } else if (remaining > 0) {
-          statusText = `WAITING (${remaining}m left)`;
+        let statusText;
+        if (ma50AboveMA200 && ma100AboveMA200) {
+          statusText = "BULLISH - Both MAs Above";
+        } else if (!ma50AboveMA200 && !ma100AboveMA200) {
+          statusText = "BEARISH - Both MAs Below";
         } else {
-          statusText = "MIXED SIGNALS";
+          statusText = "MIXED - MAs Diverging";
         }
+        
+        statusElement.textContent = statusText;
+        statusElement.style.color = this.indicatorState.lastSpreadColor;
+      } else {
+        statusElement.textContent = "LOADING...";
       }
-      
-      statusElement.textContent = statusText;
-      statusElement.style.color = this.indicatorState.lastSpreadColor;
     }
   }
 
@@ -725,15 +696,16 @@ timeframeManager.initializeChart().then(() => {
   timeframeManager.startUpdateCycle();
   setupChartSync();
   
-  // Setup the simplified MA Crossover Indicator
+  // Setup the immediate MA Crossover Indicator
   setupCustomIndicator({
     type: 'line',
-    title: 'MA Crossover (20m persistence)',
+    title: 'MA Crossover (Immediate)',
     color: '#00d4ff',
     lineWidth: 3,
     calculate: timeframeManager.calculateCustomIndicator.bind(timeframeManager)
   });
   
-  console.log('📊 MA Crossover indicator ready!');
+  console.log('📊 Immediate MA Crossover indicator active!');
+  console.log('🎯 Logic: Top(1.0)=Both MAs above MA200 | Bottom(0.0)=Both below | Middle(0.5)=Mixed');
 });
 
