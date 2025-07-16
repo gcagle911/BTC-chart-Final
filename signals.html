@@ -342,10 +342,10 @@
             
                          if (currentState === 0) {
                // Crossover hit 0 (bearish confirmed) = BUY signal
-               this.addSignal('BUY', latest.price || latest.close, `Real-time: Bearish confirmed on ${this.currentTimeframe} (${this.lastCrossoverState} → ${currentState})`, latest);
+               this.addSignal('BUY', latest.price || latest.close, `Real-time: Bearish confirmed on ${this.currentTimeframe} (${this.lastCrossoverState} → ${currentState})`);
              } else if (currentState === 1) {
                // Crossover hit 1 (bullish confirmed) = SELL signal  
-               this.addSignal('SELL', latest.price || latest.close, `Real-time: Bullish confirmed on ${this.currentTimeframe} (${this.lastCrossoverState} → ${currentState})`, latest);
+               this.addSignal('SELL', latest.price || latest.close, `Real-time: Bullish confirmed on ${this.currentTimeframe} (${this.lastCrossoverState} → ${currentState})`);
              }
           }
           
@@ -397,8 +397,7 @@
                  type: 'BUY',
                  price: dataPoint.price || dataPoint.close,
                  timestamp: dataPoint.time,
-                 notes: `Historical: Bearish confirmed (${previousState} → ${currentState})`,
-                 signalData: dataPoint
+                 notes: `Historical: Bearish confirmed (${previousState} → ${currentState})`
                });
                console.log(`🟢 Historical BUY signal found at ${dataPoint.time}: $${(dataPoint.price || dataPoint.close).toFixed(2)}`);
              } else if (currentState === 1) {
@@ -407,8 +406,7 @@
                  type: 'SELL',
                  price: dataPoint.price || dataPoint.close,
                  timestamp: dataPoint.time,
-                 notes: `Historical: Bullish confirmed (${previousState} → ${currentState})`,
-                 signalData: dataPoint
+                 notes: `Historical: Bullish confirmed (${previousState} → ${currentState})`
                });
                console.log(`🔴 Historical SELL signal found at ${dataPoint.time}: $${(dataPoint.price || dataPoint.close).toFixed(2)}`);
              }
@@ -424,7 +422,7 @@
          
          // Add historical signals (but mark them as historical)
          foundSignals.forEach(signal => {
-           this.addHistoricalSignal(signal.type, signal.price, signal.timestamp, signal.notes, signal.signalData);
+           this.addHistoricalSignal(signal.type, signal.price, signal.timestamp, signal.notes);
          });
          
          // Sort signals by timestamp (newest first) and save
@@ -451,30 +449,25 @@
        }
       
              // Add a new signal to the log
-       addSignal(type, price, notes = '', signalData = null) {
-         // Calculate signal strength
-         const strength = this.calculateSignalStrength(signalData, type, this.currentTimeframe);
-         
+       addSignal(type, price, notes = '') {
          const signal = {
            id: Date.now(),
            timestamp: new Date().toISOString(),
            type: type,
            price: price,
            timeframe: this.getCurrentTimeframe(),
-           notes: notes,
-           strength: strength,
-           strengthScore: strength.totalScore
+           notes: notes
          };
          
          this.signals.unshift(signal); // Add to beginning of array
          this.saveSignals();
          this.renderSignals();
          
-         console.log(`📈 New ${type} signal logged: $${price.toFixed(2)} (Strength: ${strength.totalScore}/100)`);
+         console.log(`📈 New ${type} signal logged: $${price.toFixed(2)}`);
        }
        
-       // Add a historical signal to the log with strength calculation
-       addHistoricalSignal(type, price, timestamp, notes = '', signalData = null) {
+       // Add a historical signal to the log
+       addHistoricalSignal(type, price, timestamp, notes = '') {
          // Check if we already have this signal (avoid duplicates)
          const signalTime = new Date(timestamp).getTime();
          const exists = this.signals.some(s => {
@@ -484,18 +477,13 @@
          
          if (exists) return; // Skip duplicate
          
-         // Calculate signal strength
-         const strength = this.calculateSignalStrength(signalData, type, this.currentTimeframe);
-         
          const signal = {
            id: signalTime,
            timestamp: timestamp,
            type: type,
            price: price,
            timeframe: this.getCurrentTimeframe(),
-           notes: notes,
-           strength: strength,
-           strengthScore: strength.totalScore
+           notes: notes
          };
          
          this.signals.push(signal);
@@ -506,98 +494,7 @@
          return this.currentTimeframe;
        }
        
-       // Calculate signal strength based on multiple factors
-       calculateSignalStrength(signalData, signalType, timeframe) {
-         if (!signalData) {
-           return { totalScore: 50, factors: { timeframe: 25, separation: 25 } }; // Default medium strength
-         }
-         
-         const { ma_50, ma_100, ma_200, dataPoints = 1 } = signalData;
-         
-         // Factor 1: Timeframe Weight (30%) - Longer timeframes = stronger signals
-         const timeframeWeights = { '1m': 10, '5m': 20, '15m': 30, '1h': 40, '4h': 50, '1d': 60 };
-         const timeframeScore = timeframeWeights[timeframe] || 25;
-         
-         // Factor 2: MA Separation Strength (40%) - Larger separation = stronger signal
-         const separation = Math.abs(ma_50 - ma_200) / ma_200;
-         let separationScore;
-         if (separation > 0.03) {       // 3%+ = very strong
-           separationScore = 90;
-         } else if (separation > 0.02) { // 2%+ = strong
-           separationScore = 75;
-         } else if (separation > 0.01) { // 1%+ = medium
-           separationScore = 60;
-         } else if (separation > 0.005) { // 0.5%+ = weak
-           separationScore = 40;
-         } else {                       // <0.5% = very weak
-           separationScore = 20;
-         }
-         
-         // Factor 3: MA Alignment (20%) - All MAs aligned = stronger
-         const ma50AboveMA200 = ma_50 > ma_200;
-         const ma100AboveMA200 = ma_100 > ma_200;
-         const ma50AboveMA100 = ma_50 > ma_100;
-         
-         let alignmentScore = 0;
-         if (signalType === 'SELL') {
-           // For SELL signals, want MA50 > MA100 > MA200 (bullish alignment)
-           if (ma50AboveMA200 && ma100AboveMA200 && ma50AboveMA100) {
-             alignmentScore = 80; // Perfect bullish alignment
-           } else if (ma50AboveMA200 && ma100AboveMA200) {
-             alignmentScore = 60; // Good alignment
-           } else {
-             alignmentScore = 30; // Poor alignment
-           }
-         } else {
-           // For BUY signals, want MA200 > MA100 > MA50 (bearish alignment)
-           if (!ma50AboveMA200 && !ma100AboveMA200 && !ma50AboveMA100) {
-             alignmentScore = 80; // Perfect bearish alignment
-           } else if (!ma50AboveMA200 && !ma100AboveMA200) {
-             alignmentScore = 60; // Good alignment
-           } else {
-             alignmentScore = 30; // Poor alignment
-           }
-         }
-         
-         // Factor 4: Data Density (10%) - More data points in candle = more reliable
-         let densityScore = Math.min(60, Math.max(20, dataPoints * 2)); // 20-60 range
-         
-         // Calculate weighted total score
-         const totalScore = Math.round(
-           (timeframeScore * 0.30) +
-           (separationScore * 0.40) +
-           (alignmentScore * 0.20) +
-           (densityScore * 0.10)
-         );
-         
-         return {
-           totalScore: totalScore,
-           factors: {
-             timeframe: timeframeScore,
-             separation: separationScore,
-             alignment: alignmentScore,
-             density: densityScore,
-             separationPct: (separation * 100).toFixed(3)
-           }
-         };
-       }
-       
-       // Filter signals to show only strongest 10%
-       filterToStrongestSignals() {
-         if (this.signals.length === 0) return this.signals;
-         
-         // Sort by strength score (highest first)
-         const sortedSignals = [...this.signals].sort((a, b) => (b.strengthScore || 0) - (a.strengthScore || 0));
-         
-         // Take top 10% (minimum 1 signal, maximum 50 signals for performance)
-         const top10PercentCount = Math.max(1, Math.min(50, Math.ceil(sortedSignals.length * 0.1)));
-         const strongestSignals = sortedSignals.slice(0, top10PercentCount);
-         
-         console.log(`📊 Filtered to strongest ${top10PercentCount} signals out of ${this.signals.length} total (top 10%)`);
-         console.log(`📈 Strength range: ${strongestSignals[strongestSignals.length-1]?.strengthScore || 0} - ${strongestSignals[0]?.strengthScore || 0}`);
-         
-         return strongestSignals;
-       }
+
 
        // Change timeframe and reprocess signals
        changeTimeframe(newTimeframe) {
@@ -726,79 +623,44 @@
         }
       }
       
-      // Render all signals in the log (filtered to strongest 10%)
-      renderSignals() {
-        const container = document.getElementById('signal-entries');
-        const countEl = document.getElementById('signal-count');
-        
-        // Filter to strongest 10% of signals
-        const strongestSignals = this.filterToStrongestSignals();
-        
-        countEl.textContent = `${strongestSignals.length} (top 10% of ${this.signals.length})`;
-        
-        if (strongestSignals.length === 0) {
-          container.innerHTML = `
-            <div class="empty-state">
-              <div id="debug-info">Initializing signal monitoring...</div>
-              <br>
-              <small>Showing only the <strong>strongest 10% of signals</strong><br>
-              BUY signals when crossover hits 0 (bearish confirmed)<br>
-              SELL signals when crossover hits 1 (bullish confirmed)</small>
-              <br><br>
-              <button onclick="signalLogger.forceHistoricalScan()" style="background: #2962ff; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">
-                🔄 Force Historical Scan
-              </button>
-              <button onclick="signalLogger.testCurrentData()" style="background: #26a69a; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-left: 10px;">
-                🧪 Test Current Data
-              </button>
-            </div>
-          `;
-          return;
-        }
-        
-        container.innerHTML = strongestSignals.map(signal => {
-          const strengthBadge = this.getStrengthBadge(signal.strengthScore || 0);
-          const strengthDetails = signal.strength ? `
-            Strength: ${signal.strengthScore}/100 ${strengthBadge}<br>
-            Separation: ${signal.strength.factors.separationPct}% | 
-            TF: ${signal.strength.factors.timeframe} | 
-            Align: ${signal.strength.factors.alignment}
-          ` : 'Legacy signal';
-          
-          return `
-            <div class="log-entry" style="border-left: 4px solid ${this.getStrengthColor(signal.strengthScore || 0)};">
-              <div class="timestamp">${this.formatTimestamp(signal.timestamp)}</div>
-              <div class="signal-type signal-${signal.type.toLowerCase()}">${signal.type} ${strengthBadge}</div>
-              <div class="price">$${signal.price.toFixed(2)}</div>
-              <div class="timeframe">${signal.timeframe}</div>
-              <div class="notes">
-                ${signal.notes}<br>
-                <small style="color: #888; font-size: 11px;">${strengthDetails}</small>
-              </div>
-            </div>
-          `;
-        }).join('');
-      }
+             // Render all signals in the log
+       renderSignals() {
+         const container = document.getElementById('signal-entries');
+         const countEl = document.getElementById('signal-count');
+         
+         countEl.textContent = this.signals.length;
+         
+         if (this.signals.length === 0) {
+           container.innerHTML = `
+             <div class="empty-state">
+               <div id="debug-info">Initializing signal monitoring...</div>
+               <br>
+               <small>BUY signals when crossover hits 0 (bearish confirmed)<br>
+               SELL signals when crossover hits 1 (bullish confirmed)</small>
+               <br><br>
+               <button onclick="signalLogger.forceHistoricalScan()" style="background: #2962ff; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">
+                 🔄 Force Historical Scan
+               </button>
+               <button onclick="signalLogger.testCurrentData()" style="background: #26a69a; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-left: 10px;">
+                 🧪 Test Current Data
+               </button>
+             </div>
+           `;
+           return;
+         }
+         
+         container.innerHTML = this.signals.map(signal => `
+           <div class="log-entry">
+             <div class="timestamp">${this.formatTimestamp(signal.timestamp)}</div>
+             <div class="signal-type signal-${signal.type.toLowerCase()}">${signal.type}</div>
+             <div class="price">$${signal.price.toFixed(2)}</div>
+             <div class="timeframe">${signal.timeframe}</div>
+             <div class="notes">${signal.notes}</div>
+           </div>
+         `).join('');
+       }
       
-      // Get strength badge emoji
-      getStrengthBadge(score) {
-        if (score >= 80) return '🔥'; // Very strong
-        if (score >= 70) return '💪'; // Strong  
-        if (score >= 60) return '👍'; // Good
-        if (score >= 50) return '👌'; // Medium
-        if (score >= 40) return '⚠️'; // Weak
-        return '❌'; // Very weak
-      }
       
-      // Get strength color
-      getStrengthColor(score) {
-        if (score >= 80) return '#ff4444'; // Red for very strong
-        if (score >= 70) return '#ff8800'; // Orange for strong
-        if (score >= 60) return '#ffcc00'; // Yellow for good
-        if (score >= 50) return '#26a69a'; // Green for medium
-        if (score >= 40) return '#2962ff'; // Blue for weak
-        return '#666666'; // Gray for very weak
-      }
       
       // Format timestamp for display
       formatTimestamp(isoString) {
