@@ -229,7 +229,7 @@ class TimeframeManager {
     return aggregated.sort((a, b) => new Date(a.time) - new Date(b.time));
   }
 
-  // Process and set chart data with high precision
+  // Process and set chart data (performance optimized)
   processAndSetData(data, isUpdate = false) {
     const timeframeSeconds = this.timeframes[this.currentTimeframe].seconds;
     const aggregatedData = this.aggregateData(data, timeframeSeconds);
@@ -239,6 +239,11 @@ class TimeframeManager {
     const ma100Data = [];
     const ma200Data = [];
     const indicatorData = [];
+
+    // Set loading flag to skip heavy indicator calculations during initial load
+    if (!isUpdate && aggregatedData.length > 1000) {
+      this.isInitialLoad = true;
+    }
 
     aggregatedData.forEach(d => {
       const t = this.toUnixTimestamp(d.time);
@@ -276,108 +281,128 @@ class TimeframeManager {
         });
       }
       
-      // Process custom indicator data (simplified)
-      const indicatorValue = this.calculateCustomIndicator(d);
-      if (indicatorValue !== null) {
-        indicatorData.push({ 
-          time: t, 
-          value: indicatorValue
-        });
+      // Only calculate indicator for last 100 points during initial load
+      if (!this.isInitialLoad || indicatorData.length < 100) {
+        const indicatorValue = this.calculateCustomIndicator(d);
+        if (indicatorValue !== null) {
+          indicatorData.push({ 
+            time: t, 
+            value: indicatorValue
+          });
+        }
       }
       
       if (t > this.lastTimestamp) this.lastTimestamp = t;
     });
 
+    // Clear loading flag
+    this.isInitialLoad = false;
+
     if (isUpdate) {
-      // Add new data points with precision
+      // Add new data points
       priceData.forEach(p => priceSeries.update(p));
       ma50Data.forEach(p => ma50.update(p));
       ma100Data.forEach(p => ma100.update(p));
       ma200Data.forEach(p => ma200.update(p));
       
-      // Update indicator panel
+      // Update indicator panel (only if we have data)
       if (customIndicatorSeries && indicatorData.length > 0) {
         indicatorData.forEach(p => customIndicatorSeries.update(p));
       }
     } else {
-      // Set complete dataset with precision
+      // Set complete dataset
       priceSeries.setData(priceData);
       ma50.setData(ma50Data);
       ma100.setData(ma100Data);
       ma200.setData(ma200Data);
       
-      // Set indicator panel data
+      // Set indicator panel data (optimized)
       if (customIndicatorSeries && indicatorData.length > 0) {
         customIndicatorSeries.setData(indicatorData);
         
-        // Set reference lines
-        if (topReferenceLine && indicatorData.length > 0) {
-          const refData = indicatorData.map(d => ({ time: d.time, value: 1.0 }));
-          topReferenceLine.setData(refData);
-        }
-        if (middleReferenceLine && indicatorData.length > 0) {
-          const refData = indicatorData.map(d => ({ time: d.time, value: 0.5 }));
-          middleReferenceLine.setData(refData);
-        }
-        if (bottomReferenceLine && indicatorData.length > 0) {
-          const refData = indicatorData.map(d => ({ time: d.time, value: 0.0 }));
-          bottomReferenceLine.setData(refData);
-        }
+        // Simplified reference lines (only set once)
+        this.setReferenceLinesOnce(indicatorData);
       }
     }
 
-    // Update spread status display
-    this.updateSpreadStatus(aggregatedData);
+    // Throttled status updates
+    if (!isUpdate || this.shouldUpdateStatus()) {
+      this.updateSpreadStatus(aggregatedData);
+    }
     
-    // Sync time scales between main chart and indicator panel
-    this.syncTimeScales();
-
-    // Log technical accuracy info for debugging
-    if (aggregatedData.length > 0) {
-      const sample = aggregatedData[aggregatedData.length - 1];
-      const totalPoints = aggregatedData.length;
-      console.log(`📊 ${this.currentTimeframe} Technical Analysis:`, {
-        timeframe: this.timeframes[this.currentTimeframe].label,
-        totalPeriods: totalPoints,
-        ohlc: {
-          open: sample.open,
-          high: sample.high,
-          low: sample.low,
-          close: sample.close
-        },
-        ma_50: sample.ma_50,
-        ma_100: sample.ma_100,
-        ma_200: sample.ma_200,
-        indicatorPosition: this.calculateCustomIndicator(sample),
-        spreadColor: this.indicatorState?.lastSpreadColor,
-        note: 'MAs maintain full 1-minute calculation accuracy'
-      });
+    // Sync time scales (throttled)
+    if (!this.lastSyncTime || Date.now() - this.lastSyncTime > 2000) {
+      this.syncTimeScales();
+      this.lastSyncTime = Date.now();
     }
   }
 
-  // MA Crossover with 20-minute persistence and spread alerts
+  // Helper to set reference lines only once
+  setReferenceLinesOnce(indicatorData) {
+    if (this.referenceLinesSet) return;
+    
+    if (topReferenceLine && indicatorData.length > 0) {
+      const refData = indicatorData.map(d => ({ time: d.time, value: 1.0 }));
+      topReferenceLine.setData(refData);
+    }
+    if (middleReferenceLine && indicatorData.length > 0) {
+      const refData = indicatorData.map(d => ({ time: d.time, value: 0.5 }));
+      middleReferenceLine.setData(refData);
+    }
+    if (bottomReferenceLine && indicatorData.length > 0) {
+      const refData = indicatorData.map(d => ({ time: d.time, value: 0.0 }));
+      bottomReferenceLine.setData(refData);
+    }
+    
+    this.referenceLinesSet = true;
+  }
+
+  // Helper to throttle status updates  
+  shouldUpdateStatus() {
+    if (!this.lastStatusUpdate) this.lastStatusUpdate = 0;
+    const now = Date.now();
+    if (now - this.lastStatusUpdate > 3000) { // 3 second throttle
+      this.lastStatusUpdate = now;
+      return true;
+    }
+    return false;
+  }
+
+  // MA Crossover with 20-minute persistence (optimized)
   calculateCustomIndicator(dataPoint) {
     const { ma_50, ma_100, ma_200 } = dataPoint;
     
-    // Check if we have all required MA values
+    // Quick validation
     if (ma_50 === null || ma_100 === null || ma_200 === null) {
       return null;
+    }
+    
+    // Skip during initial load to improve performance
+    if (this.isInitialLoad) {
+      return 0.5; // Return neutral during loading
     }
     
     // Initialize state tracking if needed
     if (!this.indicatorState) {
       this.indicatorState = {
-        currentPosition: 0.5, // Start neutral
-        stateHistory: [], // Track last 20 minutes
-        lastSpreadColor: '#26a69a'
+        currentPosition: 0.5,
+        stateHistory: [],
+        lastSpreadColor: '#26a69a',
+        lastUpdate: 0
       };
     }
     
-    // Determine current MA positioning
+    // Only process every few calls to reduce load
+    const now = Date.now();
+    if (now - this.indicatorState.lastUpdate < 5000) { // 5 second throttle
+      return this.indicatorState.currentPosition;
+    }
+    this.indicatorState.lastUpdate = now;
+    
+    // Determine current state
     const ma50AboveMA200 = ma_50 > ma_200;
     const ma100AboveMA200 = ma_100 > ma_200;
     
-    // Current state based on crossovers
     let currentState;
     if (ma50AboveMA200 && ma100AboveMA200) {
       currentState = 'bullish';
@@ -387,62 +412,60 @@ class TimeframeManager {
       currentState = 'mixed';
     }
     
-    // Add to history (limit to 20 data points = 20 minutes for 1m data)
+    // Add to history (efficient)
     this.indicatorState.stateHistory.push(currentState);
     if (this.indicatorState.stateHistory.length > 20) {
       this.indicatorState.stateHistory.shift();
     }
     
-    // Check if we have 20 minutes of consistent state
-    let positionValue = this.indicatorState.currentPosition; // Keep current position by default
-    
+    // Check for position changes only when we have enough history
     if (this.indicatorState.stateHistory.length >= 20) {
       const last20 = this.indicatorState.stateHistory.slice(-20);
       const allBullish = last20.every(state => state === 'bullish');
       const allBearish = last20.every(state => state === 'bearish');
       
       if (allBullish && this.indicatorState.currentPosition !== 1.0) {
-        positionValue = 1.0; // Flick to top
         this.indicatorState.currentPosition = 1.0;
-        console.log('🚀 BULLISH signal confirmed - 20min persistence!');
       } else if (allBearish && this.indicatorState.currentPosition !== 0.0) {
-        positionValue = 0.0; // Flick to bottom  
         this.indicatorState.currentPosition = 0.0;
-        console.log('🔻 BEARISH signal confirmed - 20min persistence!');
       }
-      // Mixed states don't change position - maintain current
     }
     
-    // Determine spread color (simpler logic)
-    let spreadColor;
+    // Update spread color (cached)
     if (ma_50 > 0.03) {
-      spreadColor = '#ff4444'; // Red
+      this.indicatorState.lastSpreadColor = '#ff4444';
     } else if (ma_50 > 0.02) {
-      spreadColor = '#ff8800'; // Orange  
+      this.indicatorState.lastSpreadColor = '#ff8800';
     } else if (ma_50 > 0.01) {
-      spreadColor = '#ffcc00'; // Yellow
+      this.indicatorState.lastSpreadColor = '#ffcc00';
     } else {
-      spreadColor = '#26a69a'; // Green
+      this.indicatorState.lastSpreadColor = '#26a69a';
     }
     
-    this.indicatorState.lastSpreadColor = spreadColor;
-    
-    return positionValue; // Just return the value, keep it simple
+    return this.indicatorState.currentPosition;
   }
 
-  // Update spread status display (optimized)
+  // Update spread status display (ultra-light)
   updateSpreadStatus(data) {
-    if (data.length === 0 || !this.indicatorState) return;
+    if (data.length === 0 || !this.indicatorState || this.isInitialLoad) return;
+    
+    // Skip during heavy processing
+    if (data.length > 5000) return;
     
     const latest = data[data.length - 1];
     const spreadValue = latest.ma_50;
     
-    // Only update DOM every 5th call to reduce lag
-    if (!this.statusUpdateCounter) this.statusUpdateCounter = 0;
-    this.statusUpdateCounter++;
-    
-    if (this.statusUpdateCounter % 5 !== 0) return; // Skip most updates
-    
+    // Use requestAnimationFrame for smooth DOM updates
+    if (!this.pendingStatusUpdate) {
+      this.pendingStatusUpdate = true;
+      requestAnimationFrame(() => {
+        this.updateStatusDOM(spreadValue);
+        this.pendingStatusUpdate = false;
+      });
+    }
+  }
+
+  updateStatusDOM(spreadValue) {
     const spreadElement = document.getElementById('spread-value');
     const statusElement = document.getElementById('spread-status-text');
     
@@ -451,34 +474,22 @@ class TimeframeManager {
       spreadElement.style.color = this.indicatorState.lastSpreadColor;
     }
     
-    if (statusElement) {
-      let crossoverStatus;
-      const currentPos = this.indicatorState.currentPosition;
+    if (statusElement && this.indicatorState) {
+      let statusText = "LOADING...";
       
-      if (currentPos === 1.0) {
-        crossoverStatus = "BULLISH (20m)";
-      } else if (currentPos === 0.0) {
-        crossoverStatus = "BEARISH (20m)";
-      } else {
-        crossoverStatus = "WAITING";
-      }
-      
-      // Show remaining time for confirmation
-      const historyLength = this.indicatorState.stateHistory.length;
-      const remaining = Math.max(0, 20 - historyLength);
-      
-      let statusText;
-      if (remaining > 0) {
-        statusText = `${crossoverStatus} (${remaining}m left)`;
-      } else {
-        // Check current trend
-        const lastState = this.indicatorState.stateHistory[this.indicatorState.stateHistory.length - 1];
-        if (lastState === 'bullish') {
-          statusText = `${crossoverStatus} | BULLISH TREND`;
-        } else if (lastState === 'bearish') {
-          statusText = `${crossoverStatus} | BEARISH TREND`;
+      if (this.indicatorState.stateHistory.length > 0) {
+        const currentPos = this.indicatorState.currentPosition;
+        const historyLength = this.indicatorState.stateHistory.length;
+        const remaining = Math.max(0, 20 - historyLength);
+        
+        if (currentPos === 1.0) {
+          statusText = "BULLISH (20m)";
+        } else if (currentPos === 0.0) {
+          statusText = "BEARISH (20m)";
+        } else if (remaining > 0) {
+          statusText = `WAITING (${remaining}m left)`;
         } else {
-          statusText = `${crossoverStatus} | MIXED SIGNALS`;
+          statusText = "MIXED SIGNALS";
         }
       }
       
@@ -506,39 +517,37 @@ class TimeframeManager {
   async initializeChart() {
     try {
       this.showLoading();
-      console.log('🚀 Starting chart initialization...');
+      console.log('🚀 Loading chart...');
       
-      // Phase 1: Load recent data first
-      console.log('⚡ Loading recent data...');
+      // Phase 1: Load recent data first (fast startup)
       const recentRes = await fetch('https://btc-spread-test-pipeline.onrender.com/recent.json');
       const recentData = await recentRes.json();
       
       this.rawData = recentData;
       this.processAndSetData(recentData);
-      console.log(`✅ Chart loaded with ${recentData.length} recent data points`);
+      console.log(`✅ Recent data loaded (${recentData.length} points)`);
       
-      // Phase 2: Load complete historical data in background
-      console.log('📚 Loading complete historical data...');
+      // Phase 2: Load complete historical data
       const historicalRes = await fetch('https://btc-spread-test-pipeline.onrender.com/historical.json');
       const historicalData = await historicalRes.json();
       
       this.rawData = historicalData;
       this.processAndSetData(historicalData);
       this.isFullDataLoaded = true;
-      console.log(`🎉 Chart updated with complete ${historicalData.length} historical data points`);
+      console.log(`✅ Full data loaded (${historicalData.length} points)`);
       
     } catch (err) {
-      console.error('❌ Error during chart initialization:', err);
+      console.error('❌ Loading error:', err);
       
-      // Fallback to old endpoint
+      // Fallback
       try {
         const fallbackRes = await fetch('https://btc-spread-test-pipeline.onrender.com/output-latest.json');
         const fallbackData = await fallbackRes.json();
         this.rawData = fallbackData;
         this.processAndSetData(fallbackData);
-        console.log('✅ Fallback successful');
+        console.log('✅ Fallback loaded');
       } catch (fallbackErr) {
-        console.error('❌ Fallback also failed:', fallbackErr);
+        console.error('❌ All endpoints failed');
       }
     } finally {
       this.hideLoading();
@@ -615,8 +624,8 @@ class TimeframeManager {
     if (this.updateInterval) clearInterval(this.updateInterval);
     if (this.refreshInterval) clearInterval(this.refreshInterval);
 
-    // Update with recent data every 15 seconds
-    this.updateInterval = setInterval(() => this.fetchAndUpdate(), 15000);
+    // Update with recent data every 30 seconds (reduced frequency)
+    this.updateInterval = setInterval(() => this.fetchAndUpdate(), 30000);
 
     // Refresh complete historical data every hour
     this.refreshInterval = setInterval(() => this.refreshHistoricalData(), 3600000);
@@ -688,22 +697,26 @@ function setupCustomIndicator(indicatorConfig) {
   console.log(`✅ Custom indicator "${indicatorConfig.title}" configured and active!`);
 }
 
-// Setup chart synchronization
+// Setup lightweight chart synchronization
 function setupChartSync() {
-  // Sync from main chart to indicator chart
+  let syncInProgress = false;
+  
+  // Throttled sync from main chart to indicator chart
   chart.timeScale().subscribeVisibleTimeRangeChange(() => {
-    const mainRange = chart.timeScale().getVisibleTimeRange();
-    if (mainRange) {
-      indicatorChart.timeScale().setVisibleTimeRange(mainRange);
-    }
-  });
-
-  // Sync from indicator chart to main chart
-  indicatorChart.timeScale().subscribeVisibleTimeRangeChange(() => {
-    const indicatorRange = indicatorChart.timeScale().getVisibleTimeRange();
-    if (indicatorRange) {
-      chart.timeScale().setVisibleTimeRange(indicatorRange);
-    }
+    if (syncInProgress) return;
+    syncInProgress = true;
+    
+    setTimeout(() => {
+      try {
+        const mainRange = chart.timeScale().getVisibleTimeRange();
+        if (mainRange) {
+          indicatorChart.timeScale().setVisibleTimeRange(mainRange);
+        }
+      } catch (e) {
+        // Silent fail
+      }
+      syncInProgress = false;
+    }, 50); // 50ms throttle
   });
 }
 
@@ -721,13 +734,6 @@ timeframeManager.initializeChart().then(() => {
     calculate: timeframeManager.calculateCustomIndicator.bind(timeframeManager)
   });
   
-  console.log('📊 MA Crossover (20m persistence) indicator active!');
-  console.log('🎯 Indicator Logic:');
-  console.log('   • Tracks MA50 & MA100 vs MA200 crossovers');
-  console.log('   • Requires 20 minutes of consistent state before flicking');
-  console.log('   • Top (1.0) = 20min+ of both MAs above MA200');
-  console.log('   • Bottom (0.0) = 20min+ of both MAs below MA200');
-  console.log('   • Middle (0.5) = Waiting or mixed signals');
-  console.log('   • Spread color coding: Green→Yellow→Orange→Red (>0.03)');
+  console.log('📊 MA Crossover indicator ready!');
 });
 
