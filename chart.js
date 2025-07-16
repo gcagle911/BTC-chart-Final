@@ -191,10 +191,24 @@ setInterval(fetchAndUpdate, 15000);
 setInterval(refreshHistoricalData, 3600000); // 1 hour = 3600000ms
 
 function set1Min() {
-  chart.timeScale().setBarSpacing(10); // default zoom
+  console.log("1m clicked");
+  const range = chart.timeScale().getVisibleLogicalRange();
+  if (range) {
+    chart.timeScale().setVisibleLogicalRange({
+      from: range.from,
+      to: range.from + 60 // show 60 bars (~1 hour of 1m data)
+    });
+  }
 }
 
 function set5Min() {
-  chart.timeScale().setBarSpacing(3); // zoomed out view
+  console.log("5m clicked");
+  const range = chart.timeScale().getVisibleLogicalRange();
+  if (range) {
+    chart.timeScale().setVisibleLogicalRange({
+      from: range.from,
+      to: range.from + 300 // show 300 bars (~5 hours of 1m data)
+    });
+  }
 }
 
