@@ -8,18 +8,87 @@
     body {
       margin: 0;
       background-color: #131722;
+      font-family: Arial, sans-serif;
     }
     #chart {
       width: 100vw;
       height: 100vh;
     }
+    .controls {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 10;
+      background: rgba(19, 23, 34, 0.9);
+      padding: 10px;
+      border-radius: 5px;
+      color: #D1D4DC;
+    }
+    .status {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 10;
+      background: rgba(19, 23, 34, 0.9);
+      padding: 10px;
+      border-radius: 5px;
+      color: #D1D4DC;
+      min-width: 200px;
+    }
+    button {
+      margin: 2px;
+      padding: 5px 10px;
+      background: #2B2B43;
+      color: #D1D4DC;
+      border: 1px solid #404040;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #404040;
+    }
+    input {
+      margin: 2px;
+      padding: 3px;
+      background: #2B2B43;
+      color: #D1D4DC;
+      border: 1px solid #404040;
+      border-radius: 3px;
+      width: 50px;
+    }
+    .status-item {
+      margin: 5px 0;
+      font-size: 12px;
+    }
+    .status-active {
+      color: #00ff00;
+      font-weight: bold;
+    }
+    .status-pending {
+      color: #ffd700;
+    }
   </style>
 </head>
 <body>
-  <div id="buttons" style="position: absolute; top: 10px; left: 10px; z-index: 10;">
-  <button onclick="set1Min()">1m</button>
-  <button onclick="set5Min()">5m</button>
-</div>
+  <div class="controls">
+    <div>
+      <button onclick="set1Min()">1m</button>
+      <button onclick="set5Min()">5m</button>
+    </div>
+    <div style="margin-top: 10px;">
+      <label>Confirmation Candles:</label>
+      <input type="number" id="confirmationInput" value="20" min="1" max="100" onchange="updateConfirmationCandles()">
+    </div>
+  </div>
+  
+  <div class="status">
+    <div class="status-item"><strong>MA Crossover Status</strong></div>
+    <div class="status-item" id="crossoverStatus">No crossover detected</div>
+    <div class="status-item" id="confirmationStatus">-</div>
+    <div class="status-item" id="ma003Status">MAs < 0.03 threshold</div>
+    <div class="status-item" id="confirmedCrossover">No confirmed crossover</div>
+  </div>
+  
   <div id="chart"></div>
   <script src="https://unpkg.com/lightweight-charts@4.0.0/dist/lightweight-charts.standalone.production.js"></script>
   <script src="chart.js"></script>

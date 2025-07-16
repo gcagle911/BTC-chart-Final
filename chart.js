@@ -36,12 +36,191 @@ const ma200 = chart.addLineSeries({
   lineWidth: 1,
 });
 
+// Add crossover indicator series
+const crossoverIndicator = chart.addLineSeries({
+  priceScaleId: 'left',
+  color: '#00ff00',
+  lineWidth: 3,
+  visible: false, // Initially hidden
+});
+
+// MA crossover state tracking
+let crossoverState = {
+  lastCrossover: null, // 'bull' or 'bear'
+  confirmationCount: 0,
+  confirmedCrossover: null,
+  ma50History: [],
+  ma100History: [],
+  ma200History: [],
+  allMAsAt003: false
+};
+
+// Configuration
+let CONFIRMATION_CANDLES = 20;
+const MA_THRESHOLD = 0.03;
+
+// Function to update confirmation candles from UI
+function updateConfirmationCandles() {
+  const input = document.getElementById('confirmationInput');
+  const newValue = parseInt(input.value);
+  if (newValue && newValue > 0 && newValue <= 100) {
+    CONFIRMATION_CANDLES = newValue;
+    console.log(`Confirmation candles updated to: ${CONFIRMATION_CANDLES}`);
+    // Reset crossover state when changing confirmation period
+    crossoverState.lastCrossover = null;
+    crossoverState.confirmationCount = 0;
+    crossoverState.confirmedCrossover = null;
+    updateStatusUI();
+  }
+}
+
+// Function to update the status UI
+function updateStatusUI() {
+  const crossoverStatusEl = document.getElementById('crossoverStatus');
+  const confirmationStatusEl = document.getElementById('confirmationStatus');
+  const ma003StatusEl = document.getElementById('ma003Status');
+  const confirmedCrossoverEl = document.getElementById('confirmedCrossover');
+  
+  if (!crossoverStatusEl) return; // UI not ready yet
+  
+  // Update crossover status
+  if (crossoverState.lastCrossover) {
+    crossoverStatusEl.textContent = `${crossoverState.lastCrossover.toUpperCase()} crossover detected`;
+    crossoverStatusEl.className = 'status-item status-pending';
+  } else {
+    crossoverStatusEl.textContent = 'No active crossover';
+    crossoverStatusEl.className = 'status-item';
+  }
+  
+  // Update confirmation status
+  if (crossoverState.lastCrossover && crossoverState.confirmationCount > 0) {
+    confirmationStatusEl.textContent = `Confirmation: ${crossoverState.confirmationCount}/${CONFIRMATION_CANDLES} candles`;
+    confirmationStatusEl.className = 'status-item status-pending';
+  } else {
+    confirmationStatusEl.textContent = '-';
+    confirmationStatusEl.className = 'status-item';
+  }
+  
+  // Update 0.03 threshold status
+  if (crossoverState.allMAsAt003) {
+    ma003StatusEl.textContent = 'All MAs ≥ 0.03 ✅';
+    ma003StatusEl.className = 'status-item status-active';
+  } else {
+    ma003StatusEl.textContent = 'MAs < 0.03 threshold';
+    ma003StatusEl.className = 'status-item';
+  }
+  
+  // Update confirmed crossover
+  if (crossoverState.confirmedCrossover) {
+    confirmedCrossoverEl.textContent = `Confirmed: ${crossoverState.confirmedCrossover.toUpperCase()} crossover ✅`;
+    confirmedCrossoverEl.className = 'status-item status-active';
+  } else {
+    confirmedCrossoverEl.textContent = 'No confirmed crossover';
+    confirmedCrossoverEl.className = 'status-item';
+  }
+}
+
 function toUnixTimestamp(dateStr) {
   return Math.floor(new Date(dateStr).getTime() / 1000);
 }
 
 let lastTimestamp = 0;
 let isFullDataLoaded = false;
+
+// Function to detect MA crossover and confirmation
+function detectCrossover(ma50Val, ma100Val, ma200Val, timestamp) {
+  // Store MA values in history (keep only what we need for confirmation)
+  crossoverState.ma50History.push({time: timestamp, value: ma50Val});
+  crossoverState.ma100History.push({time: timestamp, value: ma100Val});
+  crossoverState.ma200History.push({time: timestamp, value: ma200Val});
+  
+  // Keep only the last 25 candles (extra buffer)
+  const maxHistory = CONFIRMATION_CANDLES + 5;
+  if (crossoverState.ma50History.length > maxHistory) {
+    crossoverState.ma50History = crossoverState.ma50History.slice(-maxHistory);
+    crossoverState.ma100History = crossoverState.ma100History.slice(-maxHistory);
+    crossoverState.ma200History = crossoverState.ma200History.slice(-maxHistory);
+  }
+  
+  // Need at least 2 data points to detect crossover
+  if (crossoverState.ma50History.length < 2) return;
+  
+  const prev50 = crossoverState.ma50History[crossoverState.ma50History.length - 2].value;
+  const prev100 = crossoverState.ma100History[crossoverState.ma100History.length - 2].value;
+  const curr50 = ma50Val;
+  const curr100 = ma100Val;
+  
+  // Detect crossover between MA50 and MA100
+  let newCrossover = null;
+  if (prev50 <= prev100 && curr50 > curr100) {
+    newCrossover = 'bull'; // MA50 crosses above MA100
+  } else if (prev50 >= prev100 && curr50 < curr100) {
+    newCrossover = 'bear'; // MA50 crosses below MA100
+  }
+  
+  // If new crossover detected, reset confirmation
+  if (newCrossover && newCrossover !== crossoverState.lastCrossover) {
+    crossoverState.lastCrossover = newCrossover;
+    crossoverState.confirmationCount = 1;
+    crossoverState.confirmedCrossover = null;
+    console.log(`New ${newCrossover} crossover detected, starting confirmation...`);
+    updateStatusUI();
+  }
+  
+  // If we're tracking a crossover, check if it stays on the correct side of MA200
+  if (crossoverState.lastCrossover && crossoverState.confirmationCount < CONFIRMATION_CANDLES) {
+    let isValidPosition = false;
+    
+    if (crossoverState.lastCrossover === 'bull') {
+      // For bull crossover, both MA50 and MA100 should be above MA200
+      isValidPosition = (curr50 > ma200Val && curr100 > ma200Val);
+    } else if (crossoverState.lastCrossover === 'bear') {
+      // For bear crossover, both MA50 and MA100 should be below MA200
+      isValidPosition = (curr50 < ma200Val && curr100 < ma200Val);
+    }
+    
+    if (isValidPosition) {
+      crossoverState.confirmationCount++;
+      console.log(`Confirmation ${crossoverState.confirmationCount}/${CONFIRMATION_CANDLES} for ${crossoverState.lastCrossover} crossover`);
+      updateStatusUI();
+    } else {
+      // Reset if position is invalidated
+      console.log(`${crossoverState.lastCrossover} crossover invalidated, resetting...`);
+      crossoverState.lastCrossover = null;
+      crossoverState.confirmationCount = 0;
+      updateStatusUI();
+    }
+    
+    // If we've confirmed for required candles, register the crossover
+    if (crossoverState.confirmationCount >= CONFIRMATION_CANDLES) {
+      crossoverState.confirmedCrossover = crossoverState.lastCrossover;
+      console.log(`✅ ${crossoverState.lastCrossover} crossover CONFIRMED after ${CONFIRMATION_CANDLES} candles!`);
+      crossoverState.lastCrossover = null; // Reset to avoid re-confirmation
+      updateStatusUI();
+    }
+  }
+  
+  // Check if all MAs are at or above the 0.03 threshold
+  const allMAsAt003 = (ma50Val >= MA_THRESHOLD && ma100Val >= MA_THRESHOLD && ma200Val >= MA_THRESHOLD);
+  
+  if (allMAsAt003 !== crossoverState.allMAsAt003) {
+    crossoverState.allMAsAt003 = allMAsAt003;
+    if (allMAsAt003) {
+      console.log('🟢 All MAs hit 0.03 threshold! Indicator turning bright green.');
+      // Update all MA series to bright green
+      ma50.applyOptions({ color: '#00ff00' });
+      ma100.applyOptions({ color: '#00ff00' });
+      ma200.applyOptions({ color: '#00ff00' });
+    } else {
+      console.log('Restoring original MA colors');
+      // Restore original colors
+      ma50.applyOptions({ color: '#ffffff' });
+      ma100.applyOptions({ color: '#ffd700' });
+      ma200.applyOptions({ color: '#ff69b4' });
+    }
+    updateStatusUI();
+  }
+}
 
 // Helper function to process and set chart data
 function processAndSetData(data, isUpdate = false) {
@@ -57,7 +236,14 @@ function processAndSetData(data, isUpdate = false) {
     if (isUpdate && t <= lastTimestamp) return;
     
     priceData.push({ time: t, value: d.price });
-    if (d.ma_50 !== null) ma50Data.push({ time: t, value: d.ma_50 });
+    if (d.ma_50 !== null) {
+      ma50Data.push({ time: t, value: d.ma_50 });
+      
+      // Run crossover detection for new data
+      if (d.ma_100 !== null && d.ma_200 !== null) {
+        detectCrossover(d.ma_50, d.ma_100, d.ma_200, t);
+      }
+    }
     if (d.ma_100 !== null) ma100Data.push({ time: t, value: d.ma_100 });
     if (d.ma_200 !== null) ma200Data.push({ time: t, value: d.ma_200 });
     
@@ -76,6 +262,18 @@ function processAndSetData(data, isUpdate = false) {
     ma50.setData(ma50Data);
     ma100.setData(ma100Data);
     ma200.setData(ma200Data);
+    
+    // Reset crossover state when loading complete dataset
+    crossoverState = {
+      lastCrossover: null,
+      confirmationCount: 0,
+      confirmedCrossover: null,
+      ma50History: [],
+      ma100History: [],
+      ma200History: [],
+      allMAsAt003: false
+    };
+    updateStatusUI();
   }
 }
 
@@ -211,4 +409,9 @@ function set5Min() {
     });
   }
 }
+
+// Initialize UI when page loads
+window.addEventListener('load', function() {
+  setTimeout(updateStatusUI, 100); // Small delay to ensure DOM is ready
+});
 
