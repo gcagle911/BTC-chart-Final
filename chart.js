@@ -334,11 +334,31 @@ class TimeframeManager {
     }
   }
 
-  // Placeholder for custom indicator calculation (to be customized)
+  // MA Crossover Momentum Indicator (Stochastic-style)
   calculateCustomIndicator(dataPoint) {
-    // This will be replaced with user's specific indicator logic
-    // For now, return null to show the infrastructure is ready
-    return null;
+    const { ma_50, ma_100, ma_200 } = dataPoint;
+    
+    // Check if we have all required MA values
+    if (ma_50 === null || ma_100 === null || ma_200 === null) {
+      return null;
+    }
+    
+    // Determine current MA positioning relative to MA200
+    const ma50AboveMA200 = ma_50 > ma_200;
+    const ma100AboveMA200 = ma_100 > ma_200;
+    
+    // Signal logic:
+    // 1.0 (top) = Both MA50 and MA100 are above MA200 (bullish)
+    // 0.0 (bottom) = Both MA50 and MA100 are below MA200 (bearish)
+    // 0.5 (middle) = Mixed signals (one above, one below)
+    
+    if (ma50AboveMA200 && ma100AboveMA200) {
+      return 1.0; // Bullish signal - top of range
+    } else if (!ma50AboveMA200 && !ma100AboveMA200) {
+      return 0.0; // Bearish signal - bottom of range
+    } else {
+      return 0.5; // Mixed/neutral signal - middle
+    }
   }
 
   // Sync time scales between charts
@@ -550,6 +570,16 @@ function setupChartSync() {
 timeframeManager.initializeChart().then(() => {
   timeframeManager.startUpdateCycle();
   setupChartSync();
-  console.log('📊 Custom indicator panel ready! Waiting for indicator configuration...');
+  
+  // Setup the MA Crossover Momentum Indicator
+  setupCustomIndicator({
+    type: 'line',
+    title: 'MA Crossover Momentum',
+    color: '#ff6b35',
+    lineWidth: 2,
+    calculate: timeframeManager.calculateCustomIndicator.bind(timeframeManager)
+  });
+  
+  console.log('📊 MA Crossover Momentum indicator active!');
 });
 
