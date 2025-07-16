@@ -61,7 +61,7 @@ const ma200 = chart.addLineSeries({
   lineWidth: 1,
 });
 
-// Indicator panel setup - locked to main chart
+// Indicator panel setup - X-axis locked, Y-axis independent
 window.indicatorChart = LightweightCharts.createChart(document.getElementById('indicator-panel'), {
   layout: {
     background: { color: '#131722' },
@@ -74,10 +74,14 @@ window.indicatorChart = LightweightCharts.createChart(document.getElementById('i
   rightPriceScale: { 
     visible: true,
     scaleMargins: {
-      top: 0.1,
-      bottom: 0.1,
+      top: 0.05,
+      bottom: 0.05,
     },
     borderVisible: false,
+    autoScale: true, // Allow Y-axis auto-scaling
+    entireTextOnly: false,
+    ticksVisible: true,
+    mode: LightweightCharts.PriceScaleMode.Normal,
   },
   timeScale: { 
     visible: false, // Hide to avoid confusion - follows main chart
@@ -86,8 +90,24 @@ window.indicatorChart = LightweightCharts.createChart(document.getElementById('i
   crosshair: {
     mode: LightweightCharts.CrosshairMode.Normal,
   },
-  handleScroll: false, // Disable scrolling
-  handleScale: false,  // Disable scaling
+  handleScroll: {
+    mouseWheel: true,     // Enable mouse wheel for Y-axis
+    pressedMouseMove: true, // Enable drag for Y-axis
+    horzTouchDrag: false,  // Disable horizontal touch drag
+    vertTouchDrag: true,   // Enable vertical touch drag
+  },
+  handleScale: {
+    mouseWheel: true,      // Enable Y-axis zoom with mouse wheel
+    pinch: true,           // Enable pinch zoom for Y-axis
+    axisPressedMouseMove: {
+      time: false,         // Disable X-axis drag
+      price: true,         // Enable Y-axis drag
+    },
+    axisDoubleClickReset: {
+      time: false,         // Disable X-axis reset
+      price: true,         // Enable Y-axis reset
+    },
+  },
 });
 
 // Custom indicator series and reference lines
@@ -758,10 +778,16 @@ timeframeManager.initializeChart().then(() => {
     }
     
     console.log('✅ Charts are now LOCKED TOGETHER!');
-    console.log('📊 Try scrolling the main chart - indicator should follow');
+    console.log('📊 X-axis: Locked together (scroll main chart)');
+    console.log('📊 Y-axis: Independent (scroll/zoom indicator panel)');
   }, 1000);
   
   console.log('📊 MA Crossover indicator loaded');
   console.log('🎯 Logic: Top=Both MAs above MA200 | Bottom=Both below | Middle=Mixed');
+  console.log('🎮 Controls:');
+  console.log('   • Horizontal scroll/zoom: Use MAIN chart');
+  console.log('   • Vertical scroll/zoom: Use INDICATOR panel');
+  console.log('   • Mouse wheel on indicator: Y-axis zoom');
+  console.log('   • Right-click drag on indicator: Y-axis pan');
 });
 
