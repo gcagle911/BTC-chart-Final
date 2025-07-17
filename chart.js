@@ -43,6 +43,18 @@ const priceSeries = chart.addCandlestickSeries({
   wickDownColor: '#ef5350',
 });
 
+const ma10 = chart.addLineSeries({
+  priceScaleId: 'left',
+  color: '#00ff00',
+  lineWidth: 1,
+});
+
+const ma25 = chart.addLineSeries({
+  priceScaleId: 'left',
+  color: '#00ffff',
+  lineWidth: 1,
+});
+
 const ma50 = chart.addLineSeries({
   priceScaleId: 'left',
   color: '#ffffff',
@@ -262,13 +274,17 @@ class TimeframeManager {
     
     // Add MA calculations to each data point
     const dataWithMAs = data.map((item, index) => {
-      // Calculate MA50, MA100, MA200 from previous spread values in this timeframe
+      // Calculate all MAs from previous spread values in this timeframe
+      const ma10 = this.calculateMA(data, index, 10, 'rawSpread');
+      const ma25 = this.calculateMA(data, index, 25, 'rawSpread');
       const ma50 = this.calculateMA(data, index, 50, 'rawSpread');
       const ma100 = this.calculateMA(data, index, 100, 'rawSpread');
       const ma200 = this.calculateMA(data, index, 200, 'rawSpread');
       
       return {
         ...item,
+        ma_10: ma10,
+        ma_25: ma25,
         ma_50: ma50,
         ma_100: ma100,
         ma_200: ma200
@@ -300,6 +316,8 @@ class TimeframeManager {
     const aggregatedData = this.aggregateData(data, timeframeSeconds);
 
     const priceData = [];
+    const ma10Data = [];
+    const ma25Data = [];
     const ma50Data = [];
     const ma100Data = [];
     const ma200Data = [];
@@ -331,6 +349,20 @@ class TimeframeManager {
       });
       
       // MA data (main chart)
+      if (d.ma_10 !== null && d.ma_10 !== undefined) {
+        ma10Data.push({ 
+          time: sharedTime, 
+          value: parseFloat(d.ma_10) 
+        });
+      }
+      
+      if (d.ma_25 !== null && d.ma_25 !== undefined) {
+        ma25Data.push({ 
+          time: sharedTime, 
+          value: parseFloat(d.ma_25) 
+        });
+      }
+      
       if (d.ma_50 !== null && d.ma_50 !== undefined) {
         ma50Data.push({ 
           time: sharedTime, 
@@ -394,6 +426,8 @@ class TimeframeManager {
     if (isUpdate) {
       // Add new data points
       priceData.forEach(p => priceSeries.update(p));
+      ma10Data.forEach(p => ma10.update(p));
+      ma25Data.forEach(p => ma25.update(p));
       ma50Data.forEach(p => ma50.update(p));
       ma100Data.forEach(p => ma100.update(p));
       ma200Data.forEach(p => ma200.update(p));
@@ -416,6 +450,8 @@ class TimeframeManager {
     } else {
       // Set complete dataset
       priceSeries.setData(priceData);
+      ma10.setData(ma10Data);
+      ma25.setData(ma25Data);
       ma50.setData(ma50Data);
       ma100.setData(ma100Data);
       ma200.setData(ma200Data);
@@ -1292,7 +1328,7 @@ timeframeManager.initializeChart().then(() => {
   
   console.log('🌊 VOLATILITY INDICATOR loaded with adaptive confirmation');
   console.log('🎯 Logic: 1.0=HIGH VOLATILITY (MA50&100 above MA200) | 0.0=LOW VOLATILITY (MA50&100 below MA200)');
-  console.log('📊 SPREAD MAs: Now calculated properly for each timeframe (50/100/200 periods of that timeframe)');
+  console.log('📊 SPREAD MAs: Now calculated properly for each timeframe (10/25/50/100/200 periods of that timeframe)');
   console.log('🔍 Filters: MA thresholds (40%) + Rate of change (30%) + Duration (20%) + Distance (10%)');
   console.log('⚡ Adaptive Confirmation: Strong signals confirmed faster, weak signals take longer');
   console.log('📊 Timeframe scaling: 1m=noisy/responsive → 1d=strict/filtered');
