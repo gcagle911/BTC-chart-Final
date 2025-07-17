@@ -469,7 +469,7 @@ class TimeframeManager {
     
     // Skip during initial load to improve performance
     if (this.isInitialLoad) {
-      return 0.5; // Return neutral during loading
+      return 0.0; // Return low volatility during loading
     }
     
     // Initialize volatility state tracking
@@ -477,7 +477,7 @@ class TimeframeManager {
       this.indicatorState = {
         lastSpreadColor: '#26a69a',
         crossoverHistory: [],
-        confirmedState: 0.5, // Start neutral
+        confirmedState: 0.0, // Start with low volatility
         pendingCross: null,
         candlesSinceCross: 0,
         lastMA50: null,
@@ -491,14 +491,12 @@ class TimeframeManager {
     const ma50AboveMA200 = ma_50 > ma_200;
     const ma100AboveMA200 = ma_100 > ma_200;
     
-    // Current volatility state based on crossovers
+    // Current volatility state based on crossovers (BINARY ONLY)
     let currentVolatilityState;
     if (ma50AboveMA200 && ma100AboveMA200) {
       currentVolatilityState = 1.0; // HIGH VOLATILITY (Both above baseline)
-    } else if (!ma50AboveMA200 && !ma100AboveMA200) {
-      currentVolatilityState = 0.0; // LOW VOLATILITY (Both below baseline)
     } else {
-      currentVolatilityState = 0.5; // MIXED VOLATILITY (Transitional)
+      currentVolatilityState = 0.0; // LOW VOLATILITY (Both below or mixed)
     }
     
     // Track current data point for crossover analysis
@@ -520,8 +518,8 @@ class TimeframeManager {
     // Detect crossover events and apply filters
     const previousConfirmedState = this.indicatorState.confirmedState;
     
-    // Check for new crossover (state change)
-    if (currentVolatilityState !== previousConfirmedState && currentVolatilityState !== 0.5 && !this.indicatorState.pendingCross) {
+    // Check for new crossover (state change from confirmed state)
+    if (currentVolatilityState !== previousConfirmedState && !this.indicatorState.pendingCross) {
       
       // FILTER 1: Calculate Rate of Crossover (speed matters)
       const crossoverRate = this.calculateCrossoverRate();
@@ -532,11 +530,17 @@ class TimeframeManager {
       // FILTER 3: Check Absolute Thresholds (meaningful levels)
       const meaningfulThresholds = this.checkMeaningfulThresholds(ma_50, ma_100, ma_200);
       
-      // Calculate overall signal strength
-      const signalStrength = this.calculateSignalStrength(crossoverRate, maDistance, meaningfulThresholds);
+      // FILTER 4: Calculate current duration in target state
+      const duration = this.calculateCrossoverDuration(currentVolatilityState);
+      
+      // Calculate overall signal strength including duration
+      const signalStrength = this.calculateSignalStrength(crossoverRate, maDistance, meaningfulThresholds, duration);
+      
+      // Dynamic threshold based on timeframe (shorter timeframes more tolerant)
+      const strengthThreshold = this.getStrengthThreshold();
       
       // Only proceed if signal meets minimum strength threshold
-      if (signalStrength > 0.3) { // Adjust threshold as needed
+      if (signalStrength > strengthThreshold) {
         
         // Calculate dynamic confirmation period based on signal quality
         const confirmationPeriod = this.calculateConfirmationPeriod(signalStrength, crossoverRate);
@@ -548,20 +552,22 @@ class TimeframeManager {
           signalStrength: signalStrength,
           crossoverRate: crossoverRate,
           maDistance: maDistance,
-          meaningfulThresholds: meaningfulThresholds
+          meaningfulThresholds: meaningfulThresholds,
+          duration: duration
         };
         this.indicatorState.candlesSinceCross = 1;
         this.indicatorState.crossoverStartTime = Date.now();
         
         const direction = currentVolatilityState === 1.0 ? 'HIGH VOLATILITY' : 'LOW VOLATILITY';
         console.log(`🌊 VOLATILITY CROSSOVER detected: ${direction}`);
-        console.log(`   Signal Strength: ${signalStrength.toFixed(3)}`);
+        console.log(`   Signal Strength: ${signalStrength.toFixed(3)} (threshold: ${strengthThreshold.toFixed(3)})`);
         console.log(`   Crossover Rate: ${crossoverRate.toFixed(4)}`);
         console.log(`   MA Distance: ${maDistance.toFixed(4)}`);
-        console.log(`   Meaningful Levels: ${meaningfulThresholds}`);
+        console.log(`   Meaningful Levels: ${meaningfulThresholds.toFixed(3)}`);
+        console.log(`   Duration: ${duration} candles`);
         console.log(`   Confirmation Required: ${confirmationPeriod} candles`);
       } else {
-        console.log(`🚫 Weak volatility signal ignored (strength: ${signalStrength.toFixed(3)})`);
+        console.log(`🚫 Weak volatility signal ignored (strength: ${signalStrength.toFixed(3)}, threshold: ${strengthThreshold.toFixed(3)})`);
       }
     }
     
@@ -603,7 +609,10 @@ class TimeframeManager {
       }
     }
     
-    // Update spread color based on current levels
+    // Update indicator line color
+    this.updateIndicatorLineColor(ma_50, ma_100, ma_200);
+    
+    // Update spread color for status display
     this.updateSpreadColorIndicator(ma_50, ma_100, ma_200);
     
     // Store current values for next iteration
@@ -614,103 +623,185 @@ class TimeframeManager {
     return this.indicatorState.confirmedState;
   }
 
-  // Calculate dynamic confirmation based purely on MA behavior
-  calculateMABasedConfirmation(ma_50, ma_100, ma_200) {
+  // Update spread color for status display
+  updateSpreadColorIndicator(ma_50, ma_100, ma_200) {
+    // Color coding based on spread levels
+    if (ma_50 > 0.03) {
+      this.indicatorState.lastSpreadColor = '#ff4444'; // Red - High spread
+    } else if (ma_50 > 0.02) {
+      this.indicatorState.lastSpreadColor = '#ff8800'; // Orange - Medium-high spread
+    } else if (ma_50 > 0.01) {
+      this.indicatorState.lastSpreadColor = '#ffcc00'; // Yellow - Medium spread
+    } else {
+      this.indicatorState.lastSpreadColor = '#26a69a'; // Green - Low spread
+    }
+  }
+
+  // FILTER 1: Calculate Rate of Crossover (speed of MA movement)
+  calculateCrossoverRate() {
+    if (this.indicatorState.crossoverHistory.length < 5) return 0.001; // Default for insufficient data
+    
+    const recent = this.indicatorState.crossoverHistory.slice(-5);
+    let totalMA50Change = 0;
+    let totalMA100Change = 0;
+    
+    for (let i = 1; i < recent.length; i++) {
+      totalMA50Change += Math.abs(recent[i].ma50 - recent[i-1].ma50);
+      totalMA100Change += Math.abs(recent[i].ma100 - recent[i-1].ma100);
+    }
+    
+    const avgMA50Rate = totalMA50Change / (recent.length - 1);
+    const avgMA100Rate = totalMA100Change / (recent.length - 1);
+    const averageRate = (avgMA50Rate + avgMA100Rate) / 2;
+    
+    return averageRate;
+  }
+
+  // FILTER 2: Calculate Distance Between MAs (gap significance)
+  calculateMADistance(ma_50, ma_100, ma_200) {
+    const gap50_200 = Math.abs(ma_50 - ma_200);
+    const gap100_200 = Math.abs(ma_100 - ma_200);
+    const averageGap = (gap50_200 + gap100_200) / 2;
+    
+    return averageGap;
+  }
+
+  // FILTER 3: Check Absolute Thresholds (most significant)
+  checkMeaningfulThresholds(ma_50, ma_100, ma_200) {
+    let score = 0;
+    
+    // Primary thresholds (most important)
+    if (ma_50 >= 0.03) score += 2;
+    if (ma_100 >= 0.03) score += 2;
+    
+    // Secondary threshold (slower, less weighted)
+    if (ma_200 >= 2.5) score += 1;
+    
+    // Normalize to 0-1 scale (max possible score = 5)
+    return Math.min(score / 5, 1.0);
+  }
+
+  // FILTER 4: Calculate Duration of Crossover
+  calculateCrossoverDuration(targetState) {
+    if (this.indicatorState.crossoverHistory.length < 3) return 0;
+    
+    let consecutiveCount = 0;
+    const history = this.indicatorState.crossoverHistory;
+    
+    // Count consecutive candles in target state from end
+    for (let i = history.length - 1; i >= 0; i--) {
+      if (history[i].volatilityState === targetState) {
+        consecutiveCount++;
+      } else {
+        break;
+      }
+    }
+    
+    return consecutiveCount;
+  }
+
+  // Calculate Overall Signal Strength with proper weighting
+  calculateSignalStrength(crossoverRate, maDistance, meaningfulThresholds, duration = 0) {
+    // Normalize rate of change (higher = better)
+    const normalizedRate = Math.min(crossoverRate / 0.01, 1.0); // 0.01 = very fast
+    
+    // Normalize MA distance (higher = better) 
+    const normalizedDistance = Math.min(maDistance / 0.02, 1.0); // 0.02 = significant gap
+    
+    // Normalize duration (more time = better, but diminishing returns)
+    const normalizedDuration = Math.min(duration / 10, 1.0); // 10 candles = good duration
+    
+    // Weighted signal strength calculation
+    const signalStrength = (
+      meaningfulThresholds * 0.4 +    // 40% - Most significant (MA absolute values)
+      normalizedRate * 0.3 +          // 30% - Second most significant (speed)
+      normalizedDuration * 0.2 +      // 20% - Significant but dynamic (time)
+      normalizedDistance * 0.1        // 10% - Least significant (gap size)
+    );
+    
+    return Math.min(signalStrength, 1.0);
+  }
+
+  // Calculate Adaptive Confirmation Period
+  calculateConfirmationPeriod(signalStrength, crossoverRate) {
     // Base confirmation periods by timeframe
     const baseConfirmation = {
-      '1m': 16,
-      '5m': 12, 
-      '15m': 8,
-      '1h': 6,
-      '4h': 4,
-      '1d': 3
+      '1m': 15,
+      '5m': 10, 
+      '15m': 6,
+      '1h': 4,
+      '4h': 3,
+      '1d': 2
     };
     
-    const base = baseConfirmation[this.currentTimeframe] || 16;
+    const base = baseConfirmation[this.currentTimeframe] || 15;
     
-    // Factor 1: MA Separation Strength (60% weight)
-    const separation = Math.abs(ma_50 - ma_200) / ma_200;
-    let strengthFactor;
-    if (separation > 0.01) {        // 1%+ separation = very strong
-      strengthFactor = 0.5;
-    } else if (separation > 0.005) { // 0.5%+ = strong  
-      strengthFactor = 0.7;
-    } else if (separation > 0.002) { // 0.2%+ = medium
-      strengthFactor = 1.0;
-    } else {                        // <0.2% = weak
-      strengthFactor = 1.5;
+    // Adaptive multiplier based on signal strength
+    let multiplier;
+    if (signalStrength > 0.8) {
+      multiplier = 0.3; // Very strong signal = 30% of base time
+    } else if (signalStrength > 0.6) {
+      multiplier = 0.5; // Strong signal = 50% of base time
+    } else if (signalStrength > 0.4) {
+      multiplier = 1.0; // Medium signal = normal time
+    } else if (signalStrength > 0.2) {
+      multiplier = 2.0; // Weak signal = 200% of base time
+    } else {
+      multiplier = 4.0; // Very weak signal = 400% of base time
     }
     
-    // Factor 2: MA Convergence Speed (40% weight)
-    const convergenceSpeed = this.getMAConvergenceSpeed();
-    let speedFactor;
-    if (convergenceSpeed > 0.003) {     // Fast convergence
-      speedFactor = 0.7;
-    } else if (convergenceSpeed > 0.001) { // Medium speed
-      speedFactor = 1.0;
-    } else {                          // Slow convergence
-      speedFactor = 1.3;
+    // Additional adjustment for crossover rate
+    if (crossoverRate > 0.005) {
+      multiplier *= 0.8; // Fast crossover = reduce time needed
+    } else if (crossoverRate < 0.001) {
+      multiplier *= 1.5; // Slow crossover = increase time needed
     }
     
-    // Combine factors (weighted average)
-    const finalMultiplier = (strengthFactor * 0.6) + (speedFactor * 0.4);
-    const confirmationCandles = Math.max(4, Math.min(25, Math.round(base * finalMultiplier)));
-    
-    console.log(`📊 MA-Based Confirmation: ${confirmationCandles} candles (separation: ${(separation * 100).toFixed(3)}%, speed: ${convergenceSpeed.toFixed(4)}, factors: ${strengthFactor.toFixed(2)}/${speedFactor.toFixed(2)})`);
-    
-    return confirmationCandles;
+    const finalPeriod = Math.max(2, Math.round(base * multiplier));
+    return Math.min(finalPeriod, 50); // Cap at 50 candles max
   }
 
-  // Calculate how fast the MAs converged
-  getMAConvergenceSpeed() {
-    // Track MA gap changes for speed calculation
-    const currentGap = Math.abs(this.indicatorState.crossoverHistory[this.indicatorState.crossoverHistory.length - 1]?.ma50 - 
-                               this.indicatorState.crossoverHistory[this.indicatorState.crossoverHistory.length - 1]?.ma200) || 0;
+  // Get dynamic strength threshold based on timeframe
+  getStrengthThreshold() {
+    const thresholds = {
+      '1m': 0.25,   // More tolerant on 1-minute (noisy but responsive)
+      '5m': 0.35,   // Moderate filtering
+      '15m': 0.45,  // Stricter filtering
+      '1h': 0.55,   // Much stricter (less noise tolerance)
+      '4h': 0.65,   // Very strict
+      '1d': 0.75    // Extremely strict
+    };
     
-    this.indicatorState.maGapHistory.push(currentGap);
-    
-    // Keep only last 10 gaps for speed calculation
-    if (this.indicatorState.maGapHistory.length > 10) {
-      this.indicatorState.maGapHistory.shift();
-    }
-    
-    // Need at least 5 points to calculate speed
-    if (this.indicatorState.maGapHistory.length < 5) {
-      return 0.001; // Default medium speed
-    }
-    
-    // Calculate average change per candle over last 5 candles
-    const recent = this.indicatorState.maGapHistory.slice(-5);
-    let totalChange = 0;
-    for (let i = 1; i < recent.length; i++) {
-      totalChange += Math.abs(recent[i] - recent[i-1]);
-    }
-    
-    return totalChange / (recent.length - 1);
+    return thresholds[this.currentTimeframe] || 0.35;
   }
 
-  // Update indicator line color when all MAs are above 0.03
+  // Update indicator line color based on volatility state and MA levels
   updateIndicatorLineColor(ma_50, ma_100, ma_200) {
     if (!customIndicatorSeries) return;
     
-    // Check if all MAs are above 0.03
+    // Color based on confirmed volatility state and threshold breaches
     const allMAsAbove003 = ma_50 > 0.03 && ma_100 > 0.03 && ma_200 > 0.03;
+    const confirmedHighVolatility = this.indicatorState.confirmedState === 1.0;
     
-    // Store current color state to avoid unnecessary updates
-    if (!this.lastIndicatorColor) {
-      this.lastIndicatorColor = '#00d4ff'; // Default blue
+    let newColor;
+    if (confirmedHighVolatility && allMAsAbove003) {
+      newColor = '#ff0000'; // Bright red - High volatility + significant levels
+    } else if (confirmedHighVolatility) {
+      newColor = '#ff8800'; // Orange - High volatility
+    } else if (allMAsAbove003) {
+      newColor = '#ffff00'; // Yellow - Significant levels but low volatility
+    } else {
+      newColor = '#00ff00'; // Green - Low volatility, normal levels
     }
     
-    const newColor = allMAsAbove003 ? '#00ff00' : '#00d4ff'; // Bright green or blue
-    
     // Only update if color changed
-    if (newColor !== this.lastIndicatorColor) {
+    if (!this.lastIndicatorColor || newColor !== this.lastIndicatorColor) {
       customIndicatorSeries.applyOptions({
         color: newColor
       });
       this.lastIndicatorColor = newColor;
       
-      console.log(`🎨 Indicator line color: ${allMAsAbove003 ? 'BRIGHT GREEN (all MAs > 0.03)' : 'BLUE (normal)'}`);
+      console.log(`🎨 Volatility indicator color: ${newColor} (volatility: ${confirmedHighVolatility ? 'HIGH' : 'LOW'}, significant levels: ${allMAsAbove003})`);
     }
   }
 
@@ -749,22 +840,21 @@ class TimeframeManager {
       if (latest && latest.ma_50 !== null && latest.ma_100 !== null && latest.ma_200 !== null) {
         const ma50AboveMA200 = latest.ma_50 > latest.ma_200;
         const ma100AboveMA200 = latest.ma_100 > latest.ma_200;
+        const bothAbove = ma50AboveMA200 && ma100AboveMA200;
         
         let statusText;
         
         // Check if we're in a pending confirmation period
         if (this.indicatorState.pendingCross) {
           const remaining = this.indicatorState.pendingCross.candlesRequired - this.indicatorState.candlesSinceCross;
-          const targetDirection = this.indicatorState.pendingCross.targetState === 1.0 ? 'BULLISH' : 'BEARISH';
+          const targetDirection = this.indicatorState.pendingCross.targetState === 1.0 ? 'HIGH VOLATILITY' : 'LOW VOLATILITY';
           statusText = `CONFIRMING ${targetDirection} (${remaining} candles left)`;
         } else {
-          // Show confirmed state
-          if (ma50AboveMA200 && ma100AboveMA200) {
-            statusText = this.indicatorState.confirmedState === 1.0 ? "CONFIRMED BULLISH" : "BULLISH - Not Confirmed";
-          } else if (!ma50AboveMA200 && !ma100AboveMA200) {
-            statusText = this.indicatorState.confirmedState === 0.0 ? "CONFIRMED BEARISH" : "BEARISH - Not Confirmed";
+          // Show confirmed volatility state
+          if (this.indicatorState.confirmedState === 1.0) {
+            statusText = bothAbove ? "HIGH VOLATILITY CONFIRMED" : "HIGH VOLATILITY (crossover invalidated)";
           } else {
-            statusText = "MIXED - MAs Diverging";
+            statusText = !bothAbove ? "LOW VOLATILITY CONFIRMED" : "LOW VOLATILITY (crossover invalidated)";
           }
         }
         
@@ -1064,11 +1154,11 @@ function setupChartSync() {
 timeframeManager.initializeChart().then(() => {
   timeframeManager.startUpdateCycle();
   
-  // Setup the immediate MA Crossover Indicator
+  // Setup the Volatility Indicator
   setupCustomIndicator({
     type: 'line',
-    title: 'MA Crossover (Immediate)',
-    color: '#00d4ff',
+    title: 'Volatility Indicator (Spread MA Crossover)',
+    color: '#00ff00',
     lineWidth: 3,
     calculate: timeframeManager.calculateCustomIndicator.bind(timeframeManager)
   });
@@ -1116,9 +1206,11 @@ timeframeManager.initializeChart().then(() => {
     console.log('📊 Y-axis: Independent (scroll/zoom indicator panel)');
   }, 1000);
   
-  console.log('📊 MA Crossover indicator loaded (20 candle confirmation delay)');
-  console.log('🎯 Logic: 1.0=Both MAs above MA200 (confirmed after 20 candles) | 0.0=Both below (confirmed after 20 candles) | 0.5=Mixed/Unconfirmed');
-  console.log('⏱️ Confirmation: Waits 20 candles after crossover before confirming signal');
+  console.log('🌊 VOLATILITY INDICATOR loaded with adaptive confirmation');
+  console.log('🎯 Logic: 1.0=HIGH VOLATILITY (MA50&100 above MA200) | 0.0=LOW VOLATILITY (MA50&100 below MA200)');
+  console.log('🔍 Filters: MA thresholds (40%) + Rate of change (30%) + Duration (20%) + Distance (10%)');
+  console.log('⚡ Adaptive Confirmation: Strong signals confirmed faster, weak signals take longer');
+  console.log('📊 Timeframe scaling: 1m=noisy/responsive → 1d=strict/filtered');
   console.log('🎮 Controls:');
   console.log('   • Horizontal scroll/zoom: Use MAIN chart');
   console.log('   • Vertical scroll/zoom: Use INDICATOR panel');
