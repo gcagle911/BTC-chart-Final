@@ -171,15 +171,19 @@ class TimeframeManager {
 
   // Aggregate data maintaining full MA technical accuracy and create OHLC
   aggregateData(data, timeframeSeconds) {
-    // For 1-minute data, create OHLC from price data
+    // For 1-minute data, create OHLC from price data and recalculate MAs from raw spread
     if (timeframeSeconds === 60) {
-      return data.map(item => ({
+      const oneMinuteData = data.map(item => ({
         ...item,
         open: item.open || item.price,
         high: item.high || item.price,
         low: item.low || item.price,
-        close: item.close || item.price
+        close: item.close || item.price,
+        rawSpread: item.ma_50 // Use the raw 1-minute spread as our base
       }));
+      
+      // Calculate proper MAs for 1-minute timeframe
+      return this.calculateTimeframeMAs(oneMinuteData);
     }
 
     const aggregated = [];
@@ -220,14 +224,9 @@ class TimeframeManager {
         const highPrice = Math.max(...bucket.dataPoints.map(p => p.price));
         const lowPrice = Math.min(...bucket.dataPoints.map(p => p.price));
         
-        // For MAs: Use the MA value at the close time of the timeframe period
-        // This maintains the technical accuracy of the MA calculations
-        // The MA at the close represents the true MA value for that timeframe period
-        const closeMAs = closePoint;
-        
-        // Alternative approach: For maximum accuracy, we could interpolate or use
-        // the MA value that best represents the timeframe, but using close time
-        // is the standard professional approach
+        // For spread values: Calculate average spread in this timeframe bucket
+        // This represents the actual spread behavior during this timeframe period
+        const avgSpread = bucket.dataPoints.reduce((sum, p) => sum + p.ma_50, 0) / bucket.dataPoints.length;
         
         // CRITICAL: Use consistent bucket timestamp for all timeframes
         const bucketTimestamp = new Date(bucketTime * 1000).toISOString();
@@ -241,12 +240,8 @@ class TimeframeManager {
           low: lowPrice,
           close: closePoint.price,
           
-          // MAs maintain their original technical calculation accuracy
-          // These are the actual MA values calculated from full 1-minute granularity
-          // at the close of each timeframe period
-          ma_50: closeMAs.ma_50,
-          ma_100: closeMAs.ma_100,
-          ma_200: closeMAs.ma_200,
+          // Raw spread value for this timeframe (average of all 1-minute spreads in bucket)
+          rawSpread: avgSpread,
           
           // Store bucket info for debugging
           bucketStart: bucketTime,
@@ -255,7 +250,48 @@ class TimeframeManager {
       }
     }
 
-    return aggregated.sort((a, b) => new Date(a.time) - new Date(b.time));
+    const sortedAggregated = aggregated.sort((a, b) => new Date(a.time) - new Date(b.time));
+    
+    // Calculate proper MAs for this timeframe from the aggregated spread data
+    return this.calculateTimeframeMAs(sortedAggregated);
+  }
+
+  // Calculate moving averages appropriate for the current timeframe
+  calculateTimeframeMAs(data) {
+    if (data.length === 0) return data;
+    
+    // Add MA calculations to each data point
+    const dataWithMAs = data.map((item, index) => {
+      // Calculate MA50, MA100, MA200 from previous spread values in this timeframe
+      const ma50 = this.calculateMA(data, index, 50, 'rawSpread');
+      const ma100 = this.calculateMA(data, index, 100, 'rawSpread');
+      const ma200 = this.calculateMA(data, index, 200, 'rawSpread');
+      
+      return {
+        ...item,
+        ma_50: ma50,
+        ma_100: ma100,
+        ma_200: ma200
+      };
+    });
+    
+    return dataWithMAs;
+  }
+
+  // Calculate moving average for a specific period and field
+  calculateMA(data, currentIndex, period, field) {
+    // Need at least 'period' data points to calculate MA
+    if (currentIndex < period - 1) {
+      return null; // Not enough data
+    }
+    
+    // Calculate average of last 'period' values
+    let sum = 0;
+    for (let i = currentIndex - period + 1; i <= currentIndex; i++) {
+      sum += data[i][field];
+    }
+    
+    return sum / period;
   }
 
   // Process and set chart data (performance optimized)
@@ -1208,6 +1244,7 @@ timeframeManager.initializeChart().then(() => {
   
   console.log('🌊 VOLATILITY INDICATOR loaded with adaptive confirmation');
   console.log('🎯 Logic: 1.0=HIGH VOLATILITY (MA50&100 above MA200) | 0.0=LOW VOLATILITY (MA50&100 below MA200)');
+  console.log('📊 SPREAD MAs: Now calculated properly for each timeframe (50/100/200 periods of that timeframe)');
   console.log('🔍 Filters: MA thresholds (40%) + Rate of change (30%) + Duration (20%) + Distance (10%)');
   console.log('⚡ Adaptive Confirmation: Strong signals confirmed faster, weak signals take longer');
   console.log('📊 Timeframe scaling: 1m=noisy/responsive → 1d=strict/filtered');
