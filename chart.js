@@ -148,25 +148,25 @@ class TimeframeManager {
     document.getElementById('loading-indicator').style.display = 'none';
   }
 
-  setActiveButton(timeframe) {
-    document.querySelectorAll('.timeframe-btn').forEach(btn => {
-      btn.classList.remove('active');
-      if (btn.dataset.timeframe === timeframe) {
-        btn.classList.add('active');
-      }
-    });
+  setActiveDropdown(timeframe) {
+    const dropdown = document.getElementById('timeframe-dropdown');
+    if (dropdown) {
+      dropdown.value = timeframe;
+    }
   }
 
-  disableButtons() {
-    document.querySelectorAll('.timeframe-btn').forEach(btn => {
-      btn.disabled = true;
-    });
+  disableDropdown() {
+    const dropdown = document.getElementById('timeframe-dropdown');
+    if (dropdown) {
+      dropdown.disabled = true;
+    }
   }
 
-  enableButtons() {
-    document.querySelectorAll('.timeframe-btn').forEach(btn => {
-      btn.disabled = false;
-    });
+  enableDropdown() {
+    const dropdown = document.getElementById('timeframe-dropdown');
+    if (dropdown) {
+      dropdown.disabled = false;
+    }
   }
 
   // Aggregate data maintaining full MA technical accuracy and create OHLC
@@ -458,7 +458,7 @@ class TimeframeManager {
     return false;
   }
 
-  // MA Crossover - 20 Candle Confirmation Delay
+  // MA Crossover - Dynamic MA-Based Confirmation
   calculateCustomIndicator(dataPoint) {
     const { ma_50, ma_100, ma_200 } = dataPoint;
     
@@ -472,14 +472,16 @@ class TimeframeManager {
       return 0.5; // Return neutral during loading
     }
     
-    // Initialize state for crossover tracking with confirmation delay
+    // Initialize enhanced state for MA-based tracking
     if (!this.indicatorState) {
       this.indicatorState = {
         lastSpreadColor: '#26a69a',
         crossoverHistory: [],
         confirmedState: 0.5, // Start neutral
         pendingCross: null,
-        candlesSinceCross: 0
+        candlesSinceCross: 0,
+        maGapHistory: [], // Track MA separation changes
+        lastMAGap: null
       };
     }
     
@@ -497,12 +499,18 @@ class TimeframeManager {
       currentRawState = 0.5; // Mixed
     }
     
+    // Calculate dynamic confirmation period based on MA behavior
+    const dynamicConfirmation = this.calculateMABasedConfirmation(ma_50, ma_100, ma_200);
+    
     // Track crossover history to detect changes
     this.indicatorState.crossoverHistory.push({
       ma50Above: ma50AboveMA200,
       ma100Above: ma100AboveMA200,
       rawState: currentRawState,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      ma50: ma_50,
+      ma100: ma_100,
+      ma200: ma_200
     });
     
     // Keep only recent history (last 50 candles should be enough)
@@ -515,14 +523,14 @@ class TimeframeManager {
     
     // Check if current raw state is different from confirmed state and we're not already tracking a pending cross
     if (currentRawState !== previousConfirmedState && currentRawState !== 0.5 && !this.indicatorState.pendingCross) {
-      // New crossover detected - start tracking
+      // New crossover detected - start tracking with dynamic confirmation
       this.indicatorState.pendingCross = {
         targetState: currentRawState,
         startCandle: this.indicatorState.crossoverHistory.length - 1,
-        candlesRequired: 20
+        candlesRequired: dynamicConfirmation
       };
       this.indicatorState.candlesSinceCross = 1;
-      console.log(`🔄 New crossover detected: ${currentRawState === 1.0 ? 'BULLISH' : 'BEARISH'} - waiting for 20 candle confirmation`);
+      console.log(`🔄 New MA crossover detected: ${currentRawState === 1.0 ? 'BULLISH' : 'BEARISH'} - waiting for ${dynamicConfirmation} candle confirmation (MA-based)`);
     }
     
     // If we have a pending crossover, check confirmation progress
@@ -535,19 +543,22 @@ class TimeframeManager {
         if (this.indicatorState.candlesSinceCross >= this.indicatorState.pendingCross.candlesRequired) {
           // Confirmation complete - update confirmed state
           this.indicatorState.confirmedState = this.indicatorState.pendingCross.targetState;
-          console.log(`✅ Crossover CONFIRMED after ${this.indicatorState.candlesSinceCross} candles: ${this.indicatorState.confirmedState === 1.0 ? 'BULLISH' : 'BEARISH'}`);
+          console.log(`✅ MA Crossover CONFIRMED after ${this.indicatorState.candlesSinceCross} candles: ${this.indicatorState.confirmedState === 1.0 ? 'BULLISH' : 'BEARISH'}`);
           this.indicatorState.pendingCross = null;
           this.indicatorState.candlesSinceCross = 0;
+          
+          // Update indicator line color when all MAs above 0.03
+          this.updateIndicatorLineColor(ma_50, ma_100, ma_200);
         } else {
           // Still waiting for confirmation
           const remaining = this.indicatorState.pendingCross.candlesRequired - this.indicatorState.candlesSinceCross;
           if (remaining % 5 === 0 || remaining <= 3) { // Log every 5 candles or last 3
-            console.log(`⏳ Crossover confirmation: ${this.indicatorState.candlesSinceCross}/${this.indicatorState.pendingCross.candlesRequired} candles (${remaining} remaining)`);
+            console.log(`⏳ MA crossover confirmation: ${this.indicatorState.candlesSinceCross}/${this.indicatorState.pendingCross.candlesRequired} candles (${remaining} remaining)`);
           }
         }
       } else {
         // Crossover invalidated - MAs crossed back before confirmation
-        console.log(`❌ Crossover INVALIDATED after ${this.indicatorState.candlesSinceCross} candles - MAs crossed back`);
+        console.log(`❌ MA Crossover INVALIDATED after ${this.indicatorState.candlesSinceCross} candles - MAs crossed back`);
         this.indicatorState.pendingCross = null;
         this.indicatorState.candlesSinceCross = 0;
       }
@@ -564,8 +575,111 @@ class TimeframeManager {
       this.indicatorState.lastSpreadColor = '#26a69a'; // Green
     }
     
+    // Update indicator line color based on MA values
+    this.updateIndicatorLineColor(ma_50, ma_100, ma_200);
+    
     // Return the confirmed state (not the raw state)
     return this.indicatorState.confirmedState;
+  }
+
+  // Calculate dynamic confirmation based purely on MA behavior
+  calculateMABasedConfirmation(ma_50, ma_100, ma_200) {
+    // Base confirmation periods by timeframe
+    const baseConfirmation = {
+      '1m': 16,
+      '5m': 12, 
+      '15m': 8,
+      '1h': 6,
+      '4h': 4,
+      '1d': 3
+    };
+    
+    const base = baseConfirmation[this.currentTimeframe] || 16;
+    
+    // Factor 1: MA Separation Strength (60% weight)
+    const separation = Math.abs(ma_50 - ma_200) / ma_200;
+    let strengthFactor;
+    if (separation > 0.01) {        // 1%+ separation = very strong
+      strengthFactor = 0.5;
+    } else if (separation > 0.005) { // 0.5%+ = strong  
+      strengthFactor = 0.7;
+    } else if (separation > 0.002) { // 0.2%+ = medium
+      strengthFactor = 1.0;
+    } else {                        // <0.2% = weak
+      strengthFactor = 1.5;
+    }
+    
+    // Factor 2: MA Convergence Speed (40% weight)
+    const convergenceSpeed = this.getMAConvergenceSpeed();
+    let speedFactor;
+    if (convergenceSpeed > 0.003) {     // Fast convergence
+      speedFactor = 0.7;
+    } else if (convergenceSpeed > 0.001) { // Medium speed
+      speedFactor = 1.0;
+    } else {                          // Slow convergence
+      speedFactor = 1.3;
+    }
+    
+    // Combine factors (weighted average)
+    const finalMultiplier = (strengthFactor * 0.6) + (speedFactor * 0.4);
+    const confirmationCandles = Math.max(4, Math.min(25, Math.round(base * finalMultiplier)));
+    
+    console.log(`📊 MA-Based Confirmation: ${confirmationCandles} candles (separation: ${(separation * 100).toFixed(3)}%, speed: ${convergenceSpeed.toFixed(4)}, factors: ${strengthFactor.toFixed(2)}/${speedFactor.toFixed(2)})`);
+    
+    return confirmationCandles;
+  }
+
+  // Calculate how fast the MAs converged
+  getMAConvergenceSpeed() {
+    // Track MA gap changes for speed calculation
+    const currentGap = Math.abs(this.indicatorState.crossoverHistory[this.indicatorState.crossoverHistory.length - 1]?.ma50 - 
+                               this.indicatorState.crossoverHistory[this.indicatorState.crossoverHistory.length - 1]?.ma200) || 0;
+    
+    this.indicatorState.maGapHistory.push(currentGap);
+    
+    // Keep only last 10 gaps for speed calculation
+    if (this.indicatorState.maGapHistory.length > 10) {
+      this.indicatorState.maGapHistory.shift();
+    }
+    
+    // Need at least 5 points to calculate speed
+    if (this.indicatorState.maGapHistory.length < 5) {
+      return 0.001; // Default medium speed
+    }
+    
+    // Calculate average change per candle over last 5 candles
+    const recent = this.indicatorState.maGapHistory.slice(-5);
+    let totalChange = 0;
+    for (let i = 1; i < recent.length; i++) {
+      totalChange += Math.abs(recent[i] - recent[i-1]);
+    }
+    
+    return totalChange / (recent.length - 1);
+  }
+
+  // Update indicator line color when all MAs are above 0.03
+  updateIndicatorLineColor(ma_50, ma_100, ma_200) {
+    if (!customIndicatorSeries) return;
+    
+    // Check if all MAs are above 0.03
+    const allMAsAbove003 = ma_50 > 0.03 && ma_100 > 0.03 && ma_200 > 0.03;
+    
+    // Store current color state to avoid unnecessary updates
+    if (!this.lastIndicatorColor) {
+      this.lastIndicatorColor = '#00d4ff'; // Default blue
+    }
+    
+    const newColor = allMAsAbove003 ? '#00ff00' : '#00d4ff'; // Bright green or blue
+    
+    // Only update if color changed
+    if (newColor !== this.lastIndicatorColor) {
+      customIndicatorSeries.applyOptions({
+        color: newColor
+      });
+      this.lastIndicatorColor = newColor;
+      
+      console.log(`🎨 Indicator line color: ${allMAsAbove003 ? 'BRIGHT GREEN (all MAs > 0.03)' : 'BLUE (normal)'}`);
+    }
   }
 
   // Update spread status display (ultra-light)
@@ -744,13 +858,13 @@ class TimeframeManager {
     if (timeframe === this.currentTimeframe) return;
     
     this.showLoading();
-    this.disableButtons();
+    this.disableDropdown();
     
     console.log(`🔄 Switching to ${timeframe} timeframe - ensuring perfect alignment`);
     
     const oldTimeframe = this.currentTimeframe;
     this.currentTimeframe = timeframe;
-    this.setActiveButton(timeframe);
+    this.setActiveDropdown(timeframe);
     
     // Reset sync state for clean timeframe switch
     this.referenceLinesSet = false;
@@ -799,7 +913,7 @@ class TimeframeManager {
     }, 600);
     
     this.hideLoading();
-    this.enableButtons();
+    this.enableDropdown();
     
     console.log(`✅ Switched to ${this.timeframes[timeframe].label} - Multi-stage sync initiated`);
   }

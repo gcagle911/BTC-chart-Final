@@ -29,43 +29,71 @@
       background: #131722;
     }
     
-    #timeframe-selector {
+    #top-controls {
       position: absolute;
       top: 10px;
       left: 10px;
+      right: 10px;
       z-index: 10;
       display: flex;
-      gap: 4px;
-      background: rgba(25, 28, 35, 0.8);
-      padding: 8px;
+      justify-content: space-between;
+      align-items: center;
+      gap: 15px;
+    }
+    
+    #timeframe-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(25, 28, 35, 0.9);
+      padding: 8px 12px;
       border-radius: 6px;
       backdrop-filter: blur(10px);
     }
     
-    .timeframe-btn {
-      background: transparent;
-      border: 1px solid #2a2e39;
+    #timeframe-dropdown {
+      background: #2a2e39;
+      border: 1px solid #4a4e59;
       color: #d1d4dc;
       padding: 6px 12px;
       border-radius: 4px;
       cursor: pointer;
       font-size: 12px;
       font-weight: 500;
+      min-width: 60px;
+    }
+    
+    #timeframe-dropdown:hover {
+      background: #363a45;
+      border-color: #5a5e69;
+    }
+    
+    #timeframe-dropdown:focus {
+      outline: none;
+      border-color: #2962ff;
+      box-shadow: 0 0 0 2px rgba(41, 98, 255, 0.2);
+    }
+    
+    .control-btn {
+      background: #2962ff;
+      border: none;
+      color: white;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
       transition: all 0.2s ease;
     }
     
-    .timeframe-btn:hover {
-      background: rgba(255, 255, 255, 0.1);
-      border-color: #4a4e59;
+    .control-btn:hover {
+      background: #1e53e5;
     }
     
-    .timeframe-btn.active {
-      background: #2962ff;
-      border-color: #2962ff;
-      color: white;
-    }
-    
-    .timeframe-btn:disabled {
+    .control-btn:disabled {
       opacity: 0.5;
       cursor: not-allowed;
     }
@@ -84,11 +112,7 @@
     }
     
     #spread-status {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      z-index: 10;
-      background: rgba(25, 28, 35, 0.8);
+      background: rgba(25, 28, 35, 0.9);
       color: #d1d4dc;
       padding: 8px 12px;
       border-radius: 6px;
@@ -96,6 +120,7 @@
       font-weight: 500;
       backdrop-filter: blur(10px);
       min-width: 120px;
+      white-space: nowrap;
     }
     
     .spread-value {
@@ -105,22 +130,28 @@
   </style>
 </head>
 <body>
-  <div id="timeframe-selector">
-    <button class="timeframe-btn active" onclick="setTimeframe('1m')" data-timeframe="1m">1m</button>
-    <button class="timeframe-btn" onclick="setTimeframe('5m')" data-timeframe="5m">5m</button>
-    <button class="timeframe-btn" onclick="setTimeframe('15m')" data-timeframe="15m">15m</button>
-    <button class="timeframe-btn" onclick="setTimeframe('1h')" data-timeframe="1h">1H</button>
-    <button class="timeframe-btn" onclick="setTimeframe('4h')" data-timeframe="4h">4H</button>
-    <button class="timeframe-btn" onclick="setTimeframe('1d')" data-timeframe="1d">1D</button>
+  <div id="top-controls">
+    <div id="timeframe-controls">
+      <label for="timeframe-dropdown" style="color: #d1d4dc; font-size: 12px; font-weight: 500;">Timeframe:</label>
+      <select id="timeframe-dropdown" onchange="setTimeframe(this.value)">
+        <option value="1m" selected>1 Minute</option>
+        <option value="5m">5 Minutes</option>
+        <option value="15m">15 Minutes</option>
+        <option value="1h">1 Hour</option>
+        <option value="4h">4 Hours</option>
+        <option value="1d">1 Day</option>
+      </select>
+      <a href="signals.html" class="control-btn">📈 Signals</a>
+    </div>
+    
+    <div id="spread-status">
+      <div>Spread MA50: <span class="spread-value" id="spread-value">--</span></div>
+      <div>Status: <span id="spread-status-text">Loading...</span></div>
+    </div>
   </div>
   
   <div id="loading-indicator">
     Loading chart data...
-  </div>
-  
-  <div id="spread-status">
-    <div>Spread MA50: <span class="spread-value" id="spread-value">--</span></div>
-    <div>Status: <span id="spread-status-text">Loading...</span></div>
   </div>
   
   <div id="chart-container">
