@@ -659,14 +659,16 @@ class TimeframeManager {
     return this.indicatorState.confirmedState;
   }
 
-  // Update spread color for status display
+  // Update spread color for status display (timeframe-aware)
   updateSpreadColorIndicator(ma_50, ma_100, ma_200) {
-    // Color coding based on spread levels
-    if (ma_50 > 0.03) {
-      this.indicatorState.lastSpreadColor = '#ff4444'; // Red - High spread
-    } else if (ma_50 > 0.02) {
-      this.indicatorState.lastSpreadColor = '#ff8800'; // Orange - Medium-high spread
-    } else if (ma_50 > 0.01) {
+    const thresholds = this.getTimeframeThresholds();
+    
+    // Color coding based on timeframe-appropriate spread levels
+    if (ma_50 > thresholds.high * 1.5) {
+      this.indicatorState.lastSpreadColor = '#ff4444'; // Red - Very high spread
+    } else if (ma_50 > thresholds.high) {
+      this.indicatorState.lastSpreadColor = '#ff8800'; // Orange - High spread
+    } else if (ma_50 > thresholds.medium) {
       this.indicatorState.lastSpreadColor = '#ffcc00'; // Yellow - Medium spread
     } else {
       this.indicatorState.lastSpreadColor = '#26a69a'; // Green - Low spread
@@ -702,21 +704,62 @@ class TimeframeManager {
     return averageGap;
   }
 
-  // FILTER 3: Check Absolute Thresholds (most significant) - MORE REACTIVE
+  // FILTER 3: Check Absolute Thresholds (timeframe-aware)
   checkMeaningfulThresholds(ma_50, ma_100, ma_200) {
+    // Get timeframe-specific thresholds
+    const thresholds = this.getTimeframeThresholds();
+    
     let score = 0;
     
-    // More reactive primary thresholds
-    if (ma_50 >= 0.02) score += 3; // Lowered from 0.03, increased weight
-    if (ma_100 >= 0.02) score += 3; // Lowered from 0.03, increased weight
-    if (ma_50 >= 0.01) score += 1; // Additional scoring for lower levels
-    if (ma_100 >= 0.01) score += 1; // Additional scoring for lower levels
+    // Primary thresholds (MA50 & MA100)
+    if (ma_50 >= thresholds.high) score += 3;
+    if (ma_100 >= thresholds.high) score += 3;
+    if (ma_50 >= thresholds.medium) score += 1;
+    if (ma_100 >= thresholds.medium) score += 1;
     
-    // Secondary threshold (more reactive)
-    if (ma_200 >= 1.5) score += 2; // Lowered from 2.5, increased weight
+    // Secondary threshold (MA200)
+    if (ma_200 >= thresholds.ma200) score += 2;
     
     // Normalize to 0-1 scale (max possible score = 10)
     return Math.min(score / 10, 1.0);
+  }
+
+  // Get timeframe-specific MA thresholds
+  getTimeframeThresholds() {
+    const thresholds = {
+      '1m': {
+        medium: 0.01,   // 1% spread
+        high: 0.02,     // 2% spread  
+        ma200: 1.5      // Long-term baseline
+      },
+      '5m': {
+        medium: 0.008,  // Slightly lower (averaged over 5 minutes)
+        high: 0.015,    // Slightly lower
+        ma200: 1.2      // Lower baseline
+      },
+      '15m': {
+        medium: 0.006,  // Lower (averaged over 15 minutes)
+        high: 0.012,    // Lower
+        ma200: 1.0      // Lower baseline
+      },
+      '1h': {
+        medium: 0.004,  // Much lower (averaged over 1 hour)
+        high: 0.008,    // Much lower
+        ma200: 0.8      // Much lower baseline
+      },
+      '4h': {
+        medium: 0.003,  // Very low (averaged over 4 hours)
+        high: 0.006,    // Very low
+        ma200: 0.6      // Very low baseline
+      },
+      '1d': {
+        medium: 0.002,  // Extremely low (averaged over 1 day)
+        high: 0.004,    // Extremely low
+        ma200: 0.4      // Extremely low baseline
+      }
+    };
+    
+    return thresholds[this.currentTimeframe] || thresholds['1m'];
   }
 
   // FILTER 4: Calculate Duration of Crossover
@@ -738,16 +781,21 @@ class TimeframeManager {
     return consecutiveCount;
   }
 
-  // Calculate Overall Signal Strength with proper weighting (BALANCED)
+  // Calculate Overall Signal Strength with proper weighting (TIMEFRAME-AWARE)
   calculateSignalStrength(crossoverRate, maDistance, meaningfulThresholds, duration = 0) {
-    // Balanced normalization for rate of change
-    const normalizedRate = Math.min(crossoverRate / 0.007, 1.0); // Balanced between 0.005 and 0.01
+    // Get timeframe-specific normalization factors
+    const thresholds = this.getTimeframeThresholds();
     
-    // Balanced normalization for MA distance
-    const normalizedDistance = Math.min(maDistance / 0.015, 1.0); // Balanced between 0.01 and 0.02
+    // Timeframe-aware normalization for rate of change
+    const rateThreshold = thresholds.high * 0.35; // 35% of high threshold
+    const normalizedRate = Math.min(crossoverRate / rateThreshold, 1.0);
     
-    // Balanced duration normalization
-    const normalizedDuration = Math.min(duration / 5, 1.0); // Balanced between 3 and 10
+    // Timeframe-aware normalization for MA distance  
+    const distanceThreshold = thresholds.high * 0.75; // 75% of high threshold
+    const normalizedDistance = Math.min(maDistance / distanceThreshold, 1.0);
+    
+    // Duration normalization (same across timeframes)
+    const normalizedDuration = Math.min(duration / 5, 1.0);
     
     // Weighted signal strength calculation (same weights but easier to achieve)
     const signalStrength = (
