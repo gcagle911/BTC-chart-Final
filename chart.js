@@ -666,19 +666,21 @@ class TimeframeManager {
     return averageGap;
   }
 
-  // FILTER 3: Check Absolute Thresholds (most significant)
+  // FILTER 3: Check Absolute Thresholds (most significant) - MORE REACTIVE
   checkMeaningfulThresholds(ma_50, ma_100, ma_200) {
     let score = 0;
     
-    // Primary thresholds (most important)
-    if (ma_50 >= 0.03) score += 2;
-    if (ma_100 >= 0.03) score += 2;
+    // More reactive primary thresholds
+    if (ma_50 >= 0.02) score += 3; // Lowered from 0.03, increased weight
+    if (ma_100 >= 0.02) score += 3; // Lowered from 0.03, increased weight
+    if (ma_50 >= 0.01) score += 1; // Additional scoring for lower levels
+    if (ma_100 >= 0.01) score += 1; // Additional scoring for lower levels
     
-    // Secondary threshold (slower, less weighted)
-    if (ma_200 >= 2.5) score += 1;
+    // Secondary threshold (more reactive)
+    if (ma_200 >= 1.5) score += 2; // Lowered from 2.5, increased weight
     
-    // Normalize to 0-1 scale (max possible score = 5)
-    return Math.min(score / 5, 1.0);
+    // Normalize to 0-1 scale (max possible score = 10)
+    return Math.min(score / 10, 1.0);
   }
 
   // FILTER 4: Calculate Duration of Crossover
@@ -700,18 +702,18 @@ class TimeframeManager {
     return consecutiveCount;
   }
 
-  // Calculate Overall Signal Strength with proper weighting
+  // Calculate Overall Signal Strength with proper weighting (MORE REACTIVE)
   calculateSignalStrength(crossoverRate, maDistance, meaningfulThresholds, duration = 0) {
-    // Normalize rate of change (higher = better)
-    const normalizedRate = Math.min(crossoverRate / 0.01, 1.0); // 0.01 = very fast
+    // More reactive normalization for rate of change
+    const normalizedRate = Math.min(crossoverRate / 0.005, 1.0); // Lowered from 0.01 = easier to achieve
     
-    // Normalize MA distance (higher = better) 
-    const normalizedDistance = Math.min(maDistance / 0.02, 1.0); // 0.02 = significant gap
+    // More reactive normalization for MA distance
+    const normalizedDistance = Math.min(maDistance / 0.01, 1.0); // Lowered from 0.02 = easier to achieve
     
-    // Normalize duration (more time = better, but diminishing returns)
-    const normalizedDuration = Math.min(duration / 10, 1.0); // 10 candles = good duration
+    // More forgiving duration normalization
+    const normalizedDuration = Math.min(duration / 3, 1.0); // Lowered from 10 = much easier to achieve
     
-    // Weighted signal strength calculation
+    // Weighted signal strength calculation (same weights but easier to achieve)
     const signalStrength = (
       meaningfulThresholds * 0.4 +    // 40% - Most significant (MA absolute values)
       normalizedRate * 0.3 +          // 30% - Second most significant (speed)
@@ -722,57 +724,55 @@ class TimeframeManager {
     return Math.min(signalStrength, 1.0);
   }
 
-  // Calculate Adaptive Confirmation Period
+  // Calculate Adaptive Confirmation Period (MUCH FASTER)
   calculateConfirmationPeriod(signalStrength, crossoverRate) {
-    // Base confirmation periods by timeframe
+    // Base confirmation periods by timeframe (REDUCED)
     const baseConfirmation = {
-      '1m': 15,
-      '5m': 10, 
-      '15m': 6,
-      '1h': 4,
-      '4h': 3,
-      '1d': 2
+      '1m': 3,   // Much faster - was 15
+      '5m': 2,   // Much faster - was 10
+      '15m': 2,  // Much faster - was 6
+      '1h': 2,   // Much faster - was 4
+      '4h': 2,   // Much faster - was 3
+      '1d': 1    // Much faster - was 2
     };
     
-    const base = baseConfirmation[this.currentTimeframe] || 15;
+    const base = baseConfirmation[this.currentTimeframe] || 3;
     
-    // Adaptive multiplier based on signal strength
+    // More aggressive multiplier based on signal strength
     let multiplier;
-    if (signalStrength > 0.8) {
-      multiplier = 0.3; // Very strong signal = 30% of base time
-    } else if (signalStrength > 0.6) {
-      multiplier = 0.5; // Strong signal = 50% of base time
-    } else if (signalStrength > 0.4) {
-      multiplier = 1.0; // Medium signal = normal time
+    if (signalStrength > 0.4) {
+      multiplier = 0.5; // Strong signal = 50% of base time (was 0.3)
     } else if (signalStrength > 0.2) {
-      multiplier = 2.0; // Weak signal = 200% of base time
+      multiplier = 1.0; // Medium signal = normal time (was 0.5)
+    } else if (signalStrength > 0.1) {
+      multiplier = 1.5; // Weak signal = 150% of base time (was 2.0)
     } else {
-      multiplier = 4.0; // Very weak signal = 400% of base time
+      multiplier = 2.0; // Very weak signal = 200% of base time (was 4.0)
     }
     
-    // Additional adjustment for crossover rate
-    if (crossoverRate > 0.005) {
-      multiplier *= 0.8; // Fast crossover = reduce time needed
-    } else if (crossoverRate < 0.001) {
-      multiplier *= 1.5; // Slow crossover = increase time needed
+    // Additional adjustment for crossover rate (more aggressive)
+    if (crossoverRate > 0.002) {
+      multiplier *= 0.5; // Fast crossover = much less time needed
+    } else if (crossoverRate < 0.0005) {
+      multiplier *= 1.2; // Slow crossover = slightly more time needed
     }
     
-    const finalPeriod = Math.max(2, Math.round(base * multiplier));
-    return Math.min(finalPeriod, 50); // Cap at 50 candles max
+    const finalPeriod = Math.max(1, Math.round(base * multiplier));
+    return Math.min(finalPeriod, 10); // Cap at 10 candles max (was 50)
   }
 
-  // Get dynamic strength threshold based on timeframe
+  // Get dynamic strength threshold based on timeframe (MUCH MORE REACTIVE)
   getStrengthThreshold() {
     const thresholds = {
-      '1m': 0.25,   // More tolerant on 1-minute (noisy but responsive)
-      '5m': 0.35,   // Moderate filtering
-      '15m': 0.45,  // Stricter filtering
-      '1h': 0.55,   // Much stricter (less noise tolerance)
-      '4h': 0.65,   // Very strict
-      '1d': 0.75    // Extremely strict
+      '1m': 0.05,   // Very reactive on 1-minute
+      '5m': 0.10,   // Still very reactive
+      '15m': 0.15,  // Moderately reactive
+      '1h': 0.25,   // Less reactive but still responsive
+      '4h': 0.35,   // Moderate filtering
+      '1d': 0.45    // Most filtering but not overly strict
     };
     
-    return thresholds[this.currentTimeframe] || 0.35;
+    return thresholds[this.currentTimeframe] || 0.15;
   }
 
   // Update indicator line color based on volatility state and MA levels
