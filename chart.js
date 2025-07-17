@@ -458,7 +458,7 @@ class TimeframeManager {
     return false;
   }
 
-  // MA Crossover - Dynamic MA-Based Confirmation
+  // Volatility Indicator - Spread MA Crossover with Meaningful Signal Filtering
   calculateCustomIndicator(dataPoint) {
     const { ma_50, ma_100, ma_200 } = dataPoint;
     
@@ -472,7 +472,7 @@ class TimeframeManager {
       return 0.5; // Return neutral during loading
     }
     
-    // Initialize enhanced state for MA-based tracking
+    // Initialize volatility state tracking
     if (!this.indicatorState) {
       this.indicatorState = {
         lastSpreadColor: '#26a69a',
@@ -480,105 +480,137 @@ class TimeframeManager {
         confirmedState: 0.5, // Start neutral
         pendingCross: null,
         candlesSinceCross: 0,
-        maGapHistory: [], // Track MA separation changes
-        lastMAGap: null
+        lastMA50: null,
+        lastMA100: null,
+        lastMA200: null,
+        crossoverStartTime: null
       };
     }
     
-    // Determine current MA positioning
+    // VOLATILITY LOGIC: MA50 & MA100 vs MA200 crossovers
     const ma50AboveMA200 = ma_50 > ma_200;
     const ma100AboveMA200 = ma_100 > ma_200;
     
-    // Current raw state (what it would be without delay)
-    let currentRawState;
+    // Current volatility state based on crossovers
+    let currentVolatilityState;
     if (ma50AboveMA200 && ma100AboveMA200) {
-      currentRawState = 1.0; // Both above
+      currentVolatilityState = 1.0; // HIGH VOLATILITY (Both above baseline)
     } else if (!ma50AboveMA200 && !ma100AboveMA200) {
-      currentRawState = 0.0; // Both below
+      currentVolatilityState = 0.0; // LOW VOLATILITY (Both below baseline)
     } else {
-      currentRawState = 0.5; // Mixed
+      currentVolatilityState = 0.5; // MIXED VOLATILITY (Transitional)
     }
     
-    // Calculate dynamic confirmation period based on MA behavior
-    const dynamicConfirmation = this.calculateMABasedConfirmation(ma_50, ma_100, ma_200);
-    
-    // Track crossover history to detect changes
+    // Track current data point for crossover analysis
     this.indicatorState.crossoverHistory.push({
-      ma50Above: ma50AboveMA200,
-      ma100Above: ma100AboveMA200,
-      rawState: currentRawState,
-      timestamp: Date.now(),
       ma50: ma_50,
       ma100: ma_100,
-      ma200: ma_200
+      ma200: ma_200,
+      ma50Above: ma50AboveMA200,
+      ma100Above: ma100AboveMA200,
+      volatilityState: currentVolatilityState,
+      timestamp: Date.now()
     });
     
-    // Keep only recent history (last 50 candles should be enough)
+    // Keep rolling history for crossover rate analysis
     if (this.indicatorState.crossoverHistory.length > 50) {
       this.indicatorState.crossoverHistory.shift();
     }
     
-    // Detect if we have a new crossover (change from previous confirmed state)
+    // Detect crossover events and apply filters
     const previousConfirmedState = this.indicatorState.confirmedState;
     
-    // Check if current raw state is different from confirmed state and we're not already tracking a pending cross
-    if (currentRawState !== previousConfirmedState && currentRawState !== 0.5 && !this.indicatorState.pendingCross) {
-      // New crossover detected - start tracking with dynamic confirmation
-      this.indicatorState.pendingCross = {
-        targetState: currentRawState,
-        startCandle: this.indicatorState.crossoverHistory.length - 1,
-        candlesRequired: dynamicConfirmation
-      };
-      this.indicatorState.candlesSinceCross = 1;
-      console.log(`🔄 New MA crossover detected: ${currentRawState === 1.0 ? 'BULLISH' : 'BEARISH'} - waiting for ${dynamicConfirmation} candle confirmation (MA-based)`);
-    }
-    
-    // If we have a pending crossover, check confirmation progress
-    if (this.indicatorState.pendingCross) {
-      this.indicatorState.candlesSinceCross++;
+    // Check for new crossover (state change)
+    if (currentVolatilityState !== previousConfirmedState && currentVolatilityState !== 0.5 && !this.indicatorState.pendingCross) {
       
-      // Check if the crossover is still valid (MAs haven't crossed back)
-      if (currentRawState === this.indicatorState.pendingCross.targetState) {
-        // Crossover still valid, check if we've waited long enough
-        if (this.indicatorState.candlesSinceCross >= this.indicatorState.pendingCross.candlesRequired) {
-          // Confirmation complete - update confirmed state
-          this.indicatorState.confirmedState = this.indicatorState.pendingCross.targetState;
-          console.log(`✅ MA Crossover CONFIRMED after ${this.indicatorState.candlesSinceCross} candles: ${this.indicatorState.confirmedState === 1.0 ? 'BULLISH' : 'BEARISH'}`);
-          this.indicatorState.pendingCross = null;
-          this.indicatorState.candlesSinceCross = 0;
-          
-          // Update indicator line color when all MAs above 0.03
-          this.updateIndicatorLineColor(ma_50, ma_100, ma_200);
-        } else {
-          // Still waiting for confirmation
-          const remaining = this.indicatorState.pendingCross.candlesRequired - this.indicatorState.candlesSinceCross;
-          if (remaining % 5 === 0 || remaining <= 3) { // Log every 5 candles or last 3
-            console.log(`⏳ MA crossover confirmation: ${this.indicatorState.candlesSinceCross}/${this.indicatorState.pendingCross.candlesRequired} candles (${remaining} remaining)`);
-          }
-        }
+      // FILTER 1: Calculate Rate of Crossover (speed matters)
+      const crossoverRate = this.calculateCrossoverRate();
+      
+      // FILTER 2: Calculate Distance Between MAs (gap significance)
+      const maDistance = this.calculateMADistance(ma_50, ma_100, ma_200);
+      
+      // FILTER 3: Check Absolute Thresholds (meaningful levels)
+      const meaningfulThresholds = this.checkMeaningfulThresholds(ma_50, ma_100, ma_200);
+      
+      // Calculate overall signal strength
+      const signalStrength = this.calculateSignalStrength(crossoverRate, maDistance, meaningfulThresholds);
+      
+      // Only proceed if signal meets minimum strength threshold
+      if (signalStrength > 0.3) { // Adjust threshold as needed
+        
+        // Calculate dynamic confirmation period based on signal quality
+        const confirmationPeriod = this.calculateConfirmationPeriod(signalStrength, crossoverRate);
+        
+        this.indicatorState.pendingCross = {
+          targetState: currentVolatilityState,
+          startCandle: this.indicatorState.crossoverHistory.length - 1,
+          candlesRequired: confirmationPeriod,
+          signalStrength: signalStrength,
+          crossoverRate: crossoverRate,
+          maDistance: maDistance,
+          meaningfulThresholds: meaningfulThresholds
+        };
+        this.indicatorState.candlesSinceCross = 1;
+        this.indicatorState.crossoverStartTime = Date.now();
+        
+        const direction = currentVolatilityState === 1.0 ? 'HIGH VOLATILITY' : 'LOW VOLATILITY';
+        console.log(`🌊 VOLATILITY CROSSOVER detected: ${direction}`);
+        console.log(`   Signal Strength: ${signalStrength.toFixed(3)}`);
+        console.log(`   Crossover Rate: ${crossoverRate.toFixed(4)}`);
+        console.log(`   MA Distance: ${maDistance.toFixed(4)}`);
+        console.log(`   Meaningful Levels: ${meaningfulThresholds}`);
+        console.log(`   Confirmation Required: ${confirmationPeriod} candles`);
       } else {
-        // Crossover invalidated - MAs crossed back before confirmation
-        console.log(`❌ MA Crossover INVALIDATED after ${this.indicatorState.candlesSinceCross} candles - MAs crossed back`);
-        this.indicatorState.pendingCross = null;
-        this.indicatorState.candlesSinceCross = 0;
+        console.log(`🚫 Weak volatility signal ignored (strength: ${signalStrength.toFixed(3)})`);
       }
     }
     
-    // Update spread color (for status display)
-    if (ma_50 > 0.03) {
-      this.indicatorState.lastSpreadColor = '#ff4444'; // Red
-    } else if (ma_50 > 0.02) {
-      this.indicatorState.lastSpreadColor = '#ff8800'; // Orange
-    } else if (ma_50 > 0.01) {
-      this.indicatorState.lastSpreadColor = '#ffcc00'; // Yellow
-    } else {
-      this.indicatorState.lastSpreadColor = '#26a69a'; // Green
+    // Process pending crossover confirmation
+    if (this.indicatorState.pendingCross) {
+      this.indicatorState.candlesSinceCross++;
+      
+      // Check if crossover still valid
+      if (currentVolatilityState === this.indicatorState.pendingCross.targetState) {
+        // Still valid, check if confirmed
+        if (this.indicatorState.candlesSinceCross >= this.indicatorState.pendingCross.candlesRequired) {
+          // CONFIRMATION COMPLETE
+          this.indicatorState.confirmedState = this.indicatorState.pendingCross.targetState;
+          
+          const direction = this.indicatorState.confirmedState === 1.0 ? 'HIGH VOLATILITY' : 'LOW VOLATILITY';
+          const elapsedTime = Math.round((Date.now() - this.indicatorState.crossoverStartTime) / 1000);
+          
+          console.log(`✅ VOLATILITY CONFIRMED: ${direction} after ${this.indicatorState.candlesSinceCross} candles (${elapsedTime}s)`);
+          console.log(`   Final Signal Strength: ${this.indicatorState.pendingCross.signalStrength.toFixed(3)}`);
+          
+          // Clear pending state
+          this.indicatorState.pendingCross = null;
+          this.indicatorState.candlesSinceCross = 0;
+          this.indicatorState.crossoverStartTime = null;
+          
+        } else {
+          // Still waiting for confirmation
+          const remaining = this.indicatorState.pendingCross.candlesRequired - this.indicatorState.candlesSinceCross;
+          if (remaining % 5 === 0 || remaining <= 3) {
+            console.log(`⏳ Volatility confirmation: ${this.indicatorState.candlesSinceCross}/${this.indicatorState.pendingCross.candlesRequired} candles (${remaining} remaining)`);
+          }
+        }
+      } else {
+        // Crossover invalidated
+        console.log(`❌ VOLATILITY CROSSOVER INVALIDATED after ${this.indicatorState.candlesSinceCross} candles`);
+        this.indicatorState.pendingCross = null;
+        this.indicatorState.candlesSinceCross = 0;
+        this.indicatorState.crossoverStartTime = null;
+      }
     }
     
-    // Update indicator line color based on MA values
-    this.updateIndicatorLineColor(ma_50, ma_100, ma_200);
+    // Update spread color based on current levels
+    this.updateSpreadColorIndicator(ma_50, ma_100, ma_200);
     
-    // Return the confirmed state (not the raw state)
+    // Store current values for next iteration
+    this.indicatorState.lastMA50 = ma_50;
+    this.indicatorState.lastMA100 = ma_100;
+    this.indicatorState.lastMA200 = ma_200;
+    
     return this.indicatorState.confirmedState;
   }
 
