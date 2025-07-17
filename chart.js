@@ -702,16 +702,16 @@ class TimeframeManager {
     return consecutiveCount;
   }
 
-  // Calculate Overall Signal Strength with proper weighting (MORE REACTIVE)
+  // Calculate Overall Signal Strength with proper weighting (BALANCED)
   calculateSignalStrength(crossoverRate, maDistance, meaningfulThresholds, duration = 0) {
-    // More reactive normalization for rate of change
-    const normalizedRate = Math.min(crossoverRate / 0.005, 1.0); // Lowered from 0.01 = easier to achieve
+    // Balanced normalization for rate of change
+    const normalizedRate = Math.min(crossoverRate / 0.007, 1.0); // Balanced between 0.005 and 0.01
     
-    // More reactive normalization for MA distance
-    const normalizedDistance = Math.min(maDistance / 0.01, 1.0); // Lowered from 0.02 = easier to achieve
+    // Balanced normalization for MA distance
+    const normalizedDistance = Math.min(maDistance / 0.015, 1.0); // Balanced between 0.01 and 0.02
     
-    // More forgiving duration normalization
-    const normalizedDuration = Math.min(duration / 3, 1.0); // Lowered from 10 = much easier to achieve
+    // Balanced duration normalization
+    const normalizedDuration = Math.min(duration / 5, 1.0); // Balanced between 3 and 10
     
     // Weighted signal strength calculation (same weights but easier to achieve)
     const signalStrength = (
@@ -724,55 +724,55 @@ class TimeframeManager {
     return Math.min(signalStrength, 1.0);
   }
 
-  // Calculate Adaptive Confirmation Period (MUCH FASTER)
+  // Calculate Adaptive Confirmation Period (BALANCED)
   calculateConfirmationPeriod(signalStrength, crossoverRate) {
-    // Base confirmation periods by timeframe (REDUCED)
+    // Base confirmation periods by timeframe (BALANCED)
     const baseConfirmation = {
-      '1m': 3,   // Much faster - was 15
-      '5m': 2,   // Much faster - was 10
-      '15m': 2,  // Much faster - was 6
-      '1h': 2,   // Much faster - was 4
-      '4h': 2,   // Much faster - was 3
-      '1d': 1    // Much faster - was 2
+      '1m': 5,   // Balanced - was 3
+      '5m': 4,   // Balanced - was 2  
+      '15m': 3,  // Balanced - was 2
+      '1h': 3,   // Balanced - was 2
+      '4h': 2,   // Keep fast - was 2
+      '1d': 2    // Keep fast - was 1
     };
     
-    const base = baseConfirmation[this.currentTimeframe] || 3;
+    const base = baseConfirmation[this.currentTimeframe] || 4;
     
-    // More aggressive multiplier based on signal strength
+    // Balanced multiplier based on signal strength
     let multiplier;
-    if (signalStrength > 0.4) {
-      multiplier = 0.5; // Strong signal = 50% of base time (was 0.3)
-    } else if (signalStrength > 0.2) {
-      multiplier = 1.0; // Medium signal = normal time (was 0.5)
-    } else if (signalStrength > 0.1) {
-      multiplier = 1.5; // Weak signal = 150% of base time (was 2.0)
+    if (signalStrength > 0.5) {
+      multiplier = 0.6; // Strong signal = 60% of base time
+    } else if (signalStrength > 0.3) {
+      multiplier = 1.0; // Medium signal = normal time
+    } else if (signalStrength > 0.15) {
+      multiplier = 1.4; // Weak signal = 140% of base time
     } else {
-      multiplier = 2.0; // Very weak signal = 200% of base time (was 4.0)
+      multiplier = 2.0; // Very weak signal = 200% of base time
     }
     
-    // Additional adjustment for crossover rate (more aggressive)
-    if (crossoverRate > 0.002) {
-      multiplier *= 0.5; // Fast crossover = much less time needed
-    } else if (crossoverRate < 0.0005) {
-      multiplier *= 1.2; // Slow crossover = slightly more time needed
+    // Balanced adjustment for crossover rate
+    if (crossoverRate > 0.003) {
+      multiplier *= 0.7; // Fast crossover = less time needed
+    } else if (crossoverRate < 0.0008) {
+      multiplier *= 1.3; // Slow crossover = more time needed
     }
     
-    const finalPeriod = Math.max(1, Math.round(base * multiplier));
-    return Math.min(finalPeriod, 10); // Cap at 10 candles max (was 50)
+    const finalPeriod = Math.max(2, Math.round(base * multiplier));
+    return Math.min(finalPeriod, 15); // Cap at 15 candles max
   }
 
-  // Get dynamic strength threshold based on timeframe (MUCH MORE REACTIVE)
+  // Get dynamic strength threshold based on timeframe (BALANCED)
   getStrengthThreshold() {
     const thresholds = {
-      '1m': 0.05,   // Very reactive on 1-minute
-      '5m': 0.10,   // Still very reactive
-      '15m': 0.15,  // Moderately reactive
-      '1h': 0.25,   // Less reactive but still responsive
-      '4h': 0.35,   // Moderate filtering
-      '1d': 0.45    // Most filtering but not overly strict
+      '1m': 0.12,   // Reactive but not too sensitive
+      '5m': 0.18,   // Moderate reactivity
+      '15m': 0.25,  // Balanced filtering
+      '1h': 0.35,   // More selective
+      '4h': 0.45,   // Stricter filtering
+      '1d': 0.55    // Most selective
     };
     
-    return thresholds[this.currentTimeframe] || 0.15;
+    return thresholds[this.currentTimeframe] || 0.25;
   }
 
   // Update indicator line color based on volatility state and MA levels
