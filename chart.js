@@ -343,6 +343,14 @@ class TimeframeManager {
         });
       }
       
+      // MA1 (real-time L20 spread data) - same pattern as other MAs
+      if (d.spread_avg_L20_pct !== null && d.spread_avg_L20_pct !== undefined) {
+        realtimeData.push({
+          time: sharedTime,
+          value: parseFloat(d.spread_avg_L20_pct)
+        });
+      }
+      
       // Calculate cumulative average of L20 spread data
       if (d.spread_avg_L20_pct !== null && d.spread_avg_L20_pct !== undefined) {
         cumulativeSum += parseFloat(d.spread_avg_L20_pct);
@@ -352,12 +360,6 @@ class TimeframeManager {
         cumulativeData.push({
           time: sharedTime,
           value: cumulativeAverage
-        });
-        
-        // Real-time L20 spread value (current data point)
-        realtimeData.push({
-          time: sharedTime,
-          value: parseFloat(d.spread_avg_L20_pct)
         });
       }
     }
