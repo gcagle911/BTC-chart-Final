@@ -72,17 +72,24 @@ class VolatilityIndicators {
     ];
 
     referenceLines.forEach(line => {
-      this.chart.addLineSeries({
+      const referenceLine = this.chart.addLineSeries({
         priceScaleId: 'right',
         color: line.color,
         lineWidth: 1,
-        lineStyle: LightweightCharts.LineStyle.Dashed,
+        lineStyle: 2, // Dashed line style
         title: line.title,
         lastValueVisible: false,
         priceLineVisible: false,
-      }).setData([
-        { time: 1640995200, value: line.value }, // Start time
-        { time: 2000000000, value: line.value }, // End time (far future)
+      });
+      
+      // Set reference line data with current timestamp range
+      const now = Math.floor(Date.now() / 1000);
+      const start = now - (365 * 24 * 60 * 60); // 1 year ago
+      const end = now + (365 * 24 * 60 * 60); // 1 year future
+      
+      referenceLine.setData([
+        { time: start, value: line.value },
+        { time: end, value: line.value },
       ]);
     });
   }
@@ -225,13 +232,21 @@ class VolatilityIndicators {
   // Process and update all volatility indicators
   updateIndicators(data, isUpdate = false) {
     try {
-      console.log('📊 Updating volatility indicators...');
+      console.log(`📊 Updating volatility indicators with ${data.length} data points...`);
+      
+      // Ensure we have enough data
+      if (!data || data.length < 100) {
+        console.warn('⚠️ Not enough data for volatility indicators (need 100+ points)');
+        return;
+      }
       
       const velocity = this.calculateSpreadVelocity(data);
       const acceleration = this.calculateSpreadAcceleration(velocity);
       const svi = this.calculateSpreadVolatilityIndex(data);
       const zScore = this.calculateSpreadZScore(data);
       const predictor = this.calculateVolatilityPredictor(data);
+      
+      console.log(`📈 Calculated indicators: Velocity(${velocity.length}), SVI(${svi.length}), Z-Score(${zScore.length}), Predictor(${predictor.length})`);
       
       if (isUpdate) {
         // Update with new data points
@@ -242,6 +257,7 @@ class VolatilityIndicators {
         predictor.forEach(p => this.volatilityPredictor.update(p));
       } else {
         // Set complete datasets
+        console.log('🔄 Setting complete volatility datasets...');
         this.spreadVelocity.setData(velocity);
         this.spreadAcceleration.setData(acceleration);
         this.spreadVolatilityIndex.setData(svi);
@@ -249,10 +265,11 @@ class VolatilityIndicators {
         this.volatilityPredictor.setData(predictor);
       }
       
-      console.log(`✅ Volatility indicators updated: Velocity(${velocity.length}), SVI(${svi.length}), Z-Score(${zScore.length}), Predictor(${predictor.length})`);
+      console.log(`✅ Volatility indicators updated successfully`);
       
     } catch (error) {
       console.error('❌ Error updating volatility indicators:', error);
+      console.error('Data sample:', data.length > 0 ? data[0] : 'No data');
     }
   }
 

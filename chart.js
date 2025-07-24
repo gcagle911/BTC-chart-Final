@@ -73,6 +73,9 @@ window.mainChart = LightweightCharts.createChart(document.getElementById('main-c
   },
 });
 
+// Maintain backward compatibility
+window.chart = window.mainChart;
+
 // Volatility indicators chart (bottom panel)
 window.volatilityChart = LightweightCharts.createChart(document.getElementById('volatility-panel'), {
   layout: {
@@ -423,7 +426,7 @@ class TimeframeManager {
       cumulativeData.forEach(p => cumulativeMA.update(p));
       
       // Update volatility indicators
-      if (volatilityIndicators) {
+      if (volatilityIndicators && this.rawData && this.rawData.length > 0) {
         volatilityIndicators.updateIndicators(this.rawData, isUpdate);
       }
     } else {
@@ -436,12 +439,20 @@ class TimeframeManager {
       cumulativeMA.setData(cumulativeData);
       
       // Update volatility indicators
-      if (volatilityIndicators) {
+      if (volatilityIndicators && this.rawData && this.rawData.length > 0) {
         volatilityIndicators.updateIndicators(this.rawData, isUpdate);
       }
       
       // Fit content to show all data
       mainChart.timeScale().fitContent();
+      
+      // Sync volatility chart time scale
+      if (window.volatilityChart) {
+        const visibleRange = mainChart.timeScale().getVisibleRange();
+        if (visibleRange) {
+          window.volatilityChart.timeScale().setVisibleRange(visibleRange);
+        }
+      }
     }
 
     console.log(`✅ Chart updated with ${priceData.length} candles and bid spread MAs`);
@@ -766,6 +777,12 @@ manager.initializeChart().then(() => {
   if (window.VolatilityIndicators && window.volatilityChart) {
     volatilityIndicators = new VolatilityIndicators(window.volatilityChart);
     console.log('📊 Volatility indicators initialized in bottom panel');
+    
+    // Initial update with any existing data
+    if (manager.rawData && manager.rawData.length > 0) {
+      console.log('🔄 Updating volatility indicators with initial data...');
+      volatilityIndicators.updateIndicators(manager.rawData, false);
+    }
   }
   
   // Start update cycle
