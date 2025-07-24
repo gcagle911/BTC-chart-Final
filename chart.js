@@ -133,6 +133,17 @@ const cumulativeMA = chart.addLineSeries({
   priceLineVisible: false,
 });
 
+// Real-time L20 spread line (current value)
+const realtimeL20 = chart.addLineSeries({
+  priceScaleId: 'left', // LEFT y-axis for MAs
+  color: '#FF00FF',
+  lineWidth: 1,
+  lineStyle: LightweightCharts.LineStyle.Dashed,
+  title: 'Current L20',
+  lastValueVisible: true,
+  priceLineVisible: true,
+});
+
 // Restored proper timeframe manager
 class TimeframeManager {
   constructor() {
@@ -256,6 +267,7 @@ class TimeframeManager {
     const ma100Data = [];
     const ma200Data = [];
     const cumulativeData = [];
+    const realtimeData = [];
 
     // Process aggregated price data for price series
     for (let i = 0; i < aggregatedPriceData.length; i++) {
@@ -342,6 +354,12 @@ class TimeframeManager {
           time: sharedTime,
           value: cumulativeAverage
         });
+        
+        // Real-time L20 spread value (current data point)
+        realtimeData.push({
+          time: sharedTime,
+          value: parseFloat(d.spread_avg_L20_pct)
+        });
       }
     }
 
@@ -351,6 +369,7 @@ class TimeframeManager {
       console.log(`   Candlestick Data: ${priceData.length} points (RIGHT y-axis)`);
       console.log(`   Bid Spread L20 MA Data: MA20(${ma20Data.length}), MA50(${ma50Data.length}), MA100(${ma100Data.length}), MA200(${ma200Data.length}) points (LEFT y-axis)`);
       console.log(`   Cumulative L20 Avg: ${cumulativeData.length} points (LEFT y-axis)`);
+      console.log(`   Real-time L20: ${realtimeData.length} points (LEFT y-axis)`);
     }
 
     if (isUpdate) {
@@ -363,6 +382,7 @@ class TimeframeManager {
       ma100Data.forEach(p => ma100.update(p));
       ma200Data.forEach(p => ma200.update(p));
       cumulativeData.forEach(p => cumulativeMA.update(p));
+      realtimeData.forEach(p => realtimeL20.update(p));
     } else {
       // Set complete dataset
       priceSeries.setData(priceData);
@@ -371,6 +391,7 @@ class TimeframeManager {
       ma100.setData(ma100Data);
       ma200.setData(ma200Data);
       cumulativeMA.setData(cumulativeData);
+      realtimeL20.setData(realtimeData);
       
       // Fit content to show all data
       chart.timeScale().fitContent();
