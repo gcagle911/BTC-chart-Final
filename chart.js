@@ -1,7 +1,7 @@
 // Simplified Bitcoin Chart - Clean Interface
-// Only main price chart with MAs and enhanced zoom capability
+// Main price chart with Bid Spread MAs on LEFT y-axis and enhanced zoom capability
 
-// Chart configuration with improved candlestick visibility and extended zoom range
+// Chart configuration with LEFT/RIGHT dual y-axis and massive zoom range
 window.chart = LightweightCharts.createChart(document.getElementById('main-chart'), {
   layout: {
     background: { color: '#131722' },
@@ -14,19 +14,35 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
   rightPriceScale: { 
     visible: true,
     scaleMargins: {
-      top: 0.1,
-      bottom: 0.1,
+      top: 0.05,
+      bottom: 0.05,
     },
     borderVisible: false,
     autoScale: true,
+    entireTextOnly: false,
+    ticksVisible: true,
+    mode: LightweightCharts.PriceScaleMode.Normal,
+  },
+  leftPriceScale: { 
+    visible: true, // LEFT y-axis for Bid Spread MAs
+    scaleMargins: {
+      top: 0.05,
+      bottom: 0.05,
+    },
+    borderVisible: false,
+    autoScale: true,
+    entireTextOnly: false,
+    ticksVisible: true,
+    mode: LightweightCharts.PriceScaleMode.Normal,
+    alignLabels: false,
   },
   timeScale: { 
     timeVisible: true, 
     secondsVisible: false,
     borderVisible: false,
-    rightOffset: 12,
-    barSpacing: 6, // Better spacing for visibility
-    minBarSpacing: 0.5, // Allow much tighter spacing when zoomed out
+    rightOffset: 50,
+    barSpacing: 8, // Good default spacing
+    minBarSpacing: 0.1, // MUCH tighter for extreme zoom out
     fixLeftEdge: false,
     fixRightEdge: false,
   },
@@ -57,8 +73,9 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
   },
 });
 
-// Enhanced candlestick series with better visibility
+// Price series on RIGHT y-axis
 const priceSeries = chart.addCandlestickSeries({
+  priceScaleId: 'right', // RIGHT y-axis for price
   upColor: '#26a69a',
   downColor: '#ef5350',
   borderVisible: false,
@@ -68,8 +85,9 @@ const priceSeries = chart.addCandlestickSeries({
   borderDownColor: '#ef5350',
 });
 
-// Bid Spread Moving Averages - these are the special MAs from your data
+// Bid Spread Moving Averages on LEFT y-axis (separate scale!)
 const ma50 = chart.addLineSeries({
+  priceScaleId: 'left', // LEFT y-axis for MAs
   color: '#FF6B6B',
   lineWidth: 2,
   title: 'Bid Spread MA50',
@@ -78,6 +96,7 @@ const ma50 = chart.addLineSeries({
 });
 
 const ma100 = chart.addLineSeries({
+  priceScaleId: 'left', // LEFT y-axis for MAs
   color: '#4ADF86',
   lineWidth: 2,
   title: 'Bid Spread MA100',
@@ -86,6 +105,7 @@ const ma100 = chart.addLineSeries({
 });
 
 const ma200 = chart.addLineSeries({
+  priceScaleId: 'left', // LEFT y-axis for MAs
   color: '#FFD700',
   lineWidth: 2,
   title: 'Bid Spread MA200',
@@ -93,7 +113,7 @@ const ma200 = chart.addLineSeries({
   priceLineVisible: false,
 });
 
-// Restored timeframe manager with your original data source
+// Restored proper timeframe manager
 class TimeframeManager {
   constructor() {
     this.currentTimeframe = '1m';
@@ -117,7 +137,7 @@ class TimeframeManager {
     return Math.floor(new Date(dateStr).getTime() / 1000);
   }
 
-  // Aggregate data maintaining the bid spread MAs
+  // Aggregate data maintaining full MA technical accuracy
   aggregateData(data, timeframeSeconds) {
     // For 1-minute data, create synthetic OHLC from single price points
     if (timeframeSeconds === 60) {
@@ -169,10 +189,10 @@ class TimeframeManager {
         const highPrice = Math.max(...bucket.dataPoints.map(p => p.price));
         const lowPrice = Math.min(...bucket.dataPoints.map(p => p.price));
         
-        // Keep MAs from close time to maintain exact same values
+        // SOLUTION: Keep MAs from close time to maintain exact same values
         const closeMAs = closePoint;
         
-        // Use consistent bucket timestamp for all timeframes
+        // CRITICAL: Use consistent bucket timestamp for all timeframes
         const bucketTimestamp = new Date(bucketTime * 1000).toISOString();
         
         aggregated.push({
@@ -184,7 +204,7 @@ class TimeframeManager {
           close: closePoint.price,
           price: closePoint.price,
           
-          // Bid Spread L20 MAs - keep exact values
+          // Bid Spread L20 MAs STAY THE SAME - using exact values from close time
           ma_50: closeMAs.ma_50,
           ma_100: closeMAs.ma_100,
           ma_200: closeMAs.ma_200,
@@ -192,7 +212,7 @@ class TimeframeManager {
           // Keep original spread data
           spread_avg_L20_pct: closePoint.spread_avg_L20_pct,
           
-          // Store bucket info
+          // Store bucket info for debugging
           bucketStart: bucketTime,
           dataPoints: bucket.dataPoints.length
         });
@@ -202,11 +222,11 @@ class TimeframeManager {
     return aggregated.sort((a, b) => new Date(a.time) - new Date(b.time));
   }
 
-  // Process and set chart data
+  // Process and set chart data (performance optimized)
   processAndSetData(data, isUpdate = false) {
     const timeframeSeconds = this.timeframes[this.currentTimeframe].seconds;
     
-    // Use 1-minute data for MAs, aggregated data for prices
+    // SOLUTION: Always use 1-minute data for MAs, only aggregate prices
     const rawMinuteData = this.currentTimeframe === '1m' ? data : this.rawData || data;
     const aggregatedPriceData = this.aggregateData(data, timeframeSeconds);
 
@@ -215,7 +235,7 @@ class TimeframeManager {
     const ma100Data = [];
     const ma200Data = [];
 
-    // Process aggregated price data for candlesticks
+    // Process aggregated price data for price series
     for (let i = 0; i < aggregatedPriceData.length; i++) {
       const d = aggregatedPriceData[i];
       const t = this.toUnixTimestamp(d.time);
@@ -223,9 +243,10 @@ class TimeframeManager {
       // For updates, only add new data
       if (isUpdate && t <= this.lastTimestamp) continue;
       
+      // CRITICAL: Create all data points with IDENTICAL timestamps
       const sharedTime = t;
       
-      // Price data (candlestick format)
+      // Price data (main chart) - candlestick format
       priceData.push({ 
         time: sharedTime, 
         open: parseFloat(d.open),
@@ -237,7 +258,7 @@ class TimeframeManager {
       if (t > this.lastTimestamp) this.lastTimestamp = t;
     }
 
-    // Process RAW MINUTE DATA for bid spread MAs
+    // Process RAW MINUTE DATA for MAs - NEVER CHANGES regardless of timeframe
     for (let i = 0; i < rawMinuteData.length; i++) {
       const d = rawMinuteData[i];
       const t = this.toUnixTimestamp(d.time);
@@ -247,7 +268,7 @@ class TimeframeManager {
       
       const sharedTime = t;
       
-      // Bid Spread MA data from 1-minute data
+      // MA data ALWAYS from 1-minute data - IDENTICAL across all timeframes
       if (d.ma_50 !== null && d.ma_50 !== undefined) {
         ma50Data.push({ 
           time: sharedTime, 
@@ -270,9 +291,12 @@ class TimeframeManager {
       }
     }
 
-    console.log(`📊 ${this.currentTimeframe} Data Processing:`);
-    console.log(`   Candlestick Data: ${priceData.length} points`);
-    console.log(`   Bid Spread MA Data: ${ma50Data.length} points`);
+    // Log timestamp alignment for debugging
+    if (priceData.length > 0 && ma50Data.length > 0) {
+      console.log(`🕐 ${this.currentTimeframe} Data Processing:`);
+      console.log(`   Candlestick Data: ${priceData.length} points (RIGHT y-axis)`);
+      console.log(`   Bid Spread L20 MA Data: ${ma50Data.length} points (LEFT y-axis)`);
+    }
 
     if (isUpdate) {
       // Add new data points
@@ -300,7 +324,7 @@ class TimeframeManager {
     try {
       console.log('🚀 Loading chart with bid spread data...');
       
-      // Load recent data first for fast startup
+      // Phase 1: Load recent data first (fast startup)
       const recentRes = await fetch('https://btc-spread-test-pipeline.onrender.com/recent.json');
       const recentData = await recentRes.json();
       
@@ -308,7 +332,7 @@ class TimeframeManager {
       this.processAndSetData(recentData);
       console.log(`✅ Recent data loaded (${recentData.length} points)`);
       
-      // Load complete historical data
+      // Phase 2: Load complete historical data
       const historicalRes = await fetch('https://btc-spread-test-pipeline.onrender.com/historical.json');
       const historicalData = await historicalRes.json();
       
@@ -360,6 +384,21 @@ class TimeframeManager {
     }
   }
 
+  async refreshHistoricalData() {
+    if (!this.isFullDataLoaded) return;
+    
+    try {
+      console.log('🔄 Refreshing historical data...');
+      const res = await fetch('https://btc-spread-test-pipeline.onrender.com/historical.json');
+      const data = await res.json();
+      this.rawData = data;
+      this.processAndSetData(data);
+      console.log(`✅ Historical data refreshed: ${data.length} total points`);
+    } catch (err) {
+      console.error('❌ Historical refresh failed:', err);
+    }
+  }
+
   switchTimeframe(timeframe) {
     if (timeframe === this.currentTimeframe) return;
     
@@ -389,18 +428,7 @@ class TimeframeManager {
     this.updateInterval = setInterval(() => this.fetchAndUpdate(), 30000);
 
     // Refresh complete historical data every hour
-    this.refreshInterval = setInterval(() => {
-      if (!this.isFullDataLoaded) return;
-      
-      fetch('https://btc-spread-test-pipeline.onrender.com/historical.json')
-        .then(res => res.json())
-        .then(data => {
-          this.rawData = data;
-          this.processAndSetData(data);
-          console.log(`✅ Historical data refreshed: ${data.length} total points`);
-        })
-        .catch(err => console.error('❌ Historical refresh failed:', err));
-    }, 3600000);
+    this.refreshInterval = setInterval(() => this.refreshHistoricalData(), 3600000);
   }
 }
 
@@ -412,7 +440,7 @@ function setTimeframe(timeframe) {
   manager.switchTimeframe(timeframe);
 }
 
-// Enhanced zoom functions with much greater range
+// FIXED: Enhanced zoom functions with MASSIVE zoom range like TradingView
 function zoomIn() {
   if (window.chart) {
     const timeScale = window.chart.timeScale();
@@ -420,7 +448,7 @@ function zoomIn() {
     if (visibleRange) {
       const middle = (visibleRange.from + visibleRange.to) / 2;
       const range = visibleRange.to - visibleRange.from;
-      const newRange = range * 0.5; // Zoom in more aggressively
+      const newRange = range * 0.6; // Zoom in
       timeScale.setVisibleRange({
         from: middle - newRange / 2,
         to: middle + newRange / 2
@@ -436,7 +464,7 @@ function zoomOut() {
     if (visibleRange) {
       const middle = (visibleRange.from + visibleRange.to) / 2;
       const range = visibleRange.to - visibleRange.from;
-      const newRange = range * 2; // Zoom out more aggressively
+      const newRange = range * 1.8; // Zoom out MORE
       timeScale.setVisibleRange({
         from: middle - newRange / 2,
         to: middle + newRange / 2
@@ -448,6 +476,25 @@ function zoomOut() {
 function fitContent() {
   if (window.chart) {
     window.chart.timeScale().fitContent();
+  }
+}
+
+// Enhanced Y-axis scale functions for dual axis
+function resetLeftScale() {
+  if (window.chart) {
+    window.chart.priceScale('left').applyOptions({ autoScale: true });
+    setTimeout(() => {
+      window.chart.priceScale('left').applyOptions({ autoScale: false });
+    }, 100);
+  }
+}
+
+function resetRightScale() {
+  if (window.chart) {
+    window.chart.priceScale('right').applyOptions({ autoScale: true });
+    setTimeout(() => {
+      window.chart.priceScale('right').applyOptions({ autoScale: false });
+    }, 100);
   }
 }
 
@@ -536,9 +583,9 @@ function handlePinchZoom(scaleChange) {
       const currentSize = visibleRange.to - visibleRange.from;
       const newSize = currentSize / scaleChange;
       
-      // Much wider zoom limits for extensive data viewing
-      const minSize = 60; // 1 minute minimum (for very detailed view)
-      const maxSize = 86400 * 365 * 2; // 2 years maximum (for very wide view)
+      // MASSIVE zoom limits for TradingView-like extensive viewing
+      const minSize = 30; // 30 seconds minimum (extreme detail)
+      const maxSize = 86400 * 365 * 10; // 10 YEARS maximum (extreme wide view)
       const clampedSize = Math.max(minSize, Math.min(maxSize, newSize));
       
       timeScale.setVisibleTimeRange({
@@ -553,7 +600,7 @@ function handlePinchZoom(scaleChange) {
 
 // Initialize everything
 manager.initializeChart().then(() => {
-  console.log('🎯 Chart ready with bid spread data!');
+  console.log('🎯 Chart ready with bid spread data and dual y-axis!');
   
   // Start update cycle
   manager.startUpdateCycle();
