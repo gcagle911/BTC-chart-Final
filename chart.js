@@ -133,15 +133,14 @@ const cumulativeMA = chart.addLineSeries({
   priceLineVisible: false,
 });
 
-// Real-time L20 spread line (current value)
+// Real-time L20 spread line (MA1 - raw data)
 const realtimeL20 = chart.addLineSeries({
   priceScaleId: 'left', // LEFT y-axis for MAs
   color: '#FF00FF',
-  lineWidth: 1,
-  lineStyle: LightweightCharts.LineStyle.Dashed,
-  title: 'Current L20',
-  lastValueVisible: true,
-  priceLineVisible: true,
+  lineWidth: 0.5,
+  title: 'MA1',
+  lastValueVisible: false,
+  priceLineVisible: false,
 });
 
 // Restored proper timeframe manager
