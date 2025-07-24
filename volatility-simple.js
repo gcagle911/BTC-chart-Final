@@ -148,8 +148,9 @@ class SimpleVolatilityIndicators {
     }
   }
 
-  updateData(rawData) {
-    if (!rawData || rawData.length < 50) {
+  updateData(aggregatedData, currentTimeframe = '1m') {
+    if (!aggregatedData || aggregatedData.length < 20) {
+      console.log(`⚠️ Not enough aggregated data for ${currentTimeframe} volatility calculation`);
       return;
     }
 
@@ -159,7 +160,9 @@ class SimpleVolatilityIndicators {
         return; // Skip if updated less than 1 second ago
       }
       
-      const volatilityData = this.calculateSimpleVolatility(rawData);
+      console.log(`📊 Processing ${currentTimeframe} volatility with ${aggregatedData.length} aggregated points`);
+      
+      const volatilityData = this.calculateSimpleVolatility(aggregatedData, currentTimeframe);
       if (volatilityData.length > 0) {
         this.indicators.predictor.setData(volatilityData);
         
@@ -173,7 +176,7 @@ class SimpleVolatilityIndicators {
         // Force sync after data update
         this.forceSync();
         
-        console.log(`✅ Volatility updated with ${volatilityData.length} points`);
+        console.log(`✅ ${currentTimeframe} volatility updated with ${volatilityData.length} points`);
       }
     } catch (error) {
       console.error('❌ Error updating volatility:', error);
@@ -252,27 +255,38 @@ class SimpleVolatilityIndicators {
     return Math.floor(new Date(dateStr).getTime() / 1000);
   }
 
-  calculateSimpleVolatility(data) {
+  calculateSimpleVolatility(aggregatedData, timeframe = '1m') {
     const result = [];
-    const lookback = 50; // Longer lookback for stability
-    const smoothing = 10; // Smoothing period
+    
+    // Adjust lookback and smoothing based on timeframe - shorter for longer timeframes
+    const timeframeLookbacks = {
+      '1m': { lookback: 50, smoothing: 10 },
+      '5m': { lookback: 20, smoothing: 5 },
+      '15m': { lookback: 14, smoothing: 3 },
+      '1h': { lookback: 12, smoothing: 3 },
+      '4h': { lookback: 10, smoothing: 2 },
+      '1d': { lookback: 8, smoothing: 2 }
+    };
+    
+    const { lookback, smoothing } = timeframeLookbacks[timeframe] || timeframeLookbacks['1m'];
 
-    console.log(`📊 Calculating volatility for ${data.length} data points...`);
+    console.log(`📊 Calculating ${timeframe} volatility for ${aggregatedData.length} aggregated points (lookback: ${lookback})...`);
 
-    for (let i = lookback; i < data.length; i++) {
-      const recentData = data.slice(i - lookback, i + 1);
+    for (let i = lookback; i < aggregatedData.length; i++) {
+      const recentData = aggregatedData.slice(i - lookback, i + 1);
       const spreads = recentData
         .map(d => d.spread_avg_L20_pct)
         .filter(s => s !== null && s !== undefined);
 
-      if (spreads.length >= lookback) {
+      if (spreads.length >= Math.min(lookback, 10)) { // Minimum 10 points
         // Calculate volatility score using improved method
         const mean = spreads.reduce((a, b) => a + b) / spreads.length;
         const variance = spreads.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / spreads.length;
         const stdDev = Math.sqrt(variance);
         
-        // Current spread vs historical (use recent average instead of single point)
-        const recentSpreads = spreads.slice(-5); // Last 5 points
+        // Current spread vs historical (use recent average for smoothing)
+        const recentCount = Math.min(3, spreads.length);
+        const recentSpreads = spreads.slice(-recentCount);
         const currentSpread = recentSpreads.reduce((a, b) => a + b) / recentSpreads.length;
         
         // Z-score calculation
@@ -281,15 +295,15 @@ class SimpleVolatilityIndicators {
         // Convert to 0-100 scale with better scaling
         let volatilityScore = Math.max(0, Math.min(100, ((zScore + 2) / 4) * 100));
         
-        // Apply smoothing to reduce noise
-        if (result.length > 0) {
+        // Apply timeframe-appropriate smoothing
+        if (result.length >= smoothing) {
           const recentScores = result.slice(-smoothing).map(r => r.value);
           const smoothedScore = (recentScores.reduce((a, b) => a + b, 0) + volatilityScore) / (recentScores.length + 1);
           volatilityScore = smoothedScore;
         }
 
         // Use IDENTICAL timestamp conversion as main chart TimeframeManager
-        const timestamp = this.toUnixTimestamp(data[i].time);
+        const timestamp = this.toUnixTimestamp(aggregatedData[i].time);
 
         result.push({
           time: timestamp,
@@ -298,11 +312,11 @@ class SimpleVolatilityIndicators {
       }
     }
 
-    console.log(`📈 Generated ${result.length} volatility points`);
+    console.log(`📈 Generated ${result.length} ${timeframe} volatility points`);
     if (result.length > 0) {
       const firstDate = new Date(result[0].time * 1000);
       const lastDate = new Date(result[result.length - 1].time * 1000);
-      console.log(`📅 Time range: ${firstDate.toLocaleDateString()} to ${lastDate.toLocaleDateString()}`);
+      console.log(`📅 ${timeframe} range: ${firstDate.toLocaleDateString()} to ${lastDate.toLocaleDateString()}`);
       console.log(`📊 Value range: ${Math.min(...result.map(r => r.value)).toFixed(1)} to ${Math.max(...result.map(r => r.value)).toFixed(1)}`);
     }
 

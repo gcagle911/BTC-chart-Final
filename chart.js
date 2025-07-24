@@ -382,9 +382,9 @@ class TimeframeManager {
 
     console.log(`✅ Chart updated with ${priceData.length} candles and bid spread MAs`);
     
-    // Update volatility indicators if available (throttled)
-    if (window.volatilityIndicators && this.rawData && this.rawData.length > 0) {
-      window.volatilityIndicators.updateData(this.rawData);
+    // Update volatility indicators with SAME aggregated data as main chart
+    if (window.volatilityIndicators && aggregatedPriceData && aggregatedPriceData.length > 0) {
+      window.volatilityIndicators.updateData(aggregatedPriceData, this.currentTimeframe);
     }
   }
 
@@ -484,10 +484,12 @@ class TimeframeManager {
     this.lastTimestamp = 0;
     this.processAndSetData(this.rawData);
     
-    // Force sync volatility chart after timeframe change
+    // Force sync volatility chart after timeframe change with aggregated data
     if (window.volatilityIndicators) {
       setTimeout(() => {
-        window.volatilityIndicators.updateData(this.rawData);
+        const timeframeSeconds = this.timeframes[this.currentTimeframe].seconds;
+        const aggregatedData = this.aggregateData(this.rawData, timeframeSeconds);
+        window.volatilityIndicators.updateData(aggregatedData, this.currentTimeframe);
         window.volatilityIndicators.forceSync();
       }, 100);
     }
@@ -714,9 +716,11 @@ manager.initializeChart().then(() => {
     window.volatilityIndicators = new SimpleVolatilityIndicators();
     window.volatilityIndicators.initialize();
     
-    // Update with initial data
+    // Update with initial aggregated data
     if (manager.rawData && manager.rawData.length > 0) {
-      window.volatilityIndicators.updateData(manager.rawData);
+      const timeframeSeconds = manager.timeframes[manager.currentTimeframe].seconds;
+      const aggregatedData = manager.aggregateData(manager.rawData, timeframeSeconds);
+      window.volatilityIndicators.updateData(aggregatedData, manager.currentTimeframe);
     }
   }
   
