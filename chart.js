@@ -41,7 +41,7 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
     secondsVisible: false,
     borderVisible: false,
     rightOffset: 50,
-    barSpacing: 8, // Good default spacing
+    barSpacing: 12, // Increased spacing for thicker candlestick bodies
     minBarSpacing: 0.1, // MUCH tighter for extreme zoom out
     fixLeftEdge: false,
     fixRightEdge: false,
@@ -78,11 +78,12 @@ const priceSeries = chart.addCandlestickSeries({
   priceScaleId: 'right', // RIGHT y-axis for price
   upColor: '#26a69a',
   downColor: '#ef5350',
-  borderVisible: false,
-  wickUpColor: '#26a69a',
-  wickDownColor: '#ef5350',
+  borderVisible: true,
   borderUpColor: '#26a69a',
   borderDownColor: '#ef5350',
+  wickUpColor: '#26a69a',
+  wickDownColor: '#ef5350',
+  wickVisible: true,
 });
 
 // Bid Spread Moving Averages on LEFT y-axis (separate scale!)
