@@ -34,11 +34,13 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
   },
 });
 
-const priceSeries = chart.addLineSeries({
+const priceSeries = chart.addCandlestickSeries({
   priceScaleId: 'right',
-  color: '#00D4FF',
-  lineWidth: 2,
-  title: 'BTC Price',
+  upColor: '#26a69a',
+  downColor: '#ef5350',
+  borderVisible: false,
+  wickUpColor: '#26a69a',
+  wickDownColor: '#ef5350',
 });
 
 const ma50 = chart.addLineSeries({
@@ -170,13 +172,16 @@ class TimeframeManager {
     }
   }
 
-  // Aggregate data maintaining full MA technical accuracy for line charts
+  // Aggregate data maintaining full MA technical accuracy and create synthetic OHLC
   aggregateData(data, timeframeSeconds) {
-    // For 1-minute data, return as-is
+    // For 1-minute data, create synthetic OHLC from single price points
     if (timeframeSeconds === 60) {
       return data.map(item => ({
         ...item,
-        // No OHLC needed for line chart, just use price
+        open: item.price,
+        high: item.price,
+        low: item.price,
+        close: item.price
       }));
     }
 
@@ -207,14 +212,17 @@ class TimeframeManager {
       });
     });
 
-    // Convert buckets - aggregate price data, keep MAs from close time
+    // Convert buckets - Create proper OHLC from multiple price points
     for (const [bucketTime, bucket] of buckets) {
       if (bucket.dataPoints.length > 0) {
         // Sort by timestamp
         bucket.dataPoints.sort((a, b) => a.timestamp - b.timestamp);
         
-        // For line chart: use close price (last price in the bucket)
+        // Create OHLC from price data within the bucket
+        const openPoint = bucket.dataPoints[0];
         const closePoint = bucket.dataPoints[bucket.dataPoints.length - 1];
+        const highPrice = Math.max(...bucket.dataPoints.map(p => p.price));
+        const lowPrice = Math.min(...bucket.dataPoints.map(p => p.price));
         
         // SOLUTION: Keep MAs from close time to maintain exact same values
         // This ensures MAs remain identical across all timeframes
@@ -225,8 +233,12 @@ class TimeframeManager {
         
         aggregated.push({
           time: bucketTimestamp, // Consistent bucket timestamp
-          // Use close price for line chart display
-          price: closePoint.price,
+          // Proper OHLC data for candlestick display
+          open: openPoint.price,
+          high: highPrice,
+          low: lowPrice,
+          close: closePoint.price,
+          price: closePoint.price, // Keep for compatibility
           
           // Bid Spread L20 MAs STAY THE SAME - using exact values from close time
           // This ensures MAs remain identical across all timeframes
@@ -277,10 +289,13 @@ class TimeframeManager {
       // CRITICAL: Create all data points with IDENTICAL timestamps
       const sharedTime = t; // Ensure all series use the exact same timestamp
       
-      // Price data (main chart) - line chart format
+      // Price data (main chart) - candlestick format
       priceData.push({ 
         time: sharedTime, 
-        value: parseFloat(d.price)
+        open: parseFloat(d.open),
+        high: parseFloat(d.high),
+        low: parseFloat(d.low),
+        close: parseFloat(d.close)
       });
       
       if (t > this.lastTimestamp) this.lastTimestamp = t;
@@ -331,9 +346,9 @@ class TimeframeManager {
     // Log timestamp alignment for debugging
     if (priceData.length > 0 && ma50Data.length > 0) {
       console.log(`🕐 ${this.currentTimeframe} Data Processing:`);
-      console.log(`   Price Data: ${priceData.length} points (aggregated by timeframe)`);
+      console.log(`   Candlestick Data: ${priceData.length} points (OHLC aggregated by timeframe)`);
       console.log(`   Bid Spread L20 MA Data: ${ma50Data.length} points (always 1-minute granularity)`);
-      console.log(`   Result: Spread MAs stay identical across timeframes, only price aggregation changes`);
+      console.log(`   Result: Spread MAs stay identical across timeframes, OHLC created from price points`);
     }
 
     // Clear loading flag
