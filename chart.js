@@ -41,8 +41,8 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
     secondsVisible: false,
     borderVisible: false,
     rightOffset: 50,
-    barSpacing: 6, // Tighter spacing for professional look
-    minBarSpacing: 0.5, // Better minimum spacing
+    barSpacing: 12, // Increased spacing for thicker candlestick bodies
+    minBarSpacing: 0.1, // MUCH tighter for extreme zoom out
     fixLeftEdge: false,
     fixRightEdge: false,
   },
@@ -73,7 +73,7 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
   },
 });
 
-// Price series on RIGHT y-axis with better wick visibility
+// Price series on RIGHT y-axis
 const priceSeries = chart.addCandlestickSeries({
   priceScaleId: 'right', // RIGHT y-axis for price
   upColor: '#26a69a',
@@ -602,14 +602,6 @@ function handlePinchZoom(scaleChange) {
 // Initialize everything
 manager.initializeChart().then(() => {
   console.log('🎯 Chart ready with bid spread data and dual y-axis!');
-  
-  // Apply additional styling for better candlestick appearance
-  chart.applyOptions({
-    timeScale: {
-      barSpacing: 6,
-      minBarSpacing: 0.5,
-    }
-  });
   
   // Start update cycle
   manager.startUpdateCycle();
