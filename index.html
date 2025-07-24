@@ -30,8 +30,15 @@
     
     #main-chart {
       width: 100%;
-      height: 100%;
+      height: 70%;
       touch-action: pan-x pan-y pinch-zoom;
+    }
+    
+    #volatility-panel {
+      width: 100%;
+      height: 30%;
+      touch-action: pan-x pan-y pinch-zoom;
+      border-top: 1px solid #2B2B43;
     }
     
     #timeframe-controls {
@@ -129,9 +136,11 @@
     </div>
     
     <div id="main-chart"></div>
+    <div id="volatility-panel"></div>
   </div>
   
   <script src="https://unpkg.com/lightweight-charts@4.0.0/dist/lightweight-charts.standalone.production.js"></script>
+  <script src="volatility-simple.js"></script>
   <script src="chart.js"></script>
 </body>
 </html>
