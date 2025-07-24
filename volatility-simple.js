@@ -34,17 +34,8 @@ class SimpleVolatilityIndicators {
       crosshair: {
         mode: LightweightCharts.CrosshairMode.Normal,
       },
-      handleScroll: {
-        mouseWheel: false,
-        pressedMouseMove: false,
-        horzTouchDrag: false,
-        vertTouchDrag: false, // Disable to prevent conflicts
-      },
-      handleScale: {
-        mouseWheel: false,
-        pinch: false,
-        axisPressedMouseMove: false, // Disable all to prevent conflicts
-      },
+      handleScroll: false, // Completely disable independent scrolling
+      handleScale: false,  // Completely disable independent scaling
     });
 
     // Main volatility predictor line (like RSI)
@@ -62,7 +53,18 @@ class SimpleVolatilityIndicators {
     // Sync with main chart
     this.setupSync();
 
+    // Start periodic alignment check
+    this.startPeriodicSync();
+
     console.log('📊 Simple volatility indicators initialized');
+  }
+  
+  // Start periodic sync check to ensure charts stay aligned
+  startPeriodicSync() {
+    // Check alignment every 2 seconds
+    this.syncInterval = setInterval(() => {
+      this.verifyAlignment();
+    }, 2000);
   }
 
   addReferenceLevels() {
@@ -106,22 +108,36 @@ class SimpleVolatilityIndicators {
       // Subscribe to visible time range changes (scrolling/zooming)
       window.chart.timeScale().subscribeVisibleTimeRangeChange((timeRange) => {
         if (timeRange && this.chart) {
-          // Immediate sync for perfect alignment
           try {
+            // Force exact same visible range
             this.chart.timeScale().setVisibleTimeRange(timeRange);
-            console.log(`🔄 Synced volatility chart: ${timeRange.from} to ${timeRange.to}`);
+            
+            // Also ensure logical range is synced
+            const logicalRange = window.chart.timeScale().getVisibleLogicalRange();
+            if (logicalRange) {
+              this.chart.timeScale().setVisibleLogicalRange(logicalRange);
+            }
+            
+            console.log(`🔄 Synced: ${new Date(timeRange.from * 1000).toLocaleTimeString()} to ${new Date(timeRange.to * 1000).toLocaleTimeString()}`);
           } catch (error) {
             console.error('❌ Sync error:', error);
           }
         }
       });
       
-      // Also sync on logical range changes (timeframe switches)
+      // Additional sync on logical range changes
       window.chart.timeScale().subscribeVisibleLogicalRangeChange((logicalRange) => {
         if (logicalRange && this.chart) {
           try {
             this.chart.timeScale().setVisibleLogicalRange(logicalRange);
-            console.log(`🔄 Synced logical range: ${logicalRange.from} to ${logicalRange.to}`);
+            
+            // Ensure time range is also synced
+            const timeRange = window.chart.timeScale().getVisibleTimeRange();
+            if (timeRange) {
+              this.chart.timeScale().setVisibleTimeRange(timeRange);
+            }
+            
+            console.log(`🔄 Logical sync: ${logicalRange.from} to ${logicalRange.to}`);
           } catch (error) {
             console.error('❌ Logical sync error:', error);
           }
@@ -168,20 +184,29 @@ class SimpleVolatilityIndicators {
   forceSync() {
     if (window.chart && this.chart) {
       try {
+        // Get both ranges from main chart
         const visibleRange = window.chart.timeScale().getVisibleRange();
         const logicalRange = window.chart.timeScale().getVisibleLogicalRange();
         
         if (visibleRange) {
+          // Apply visible range first
           this.chart.timeScale().setVisibleRange(visibleRange);
-          console.log(`🔄 Force synced time range: ${visibleRange.from} to ${visibleRange.to}`);
         }
         
         if (logicalRange) {
+          // Then apply logical range for perfect alignment
           this.chart.timeScale().setVisibleLogicalRange(logicalRange);
-          console.log(`🔄 Force synced logical range: ${logicalRange.from} to ${logicalRange.to}`);
         }
         
-        this.verifyAlignment();
+        // Double-check by applying visible range again after logical range
+        if (visibleRange) {
+          this.chart.timeScale().setVisibleRange(visibleRange);
+        }
+        
+        console.log(`🔄 Force sync complete: ${new Date(visibleRange.from * 1000).toLocaleTimeString()} to ${new Date(visibleRange.to * 1000).toLocaleTimeString()}`);
+        
+        // Verify alignment after sync
+        setTimeout(() => this.verifyAlignment(), 100);
       } catch (error) {
         console.error('❌ Force sync error:', error);
       }
@@ -193,16 +218,30 @@ class SimpleVolatilityIndicators {
     if (window.chart && this.chart) {
       const mainVisible = window.chart.timeScale().getVisibleRange();
       const volatilityVisible = this.chart.timeScale().getVisibleRange();
+      const mainLogical = window.chart.timeScale().getVisibleLogicalRange();
+      const volatilityLogical = this.chart.timeScale().getVisibleLogicalRange();
       
       if (mainVisible && volatilityVisible) {
         const timeDiff = Math.abs(mainVisible.from - volatilityVisible.from) + Math.abs(mainVisible.to - volatilityVisible.to);
         
-        if (timeDiff < 1) { // Less than 1 second difference
+        if (timeDiff < 0.1) { // Less than 0.1 second difference
           console.log('✅ Charts perfectly aligned');
         } else {
-          console.warn(`⚠️ Charts misaligned by ${timeDiff.toFixed(2)} seconds`);
-          console.log(`Main: ${mainVisible.from} to ${mainVisible.to}`);
-          console.log(`Volatility: ${volatilityVisible.from} to ${volatilityVisible.to}`);
+          console.warn(`⚠️ Charts misaligned by ${timeDiff.toFixed(3)} seconds`);
+          console.log(`Main time: ${new Date(mainVisible.from * 1000).toLocaleTimeString()} to ${new Date(mainVisible.to * 1000).toLocaleTimeString()}`);
+          console.log(`Vol time: ${new Date(volatilityVisible.from * 1000).toLocaleTimeString()} to ${new Date(volatilityVisible.to * 1000).toLocaleTimeString()}`);
+          
+          if (mainLogical && volatilityLogical) {
+            console.log(`Main logical: ${mainLogical.from.toFixed(2)} to ${mainLogical.to.toFixed(2)}`);
+            console.log(`Vol logical: ${volatilityLogical.from.toFixed(2)} to ${volatilityLogical.to.toFixed(2)}`);
+          }
+          
+          // Try to fix misalignment
+          console.log('🔧 Attempting to fix alignment...');
+          this.chart.timeScale().setVisibleRange(mainVisible);
+          if (mainLogical) {
+            this.chart.timeScale().setVisibleLogicalRange(mainLogical);
+          }
         }
       }
     }

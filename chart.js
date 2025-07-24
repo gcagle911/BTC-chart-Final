@@ -531,9 +531,13 @@ function zoomIn() {
       };
       timeScale.setVisibleRange(newTimeRange);
       
-      // Immediately sync volatility chart
-      if (window.volatilityIndicators && window.volatilityIndicators.chart) {
-        window.volatilityIndicators.chart.timeScale().setVisibleRange(newTimeRange);
+      // Aggressively sync volatility chart
+      if (window.volatilityIndicators) {
+        window.volatilityIndicators.forceSync();
+        // Double-check after a moment
+        setTimeout(() => {
+          window.volatilityIndicators.forceSync();
+        }, 100);
       }
     }
   }
@@ -553,9 +557,13 @@ function zoomOut() {
       };
       timeScale.setVisibleRange(newTimeRange);
       
-      // Immediately sync volatility chart
-      if (window.volatilityIndicators && window.volatilityIndicators.chart) {
-        window.volatilityIndicators.chart.timeScale().setVisibleRange(newTimeRange);
+      // Aggressively sync volatility chart
+      if (window.volatilityIndicators) {
+        window.volatilityIndicators.forceSync();
+        // Double-check after a moment
+        setTimeout(() => {
+          window.volatilityIndicators.forceSync();
+        }, 100);
       }
     }
   }
