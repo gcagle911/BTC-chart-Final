@@ -90,7 +90,7 @@ const priceSeries = chart.addCandlestickSeries({
 const ma50 = chart.addLineSeries({
   priceScaleId: 'left', // LEFT y-axis for MAs
   color: '#FF6B6B',
-  lineWidth: 1,
+  lineWidth: 0.5,
   title: 'MA50',
   lastValueVisible: false,
   priceLineVisible: false,
@@ -99,7 +99,7 @@ const ma50 = chart.addLineSeries({
 const ma100 = chart.addLineSeries({
   priceScaleId: 'left', // LEFT y-axis for MAs
   color: '#4ADF86',
-  lineWidth: 1,
+  lineWidth: 0.5,
   title: 'MA100',
   lastValueVisible: false,
   priceLineVisible: false,
@@ -108,7 +108,7 @@ const ma100 = chart.addLineSeries({
 const ma200 = chart.addLineSeries({
   priceScaleId: 'left', // LEFT y-axis for MAs
   color: '#FFD700',
-  lineWidth: 1,
+  lineWidth: 0.5,
   title: 'MA200',
   lastValueVisible: false,
   priceLineVisible: false,
