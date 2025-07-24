@@ -6,6 +6,7 @@ class SimpleVolatilityIndicators {
     this.chart = null;
     this.indicators = {};
     this.lastUpdateTime = 0;
+    this.referenceLines = [];
   }
 
   initialize() {
@@ -65,11 +66,14 @@ class SimpleVolatilityIndicators {
   }
 
   addReferenceLevels() {
+    // Store reference lines to update them later with actual data range
+    this.referenceLines = [];
+    
     const levels = [
-      { value: 80, color: '#FF4444' },
-      { value: 65, color: '#FF8844' },
-      { value: 50, color: '#FFFF44' },
-      { value: 35, color: '#88FF88' },
+      { value: 80, color: '#FF4444', label: 'Extreme' },
+      { value: 65, color: '#FF8844', label: 'High' },
+      { value: 50, color: '#FFFF44', label: 'Elevated' },
+      { value: 35, color: '#88FF88', label: 'Moderate' },
     ];
 
     levels.forEach(level => {
@@ -81,11 +85,16 @@ class SimpleVolatilityIndicators {
         priceLineVisible: false,
       });
 
-      // Set horizontal line
-      const now = Math.floor(Date.now() / 1000);
-      line.setData([
-        { time: now - 86400 * 365, value: level.value },
-        { time: now + 86400 * 365, value: level.value },
+      this.referenceLines.push({ line, value: level.value, label: level.label });
+    });
+  }
+  
+  // Update reference lines with actual data time range
+  updateReferenceLevels(dataStartTime, dataEndTime) {
+    this.referenceLines.forEach(ref => {
+      ref.line.setData([
+        { time: dataStartTime, value: ref.value },
+        { time: dataEndTime, value: ref.value },
       ]);
     });
   }
@@ -137,6 +146,12 @@ class SimpleVolatilityIndicators {
       const volatilityData = this.calculateSimpleVolatility(rawData);
       if (volatilityData.length > 0) {
         this.indicators.predictor.setData(volatilityData);
+        
+        // Update reference lines with actual data time range
+        const startTime = volatilityData[0].time;
+        const endTime = volatilityData[volatilityData.length - 1].time;
+        this.updateReferenceLevels(startTime, endTime);
+        
         this.lastUpdateTime = Date.now();
         
         // Force sync after data update
@@ -200,7 +215,8 @@ class SimpleVolatilityIndicators {
 
   calculateSimpleVolatility(data) {
     const result = [];
-    const lookback = 20;
+    const lookback = 50; // Longer lookback for stability
+    const smoothing = 10; // Smoothing period
 
     console.log(`📊 Calculating volatility for ${data.length} data points...`);
 
@@ -211,17 +227,27 @@ class SimpleVolatilityIndicators {
         .filter(s => s !== null && s !== undefined);
 
       if (spreads.length >= lookback) {
-        // Calculate volatility score (0-100)
+        // Calculate volatility score using improved method
         const mean = spreads.reduce((a, b) => a + b) / spreads.length;
         const variance = spreads.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / spreads.length;
         const stdDev = Math.sqrt(variance);
         
-        // Current spread vs historical
-        const currentSpread = spreads[spreads.length - 1];
+        // Current spread vs historical (use recent average instead of single point)
+        const recentSpreads = spreads.slice(-5); // Last 5 points
+        const currentSpread = recentSpreads.reduce((a, b) => a + b) / recentSpreads.length;
+        
+        // Z-score calculation
         const zScore = stdDev > 0 ? (currentSpread - mean) / stdDev : 0;
         
-        // Convert to 0-100 scale
-        const volatilityScore = Math.max(0, Math.min(100, (zScore + 3) * 16.67));
+        // Convert to 0-100 scale with better scaling
+        let volatilityScore = Math.max(0, Math.min(100, ((zScore + 2) / 4) * 100));
+        
+        // Apply smoothing to reduce noise
+        if (result.length > 0) {
+          const recentScores = result.slice(-smoothing).map(r => r.value);
+          const smoothedScore = (recentScores.reduce((a, b) => a + b, 0) + volatilityScore) / (recentScores.length + 1);
+          volatilityScore = smoothedScore;
+        }
 
         // Use IDENTICAL timestamp conversion as main chart TimeframeManager
         const timestamp = this.toUnixTimestamp(data[i].time);
@@ -235,7 +261,10 @@ class SimpleVolatilityIndicators {
 
     console.log(`📈 Generated ${result.length} volatility points`);
     if (result.length > 0) {
-      console.log(`📅 Time range: ${new Date(result[0].time * 1000).toISOString()} to ${new Date(result[result.length - 1].time * 1000).toISOString()}`);
+      const firstDate = new Date(result[0].time * 1000);
+      const lastDate = new Date(result[result.length - 1].time * 1000);
+      console.log(`📅 Time range: ${firstDate.toLocaleDateString()} to ${lastDate.toLocaleDateString()}`);
+      console.log(`📊 Value range: ${Math.min(...result.map(r => r.value)).toFixed(1)} to ${Math.max(...result.map(r => r.value)).toFixed(1)}`);
     }
 
     return result;
