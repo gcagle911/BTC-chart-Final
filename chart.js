@@ -11,57 +11,88 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
   rightPriceScale: { 
     visible: true,
     scaleMargins: {
-      top: 0.01,
-      bottom: 0.01,
+      top: 0.05,
+      bottom: 0.05,
     },
     borderVisible: false,
+    autoScale: true,
   },
   leftPriceScale: { 
-    visible: true,
+    visible: true, // Show left scale for MA data
     scaleMargins: {
-      top: 0.01,
-      bottom: 0.01,
+      top: 0.05,
+      bottom: 0.05,
     },
     borderVisible: false,
+    autoScale: true,
+    mode: LightweightCharts.PriceScaleMode.Normal,
+    alignLabels: false,
   },
   timeScale: { 
     timeVisible: true, 
     secondsVisible: false,
     borderVisible: false,
+    rightOffset: 50, // Add space on right for better viewing
+    barSpacing: 8, // Increase spacing between candlesticks
+    minBarSpacing: 2, // Minimum spacing when zoomed in
   },
   crosshair: {
     mode: LightweightCharts.CrosshairMode.Normal,
+  },
+  handleScroll: {
+    mouseWheel: true,
+    pressedMouseMove: true,
+    horzTouchDrag: true,
+    vertTouchDrag: true,
+  },
+  handleScale: {
+    mouseWheel: true,
+    pinch: true,
+    axisPressedMouseMove: true,
+    axisDoubleClickReset: true,
   },
 });
 
 const priceSeries = chart.addCandlestickSeries({
   priceScaleId: 'right',
-  upColor: '#26a69a',
-  downColor: '#ef5350',
+  upColor: '#00ff88',
+  downColor: '#ff4976',
   borderVisible: false,
-  wickUpColor: '#26a69a',
-  wickDownColor: '#ef5350',
+  wickUpColor: '#00ff88',
+  wickDownColor: '#ff4976',
+  borderUpColor: '#00ff88',
+  borderDownColor: '#ff4976',
 });
 
+// Keep MA lines on left scale but improve visibility
 const ma50 = chart.addLineSeries({
   priceScaleId: 'left',
   color: '#FF6B6B',
-  lineWidth: 1,
-  title: 'Bid Spread L20 MA50',
+  lineWidth: 2,
+  lineStyle: LightweightCharts.LineStyle.Solid,
+  title: 'MA50',
+  lastValueVisible: false,
+  priceLineVisible: false,
 });
 
 const ma100 = chart.addLineSeries({
   priceScaleId: 'left',
   color: '#4ADF86',
-  lineWidth: 1,
-  title: 'Bid Spread L20 MA100',
+  lineWidth: 2,
+  lineStyle: LightweightCharts.LineStyle.Solid,
+  title: 'MA100',
+  lastValueVisible: false,
+  priceLineVisible: false,
 });
 
 const ma200 = chart.addLineSeries({
   priceScaleId: 'left',
   color: '#FFD700',
-  lineWidth: 1,
-  title: 'Bid Spread L20 MA200',
+  lineWidth: 2,
+  lineStyle: LightweightCharts.LineStyle.Solid,
+  title: 'MA200',
+  lastValueVisible: false,
+  priceLineVisible: false,
 });
 
 // Indicator panel setup - X-axis locked, Y-axis independent
@@ -311,25 +342,25 @@ class TimeframeManager {
       
       const sharedTime = t;
       
-      // MA data ALWAYS from 1-minute data - IDENTICAL across all timeframes
+            // MA data ALWAYS from 1-minute data - IDENTICAL across all timeframes
       if (d.ma_50 !== null && d.ma_50 !== undefined) {
         ma50Data.push({ 
           time: sharedTime, 
-          value: parseFloat(d.ma_50) 
+          value: parseFloat(d.ma_50)
         });
       }
       
       if (d.ma_100 !== null && d.ma_100 !== undefined) {
         ma100Data.push({ 
           time: sharedTime, 
-          value: parseFloat(d.ma_100) 
+          value: parseFloat(d.ma_100)
         });
       }
       
       if (d.ma_200 !== null && d.ma_200 !== undefined) {
         ma200Data.push({ 
           time: sharedTime, 
-          value: parseFloat(d.ma_200) 
+          value: parseFloat(d.ma_200)
         });
       }
       
@@ -1091,5 +1122,80 @@ timeframeManager.initializeChart().then(() => {
   console.log('   • Vertical scroll/zoom: Use INDICATOR panel');
   console.log('   • Mouse wheel on indicator: Y-axis zoom');
   console.log('   • Right-click drag on indicator: Y-axis pan');
+  console.log('   • Use zoom buttons: +/- for zoom, ⌐ for fit all');
 });
+
+// Zoom and navigation functions
+function zoomIn() {
+  if (window.chart) {
+    const timeScale = window.chart.timeScale();
+    const visibleRange = timeScale.getVisibleRange();
+    if (visibleRange) {
+      const middle = (visibleRange.from + visibleRange.to) / 2;
+      const range = visibleRange.to - visibleRange.from;
+      const newRange = range * 0.7; // Zoom in by 30%
+      timeScale.setVisibleRange({
+        from: middle - newRange / 2,
+        to: middle + newRange / 2
+      });
+    }
+  }
+}
+
+function zoomOut() {
+  if (window.chart) {
+    const timeScale = window.chart.timeScale();
+    const visibleRange = timeScale.getVisibleRange();
+    if (visibleRange) {
+      const middle = (visibleRange.from + visibleRange.to) / 2;
+      const range = visibleRange.to - visibleRange.from;
+      const newRange = range * 1.3; // Zoom out by 30%
+      timeScale.setVisibleRange({
+        from: middle - newRange / 2,
+        to: middle + newRange / 2
+      });
+    }
+  }
+}
+
+function fitContent() {
+  if (window.chart) {
+    window.chart.timeScale().fitContent();
+  }
+  if (window.indicatorChart) {
+    window.indicatorChart.timeScale().fitContent();
+  }
+}
+
+// Improved mobile touch handling
+function addMobileOptimizations() {
+  const chartElement = document.getElementById('main-chart');
+  const indicatorElement = document.getElementById('indicator-panel');
+  
+  if (chartElement && indicatorElement) {
+    // Prevent default touch behaviors that interfere with chart interaction
+    [chartElement, indicatorElement].forEach(element => {
+      element.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 1) {
+          // Single touch - allow chart interaction
+          e.stopPropagation();
+        }
+      }, { passive: false });
+      
+      element.addEventListener('touchmove', (e) => {
+        if (e.touches.length === 1) {
+          // Single touch - allow chart panning
+          e.stopPropagation();
+        } else if (e.touches.length === 2) {
+          // Two finger touch - allow pinch zoom
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }, { passive: false });
+    });
+  }
+}
+
+// Initialize mobile optimizations after charts are loaded
+setTimeout(addMobileOptimizations, 1000);
 
