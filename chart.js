@@ -34,31 +34,32 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
   },
 });
 
-const priceSeries = chart.addCandlestickSeries({
+const priceSeries = chart.addLineSeries({
   priceScaleId: 'right',
-  upColor: '#26a69a',
-  downColor: '#ef5350',
-  borderVisible: false,
-  wickUpColor: '#26a69a',
-  wickDownColor: '#ef5350',
+  color: '#00D4FF',
+  lineWidth: 2,
+  title: 'BTC Price',
 });
 
 const ma50 = chart.addLineSeries({
   priceScaleId: 'left',
-  color: '#ffffff',
+  color: '#FF6B6B',
   lineWidth: 1,
+  title: 'Bid Spread L20 MA50',
 });
 
 const ma100 = chart.addLineSeries({
   priceScaleId: 'left',
-  color: '#ffd700',
+  color: '#4ADF86',
   lineWidth: 1,
+  title: 'Bid Spread L20 MA100',
 });
 
 const ma200 = chart.addLineSeries({
   priceScaleId: 'left',
-  color: '#ff69b4',
+  color: '#FFD700',
   lineWidth: 1,
+  title: 'Bid Spread L20 MA200',
 });
 
 // Indicator panel setup - X-axis locked, Y-axis independent
@@ -169,16 +170,13 @@ class TimeframeManager {
     }
   }
 
-  // Aggregate data maintaining full MA technical accuracy and create OHLC
+  // Aggregate data maintaining full MA technical accuracy for line charts
   aggregateData(data, timeframeSeconds) {
-    // For 1-minute data, create OHLC from price data
+    // For 1-minute data, return as-is
     if (timeframeSeconds === 60) {
       return data.map(item => ({
         ...item,
-        open: item.open || item.price,
-        high: item.high || item.price,
-        low: item.low || item.price,
-        close: item.close || item.price
+        // No OHLC needed for line chart, just use price
       }));
     }
 
@@ -209,20 +207,17 @@ class TimeframeManager {
       });
     });
 
-    // Convert buckets - ONLY aggregate price data, keep MAs from close time
+    // Convert buckets - aggregate price data, keep MAs from close time
     for (const [bucketTime, bucket] of buckets) {
       if (bucket.dataPoints.length > 0) {
         // Sort by timestamp
         bucket.dataPoints.sort((a, b) => a.timestamp - b.timestamp);
         
-        // For price: Use proper OHLC aggregation (THIS CHANGES with timeframe)
-        const openPoint = bucket.dataPoints[0];
+        // For line chart: use close price (last price in the bucket)
         const closePoint = bucket.dataPoints[bucket.dataPoints.length - 1];
-        const highPrice = Math.max(...bucket.dataPoints.map(p => p.price));
-        const lowPrice = Math.min(...bucket.dataPoints.map(p => p.price));
         
         // SOLUTION: Keep MAs from close time to maintain exact same values
-        // This ensures MAs don't change when switching timeframes
+        // This ensures MAs remain identical across all timeframes
         const closeMAs = closePoint;
         
         // CRITICAL: Use consistent bucket timestamp for all timeframes
@@ -230,14 +225,10 @@ class TimeframeManager {
         
         aggregated.push({
           time: bucketTimestamp, // Consistent bucket timestamp
-          // ONLY PRICE DATA CHANGES with timeframe - OHLC aggregation
-          price: closePoint.price, // Close price for line chart
-          open: openPoint.price,
-          high: highPrice,
-          low: lowPrice,
-          close: closePoint.price,
+          // Use close price for line chart display
+          price: closePoint.price,
           
-          // MAs STAY THE SAME - using exact values from close time
+          // Bid Spread L20 MAs STAY THE SAME - using exact values from close time
           // This ensures MAs remain identical across all timeframes
           ma_50: closeMAs.ma_50,
           ma_100: closeMAs.ma_100,
@@ -286,13 +277,10 @@ class TimeframeManager {
       // CRITICAL: Create all data points with IDENTICAL timestamps
       const sharedTime = t; // Ensure all series use the exact same timestamp
       
-      // Price data (main chart) - CHANGES with timeframe
+      // Price data (main chart) - line chart format
       priceData.push({ 
         time: sharedTime, 
-        open: parseFloat(d.open),
-        high: parseFloat(d.high),
-        low: parseFloat(d.low),
-        close: parseFloat(d.close)
+        value: parseFloat(d.price)
       });
       
       if (t > this.lastTimestamp) this.lastTimestamp = t;
@@ -344,8 +332,8 @@ class TimeframeManager {
     if (priceData.length > 0 && ma50Data.length > 0) {
       console.log(`🕐 ${this.currentTimeframe} Data Processing:`);
       console.log(`   Price Data: ${priceData.length} points (aggregated by timeframe)`);
-      console.log(`   MA Data: ${ma50Data.length} points (always 1-minute granularity)`);
-      console.log(`   Result: MAs stay identical across timeframes, only price OHLC changes`);
+      console.log(`   Bid Spread L20 MA Data: ${ma50Data.length} points (always 1-minute granularity)`);
+      console.log(`   Result: Spread MAs stay identical across timeframes, only price aggregation changes`);
     }
 
     // Clear loading flag
@@ -454,7 +442,7 @@ class TimeframeManager {
     return false;
   }
 
-  // MA Crossover - Dynamic MA-Based Confirmation
+  // Bid Spread L20 MA Crossover - Dynamic MA-Based Confirmation
   calculateCustomIndicator(dataPoint) {
     const { ma_50, ma_100, ma_200 } = dataPoint;
     
@@ -468,7 +456,7 @@ class TimeframeManager {
       return 0.5; // Return neutral during loading
     }
     
-    // Initialize enhanced state for MA-based tracking
+    // Initialize enhanced state for Bid Spread L20 MA-based tracking
     if (!this.indicatorState) {
       this.indicatorState = {
         lastSpreadColor: '#26a69a',
@@ -481,16 +469,16 @@ class TimeframeManager {
       };
     }
     
-    // Determine current MA positioning
+    // Determine current Bid Spread L20 MA positioning
     const ma50AboveMA200 = ma_50 > ma_200;
     const ma100AboveMA200 = ma_100 > ma_200;
     
     // Current raw state (what it would be without delay)
     let currentRawState;
     if (ma50AboveMA200 && ma100AboveMA200) {
-      currentRawState = 1.0; // Both above
+      currentRawState = 1.0; // Both spread MAs above MA200 (higher spreads)
     } else if (!ma50AboveMA200 && !ma100AboveMA200) {
-      currentRawState = 0.0; // Both below
+      currentRawState = 0.0; // Both spread MAs below MA200 (lower spreads)
     } else {
       currentRawState = 0.5; // Mixed
     }
@@ -526,7 +514,7 @@ class TimeframeManager {
         candlesRequired: dynamicConfirmation
       };
       this.indicatorState.candlesSinceCross = 1;
-      console.log(`🔄 New MA crossover detected: ${currentRawState === 1.0 ? 'BULLISH' : 'BEARISH'} - waiting for ${dynamicConfirmation} candle confirmation (MA-based)`);
+      console.log(`🔄 New Bid Spread L20 MA crossover detected: ${currentRawState === 1.0 ? 'HIGH SPREAD' : 'LOW SPREAD'} - waiting for ${dynamicConfirmation} candle confirmation (MA-based)`);
     }
     
     // If we have a pending crossover, check confirmation progress
@@ -539,7 +527,7 @@ class TimeframeManager {
         if (this.indicatorState.candlesSinceCross >= this.indicatorState.pendingCross.candlesRequired) {
           // Confirmation complete - update confirmed state
           this.indicatorState.confirmedState = this.indicatorState.pendingCross.targetState;
-          console.log(`✅ MA Crossover CONFIRMED after ${this.indicatorState.candlesSinceCross} candles: ${this.indicatorState.confirmedState === 1.0 ? 'BULLISH' : 'BEARISH'}`);
+          console.log(`✅ Bid Spread L20 MA Crossover CONFIRMED after ${this.indicatorState.candlesSinceCross} candles: ${this.indicatorState.confirmedState === 1.0 ? 'HIGH SPREAD' : 'LOW SPREAD'}`);
           this.indicatorState.pendingCross = null;
           this.indicatorState.candlesSinceCross = 0;
           
@@ -549,12 +537,12 @@ class TimeframeManager {
           // Still waiting for confirmation
           const remaining = this.indicatorState.pendingCross.candlesRequired - this.indicatorState.candlesSinceCross;
           if (remaining % 5 === 0 || remaining <= 3) { // Log every 5 candles or last 3
-            console.log(`⏳ MA crossover confirmation: ${this.indicatorState.candlesSinceCross}/${this.indicatorState.pendingCross.candlesRequired} candles (${remaining} remaining)`);
+            console.log(`⏳ Bid Spread L20 MA crossover confirmation: ${this.indicatorState.candlesSinceCross}/${this.indicatorState.pendingCross.candlesRequired} candles (${remaining} remaining)`);
           }
         }
       } else {
         // Crossover invalidated - MAs crossed back before confirmation
-        console.log(`❌ MA Crossover INVALIDATED after ${this.indicatorState.candlesSinceCross} candles - MAs crossed back`);
+        console.log(`❌ Bid Spread L20 MA Crossover INVALIDATED after ${this.indicatorState.candlesSinceCross} candles - MAs crossed back`);
         this.indicatorState.pendingCross = null;
         this.indicatorState.candlesSinceCross = 0;
       }
@@ -1028,10 +1016,10 @@ function setupChartSync() {
 timeframeManager.initializeChart().then(() => {
   timeframeManager.startUpdateCycle();
   
-  // Setup the immediate MA Crossover Indicator
+  // Setup the Bid Spread L20 MA Crossover Indicator
   setupCustomIndicator({
     type: 'line',
-    title: 'MA Crossover (Immediate)',
+    title: 'Bid Spread L20 MA Crossover',
     color: '#00d4ff',
     lineWidth: 3,
     calculate: timeframeManager.calculateCustomIndicator.bind(timeframeManager)
@@ -1080,8 +1068,8 @@ timeframeManager.initializeChart().then(() => {
     console.log('📊 Y-axis: Independent (scroll/zoom indicator panel)');
   }, 1000);
   
-  console.log('📊 MA Crossover indicator loaded (20 candle confirmation delay)');
-  console.log('🎯 Logic: 1.0=Both MAs above MA200 (confirmed after 20 candles) | 0.0=Both below (confirmed after 20 candles) | 0.5=Mixed/Unconfirmed');
+  console.log('📊 Bid Spread L20 MA Crossover indicator loaded (20 candle confirmation delay)');
+  console.log('🎯 Logic: 1.0=Both Spread MAs above MA200 (Higher spreads) | 0.0=Both below (Lower spreads) | 0.5=Mixed/Unconfirmed');
   console.log('⏱️ Confirmation: Waits 20 candles after crossover before confirming signal');
   console.log('🎮 Controls:');
   console.log('   • Horizontal scroll/zoom: Use MAIN chart');
