@@ -382,7 +382,7 @@ class TimeframeManager {
 
     console.log(`✅ Chart updated with ${priceData.length} candles and bid spread MAs`);
     
-    // Update volatility indicators if available
+    // Update volatility indicators if available (throttled)
     if (window.volatilityIndicators && this.rawData && this.rawData.length > 0) {
       window.volatilityIndicators.updateData(this.rawData);
     }
@@ -545,12 +545,14 @@ function fitContent() {
   if (window.chart) {
     window.chart.timeScale().fitContent();
     
-    // Sync volatility chart if it exists
+    // Sync volatility chart if it exists (throttled)
     if (window.volatilityIndicators && window.volatilityIndicators.chart) {
-      const visibleRange = window.chart.timeScale().getVisibleRange();
-      if (visibleRange) {
-        window.volatilityIndicators.chart.timeScale().setVisibleRange(visibleRange);
-      }
+      setTimeout(() => {
+        const visibleRange = window.chart.timeScale().getVisibleRange();
+        if (visibleRange) {
+          window.volatilityIndicators.chart.timeScale().setVisibleRange(visibleRange);
+        }
+      }, 50);
     }
   }
 }

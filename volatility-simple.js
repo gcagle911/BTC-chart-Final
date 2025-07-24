@@ -5,6 +5,7 @@ class SimpleVolatilityIndicators {
   constructor() {
     this.chart = null;
     this.indicators = {};
+    this.lastUpdateTime = 0;
   }
 
   initialize() {
@@ -36,15 +37,12 @@ class SimpleVolatilityIndicators {
         mouseWheel: false,
         pressedMouseMove: false,
         horzTouchDrag: false,
-        vertTouchDrag: true,
+        vertTouchDrag: false, // Disable to prevent conflicts
       },
       handleScale: {
         mouseWheel: false,
         pinch: false,
-        axisPressedMouseMove: {
-          time: false,
-          price: true,
-        },
+        axisPressedMouseMove: false, // Disable all to prevent conflicts
       },
     });
 
@@ -94,9 +92,20 @@ class SimpleVolatilityIndicators {
 
   setupSync() {
     if (window.chart) {
+      // Throttle sync updates to improve performance
+      let syncTimeout = null;
+      
       window.chart.timeScale().subscribeVisibleTimeRangeChange((timeRange) => {
         if (timeRange && this.chart) {
-          this.chart.timeScale().setVisibleTimeRange(timeRange);
+          // Clear previous timeout
+          if (syncTimeout) {
+            clearTimeout(syncTimeout);
+          }
+          
+          // Throttle updates to every 16ms (60fps)
+          syncTimeout = setTimeout(() => {
+            this.chart.timeScale().setVisibleTimeRange(timeRange);
+          }, 16);
         }
       });
     }
@@ -104,14 +113,19 @@ class SimpleVolatilityIndicators {
 
   updateData(rawData) {
     if (!rawData || rawData.length < 50) {
-      console.log('⚠️ Not enough data for volatility calculation');
       return;
     }
 
     try {
+      // Throttle data updates to prevent excessive recalculation
+      if (this.lastUpdateTime && Date.now() - this.lastUpdateTime < 1000) {
+        return; // Skip if updated less than 1 second ago
+      }
+      
       const volatilityData = this.calculateSimpleVolatility(rawData);
       if (volatilityData.length > 0) {
         this.indicators.predictor.setData(volatilityData);
+        this.lastUpdateTime = Date.now();
         console.log(`✅ Volatility updated with ${volatilityData.length} points`);
       }
     } catch (error) {
@@ -142,8 +156,11 @@ class SimpleVolatilityIndicators {
         // Convert to 0-100 scale
         const volatilityScore = Math.max(0, Math.min(100, (zScore + 3) * 16.67));
 
+        // Use EXACT same timestamp conversion as main chart for perfect alignment
+        const timestamp = Math.floor(new Date(data[i].time).getTime() / 1000);
+
         result.push({
-          time: Math.floor(new Date(data[i].time).getTime() / 1000),
+          time: timestamp,
           value: volatilityScore
         });
       }
