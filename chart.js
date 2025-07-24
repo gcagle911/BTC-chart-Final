@@ -1,4 +1,7 @@
-// Main chart setup
+// Simplified Bitcoin Chart - Clean Interface
+// Main price chart with Bid Spread MAs on LEFT y-axis and enhanced zoom capability
+
+// Chart configuration with LEFT/RIGHT dual y-axis and massive zoom range
 window.chart = LightweightCharts.createChart(document.getElementById('main-chart'), {
   layout: {
     background: { color: '#131722' },
@@ -21,7 +24,7 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
     mode: LightweightCharts.PriceScaleMode.Normal,
   },
   leftPriceScale: { 
-    visible: true, // Show left scale for MA data
+    visible: true, // LEFT y-axis for Bid Spread MAs
     scaleMargins: {
       top: 0.05,
       bottom: 0.05,
@@ -37,9 +40,11 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
     timeVisible: true, 
     secondsVisible: false,
     borderVisible: false,
-    rightOffset: 50, // Add space on right for better viewing
-    barSpacing: 8, // Increase spacing between candlesticks
-    minBarSpacing: 2, // Minimum spacing when zoomed in
+    rightOffset: 50,
+    barSpacing: 12, // Increased spacing for thicker candlestick bodies
+    minBarSpacing: 0.1, // MUCH tighter for extreme zoom out
+    fixLeftEdge: false,
+    fixRightEdge: false,
   },
   crosshair: {
     mode: LightweightCharts.CrosshairMode.Normal,
@@ -62,106 +67,83 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
       price: true,
     },
   },
+  kineticScroll: {
+    touch: true,
+    mouse: false,
+  },
 });
 
+// Price series on RIGHT y-axis
 const priceSeries = chart.addCandlestickSeries({
-  priceScaleId: 'right',
-  upColor: '#00ff88',
-  downColor: '#ff4976',
-  borderVisible: false,
-  wickUpColor: '#00ff88',
-  wickDownColor: '#ff4976',
-  borderUpColor: '#00ff88',
-  borderDownColor: '#ff4976',
+  priceScaleId: 'right', // RIGHT y-axis for price
+  upColor: '#26a69a',
+  downColor: '#ef5350',
+  borderVisible: true,
+  borderUpColor: '#26a69a',
+  borderDownColor: '#ef5350',
+  wickUpColor: '#26a69a',
+  wickDownColor: '#ef5350',
+  wickVisible: true,
 });
 
-// Keep MA lines on left scale but improve visibility
+// Bid Spread Moving Averages on LEFT y-axis (separate scale!)
+const ma20 = chart.addLineSeries({
+  priceScaleId: 'left', // LEFT y-axis for MAs
+  color: '#00BFFF',
+  lineWidth: 0.5,
+  title: 'MA20',
+  lastValueVisible: false,
+  priceLineVisible: false,
+});
+
 const ma50 = chart.addLineSeries({
-  priceScaleId: 'left',
+  priceScaleId: 'left', // LEFT y-axis for MAs
   color: '#FF6B6B',
-  lineWidth: 2,
-  lineStyle: LightweightCharts.LineStyle.Solid,
+  lineWidth: 0.5,
   title: 'MA50',
   lastValueVisible: false,
   priceLineVisible: false,
 });
 
 const ma100 = chart.addLineSeries({
-  priceScaleId: 'left',
+  priceScaleId: 'left', // LEFT y-axis for MAs
   color: '#4ADF86',
-  lineWidth: 2,
-  lineStyle: LightweightCharts.LineStyle.Solid,
+  lineWidth: 0.5,
   title: 'MA100',
   lastValueVisible: false,
   priceLineVisible: false,
 });
 
 const ma200 = chart.addLineSeries({
-  priceScaleId: 'left',
+  priceScaleId: 'left', // LEFT y-axis for MAs
   color: '#FFD700',
-  lineWidth: 2,
-  lineStyle: LightweightCharts.LineStyle.Solid,
+  lineWidth: 0.5,
   title: 'MA200',
   lastValueVisible: false,
   priceLineVisible: false,
 });
 
-// Indicator panel setup - X-axis locked, Y-axis independent
-window.indicatorChart = LightweightCharts.createChart(document.getElementById('indicator-panel'), {
-  layout: {
-    background: { color: '#131722' },
-    textColor: '#D1D4DC',
-  },
-  grid: {
-    vertLines: { color: '#2B2B43' },
-    horzLines: { color: '#2B2B43' },
-  },
-  rightPriceScale: { 
-    visible: true,
-    scaleMargins: {
-      top: 0.05,
-      bottom: 0.05,
-    },
-    borderVisible: false,
-    autoScale: true, // Allow Y-axis auto-scaling
-    entireTextOnly: false,
-    ticksVisible: true,
-    mode: LightweightCharts.PriceScaleMode.Normal,
-  },
-  timeScale: { 
-    visible: false, // Hide to avoid confusion - follows main chart
-    borderVisible: false,
-  },
-  crosshair: {
-    mode: LightweightCharts.CrosshairMode.Normal,
-  },
-  handleScroll: {
-    mouseWheel: true,     // Enable mouse wheel for Y-axis
-    pressedMouseMove: true, // Enable drag for Y-axis
-    horzTouchDrag: true,   // Enable horizontal touch drag for time sync
-    vertTouchDrag: true,   // Enable vertical touch drag
-  },
-  handleScale: {
-    mouseWheel: true,      // Enable Y-axis zoom with mouse wheel
-    pinch: true,           // Enable pinch zoom for Y-axis
-    axisPressedMouseMove: {
-      time: true,          // Enable X-axis drag for time sync
-      price: true,         // Enable Y-axis drag
-    },
-    axisDoubleClickReset: {
-      time: true,          // Enable X-axis reset for time sync
-      price: true,         // Enable Y-axis reset
-    },
-  },
+// Cumulative Average of ALL L20 spread data
+const cumulativeMA = chart.addLineSeries({
+  priceScaleId: 'left', // LEFT y-axis for MAs
+  color: '#FFFFFF',
+  lineWidth: 0.5,
+  title: 'Cumulative Avg',
+  lastValueVisible: false,
+  priceLineVisible: false,
 });
 
-// Custom indicator series and reference lines
-let customIndicatorSeries = null;
-let topReferenceLine = null;
-let middleReferenceLine = null;
-let bottomReferenceLine = null;
+// Real-time L20 spread line (MA1 - raw data)
+const realtimeL20 = chart.addLineSeries({
+  priceScaleId: 'left', // LEFT y-axis for MAs
+  color: '#FF00FF',
+  lineWidth: 0.5,
+  title: 'MA1',
+  lastValueVisible: false,
+  priceLineVisible: false,
+});
 
-// Timeframe management
+// Restored proper timeframe manager
 class TimeframeManager {
   constructor() {
     this.currentTimeframe = '1m';
@@ -185,36 +167,7 @@ class TimeframeManager {
     return Math.floor(new Date(dateStr).getTime() / 1000);
   }
 
-  showLoading() {
-    document.getElementById('loading-indicator').style.display = 'block';
-  }
-
-  hideLoading() {
-    document.getElementById('loading-indicator').style.display = 'none';
-  }
-
-  setActiveDropdown(timeframe) {
-    const dropdown = document.getElementById('timeframe-dropdown');
-    if (dropdown) {
-      dropdown.value = timeframe;
-    }
-  }
-
-  disableDropdown() {
-    const dropdown = document.getElementById('timeframe-dropdown');
-    if (dropdown) {
-      dropdown.disabled = true;
-    }
-  }
-
-  enableDropdown() {
-    const dropdown = document.getElementById('timeframe-dropdown');
-    if (dropdown) {
-      dropdown.disabled = false;
-    }
-  }
-
-  // Aggregate data maintaining full MA technical accuracy and create synthetic OHLC
+  // Aggregate data maintaining full MA technical accuracy
   aggregateData(data, timeframeSeconds) {
     // For 1-minute data, create synthetic OHLC from single price points
     if (timeframeSeconds === 60) {
@@ -267,23 +220,21 @@ class TimeframeManager {
         const lowPrice = Math.min(...bucket.dataPoints.map(p => p.price));
         
         // SOLUTION: Keep MAs from close time to maintain exact same values
-        // This ensures MAs remain identical across all timeframes
         const closeMAs = closePoint;
         
         // CRITICAL: Use consistent bucket timestamp for all timeframes
         const bucketTimestamp = new Date(bucketTime * 1000).toISOString();
         
         aggregated.push({
-          time: bucketTimestamp, // Consistent bucket timestamp
+          time: bucketTimestamp,
           // Proper OHLC data for candlestick display
           open: openPoint.price,
           high: highPrice,
           low: lowPrice,
           close: closePoint.price,
-          price: closePoint.price, // Keep for compatibility
+          price: closePoint.price,
           
           // Bid Spread L20 MAs STAY THE SAME - using exact values from close time
-          // This ensures MAs remain identical across all timeframes
           ma_50: closeMAs.ma_50,
           ma_100: closeMAs.ma_100,
           ma_200: closeMAs.ma_200,
@@ -310,15 +261,12 @@ class TimeframeManager {
     const aggregatedPriceData = this.aggregateData(data, timeframeSeconds);
 
     const priceData = [];
+    const ma20Data = [];
     const ma50Data = [];
     const ma100Data = [];
     const ma200Data = [];
-    const indicatorData = [];
-
-    // Set loading flag to skip heavy indicator calculations during initial load
-    if (!isUpdate && aggregatedPriceData.length > 1000) {
-      this.isInitialLoad = true;
-    }
+    const cumulativeData = [];
+    const realtimeData = [];
 
     // Process aggregated price data for price series
     for (let i = 0; i < aggregatedPriceData.length; i++) {
@@ -329,7 +277,7 @@ class TimeframeManager {
       if (isUpdate && t <= this.lastTimestamp) continue;
       
       // CRITICAL: Create all data points with IDENTICAL timestamps
-      const sharedTime = t; // Ensure all series use the exact same timestamp
+      const sharedTime = t;
       
       // Price data (main chart) - candlestick format
       priceData.push({ 
@@ -344,6 +292,9 @@ class TimeframeManager {
     }
 
     // Process RAW MINUTE DATA for MAs - NEVER CHANGES regardless of timeframe
+    let cumulativeSum = 0;
+    let cumulativeCount = 0;
+    
     for (let i = 0; i < rawMinuteData.length; i++) {
       const d = rawMinuteData[i];
       const t = this.toUnixTimestamp(d.time);
@@ -353,7 +304,24 @@ class TimeframeManager {
       
       const sharedTime = t;
       
-            // MA data ALWAYS from 1-minute data - IDENTICAL across all timeframes
+      // MA data ALWAYS from 1-minute data - IDENTICAL across all timeframes
+      
+      // Calculate MA20 from L20 spread data (20-period moving average)
+      if (d.spread_avg_L20_pct !== null && d.spread_avg_L20_pct !== undefined && i >= 19) {
+        const recent20 = rawMinuteData.slice(i - 19, i + 1);
+        const validSpreadData = recent20.filter(item => item.spread_avg_L20_pct !== null && item.spread_avg_L20_pct !== undefined);
+        
+        if (validSpreadData.length === 20) {
+          const sum = validSpreadData.reduce((acc, item) => acc + parseFloat(item.spread_avg_L20_pct), 0);
+          const ma20Value = sum / 20;
+          
+          ma20Data.push({
+            time: sharedTime,
+            value: ma20Value
+          });
+        }
+      }
+      
       if (d.ma_50 !== null && d.ma_50 !== undefined) {
         ma50Data.push({ 
           time: sharedTime, 
@@ -375,12 +343,23 @@ class TimeframeManager {
         });
       }
       
-      // Indicator data from raw minute data as well
-      const indicatorValue = this.calculateCustomIndicator(d);
-      if (indicatorValue !== null) {
-        indicatorData.push({ 
-          time: sharedTime, // EXACT same timestamp as price data
-          value: indicatorValue
+      // MA1 (real-time L20 spread data) - same pattern as other MAs
+      if (d.spread_avg_L20_pct !== null && d.spread_avg_L20_pct !== undefined) {
+        realtimeData.push({
+          time: sharedTime,
+          value: parseFloat(d.spread_avg_L20_pct)
+        });
+      }
+      
+      // Calculate cumulative average of L20 spread data
+      if (d.spread_avg_L20_pct !== null && d.spread_avg_L20_pct !== undefined) {
+        cumulativeSum += parseFloat(d.spread_avg_L20_pct);
+        cumulativeCount++;
+        const cumulativeAverage = cumulativeSum / cumulativeCount;
+        
+        cumulativeData.push({
+          time: sharedTime,
+          value: cumulativeAverage
         });
       }
     }
@@ -388,435 +367,43 @@ class TimeframeManager {
     // Log timestamp alignment for debugging
     if (priceData.length > 0 && ma50Data.length > 0) {
       console.log(`🕐 ${this.currentTimeframe} Data Processing:`);
-      console.log(`   Candlestick Data: ${priceData.length} points (OHLC aggregated by timeframe)`);
-      console.log(`   Bid Spread L20 MA Data: ${ma50Data.length} points (always 1-minute granularity)`);
-      console.log(`   Result: Spread MAs stay identical across timeframes, OHLC created from price points`);
+      console.log(`   Candlestick Data: ${priceData.length} points (RIGHT y-axis)`);
+      console.log(`   Bid Spread L20 MA Data: MA20(${ma20Data.length}), MA50(${ma50Data.length}), MA100(${ma100Data.length}), MA200(${ma200Data.length}) points (LEFT y-axis)`);
+      console.log(`   Cumulative L20 Avg: ${cumulativeData.length} points (LEFT y-axis)`);
+      console.log(`   Real-time L20: ${realtimeData.length} points (LEFT y-axis)`);
     }
 
-    // Clear loading flag
-    this.isInitialLoad = false;
-
-           if (isUpdate) {
-         // Add new data points
-         priceData.forEach(p => priceSeries.update(p));
-         ma50Data.forEach(p => ma50.update(p));
-        ma100Data.forEach(p => ma100.update(p));
-        ma200Data.forEach(p => ma200.update(p));
-        
-        // Update indicator panel with perfect time sync
-        if (customIndicatorSeries && indicatorData.length > 0) {
-          indicatorData.forEach(p => customIndicatorSeries.update(p));
-          
-          // Update reference lines with exact same timestamps
-          if (topReferenceLine && indicatorData.length > 0) {
-            indicatorData.forEach(p => topReferenceLine.update({ time: p.time, value: 1.0 }));
-          }
-          if (middleReferenceLine && indicatorData.length > 0) {
-            indicatorData.forEach(p => middleReferenceLine.update({ time: p.time, value: 0.5 }));
-          }
-          if (bottomReferenceLine && indicatorData.length > 0) {
-            indicatorData.forEach(p => bottomReferenceLine.update({ time: p.time, value: 0.0 }));
-          }
-        }
-      } else {
-        // Set complete dataset
-        priceSeries.setData(priceData);
-        ma50.setData(ma50Data);
-        ma100.setData(ma100Data);
-        ma200.setData(ma200Data);
-        
-        // Set indicator panel data (optimized)
-        if (customIndicatorSeries && indicatorData.length > 0) {
-          customIndicatorSeries.setData(indicatorData);
-          
-          // Simplified reference lines (only set once)
-          this.setReferenceLinesOnce(indicatorData);
-        }
+    if (isUpdate) {
+      // Add new data points
+      if (priceData.length > 0) {
+        priceData.forEach(p => priceSeries.update(p));
       }
-
-      // Throttled status updates
-      if (!isUpdate || this.shouldUpdateStatus()) {
-        this.updateSpreadStatus(rawMinuteData);
-      }
-    
-    // Force immediate and aggressive time scale sync
-    setTimeout(() => {
-      this.syncTimeScales();
-      
-      // Double-check alignment with visible ranges
-      const mainRange = chart.timeScale().getVisibleTimeRange();
-      const indicatorRange = indicatorChart.timeScale().getVisibleTimeRange();
-      
-      if (mainRange && indicatorRange) {
-        console.log('🔍 Time Range Check:');
-        console.log(`   Main: ${new Date(mainRange.from * 1000).toISOString()} → ${new Date(mainRange.to * 1000).toISOString()}`);
-        console.log(`   Indicator: ${new Date(indicatorRange.from * 1000).toISOString()} → ${new Date(indicatorRange.to * 1000).toISOString()}`);
-        
-        // Force perfect alignment if they don't match
-        if (Math.abs(mainRange.from - indicatorRange.from) > 1 || Math.abs(mainRange.to - indicatorRange.to) > 1) {
-          console.log('❌ Time ranges misaligned - forcing correction');
-          indicatorChart.timeScale().setVisibleTimeRange(mainRange);
-        } else {
-          console.log('✅ Time ranges perfectly aligned');
-        }
-      }
-      
-      console.log('🔗 Charts synchronized and aligned');
-    }, 200);
-  }
-
-  // Helper to set reference lines using exact same timestamps as indicator
-  setReferenceLinesOnce(indicatorData) {
-    if (this.referenceLinesSet || indicatorData.length === 0) return;
-    
-    console.log(`🎯 Setting reference lines with ${indicatorData.length} aligned timestamps`);
-    
-    if (topReferenceLine) {
-      const refData = indicatorData.map(d => ({ time: d.time, value: 1.0 }));
-      topReferenceLine.setData(refData);
-    }
-    if (middleReferenceLine) {
-      const refData = indicatorData.map(d => ({ time: d.time, value: 0.5 }));
-      middleReferenceLine.setData(refData);
-    }
-    if (bottomReferenceLine) {
-      const refData = indicatorData.map(d => ({ time: d.time, value: 0.0 }));
-      bottomReferenceLine.setData(refData);
-    }
-    
-    this.referenceLinesSet = true;
-    console.log('✅ Reference lines aligned with indicator timestamps');
-  }
-
-  // Helper to throttle status updates  
-  shouldUpdateStatus() {
-    if (!this.lastStatusUpdate) this.lastStatusUpdate = 0;
-    const now = Date.now();
-    if (now - this.lastStatusUpdate > 3000) { // 3 second throttle
-      this.lastStatusUpdate = now;
-      return true;
-    }
-    return false;
-  }
-
-  // Bid Spread L20 MA Crossover - Dynamic MA-Based Confirmation
-  calculateCustomIndicator(dataPoint) {
-    const { ma_50, ma_100, ma_200 } = dataPoint;
-    
-    // Quick validation
-    if (ma_50 === null || ma_100 === null || ma_200 === null) {
-      return null;
-    }
-    
-    // Skip during initial load to improve performance
-    if (this.isInitialLoad) {
-      return 0.5; // Return neutral during loading
-    }
-    
-    // Initialize enhanced state for Bid Spread L20 MA-based tracking
-    if (!this.indicatorState) {
-      this.indicatorState = {
-        lastSpreadColor: '#26a69a',
-        crossoverHistory: [],
-        confirmedState: 0.5, // Start neutral
-        pendingCross: null,
-        candlesSinceCross: 0,
-        maGapHistory: [], // Track MA separation changes
-        lastMAGap: null
-      };
-    }
-    
-    // Determine current Bid Spread L20 MA positioning
-    const ma50AboveMA200 = ma_50 > ma_200;
-    const ma100AboveMA200 = ma_100 > ma_200;
-    
-    // Current raw state (what it would be without delay)
-    let currentRawState;
-    if (ma50AboveMA200 && ma100AboveMA200) {
-      currentRawState = 1.0; // Both spread MAs above MA200 (higher spreads)
-    } else if (!ma50AboveMA200 && !ma100AboveMA200) {
-      currentRawState = 0.0; // Both spread MAs below MA200 (lower spreads)
+      ma20Data.forEach(p => ma20.update(p));
+      ma50Data.forEach(p => ma50.update(p));
+      ma100Data.forEach(p => ma100.update(p));
+      ma200Data.forEach(p => ma200.update(p));
+      cumulativeData.forEach(p => cumulativeMA.update(p));
+      realtimeData.forEach(p => realtimeL20.update(p));
     } else {
-      currentRawState = 0.5; // Mixed
-    }
-    
-    // Calculate dynamic confirmation period based on MA behavior
-    const dynamicConfirmation = this.calculateMABasedConfirmation(ma_50, ma_100, ma_200);
-    
-    // Track crossover history to detect changes
-    this.indicatorState.crossoverHistory.push({
-      ma50Above: ma50AboveMA200,
-      ma100Above: ma100AboveMA200,
-      rawState: currentRawState,
-      timestamp: Date.now(),
-      ma50: ma_50,
-      ma100: ma_100,
-      ma200: ma_200
-    });
-    
-    // Keep only recent history (last 50 candles should be enough)
-    if (this.indicatorState.crossoverHistory.length > 50) {
-      this.indicatorState.crossoverHistory.shift();
-    }
-    
-    // Detect if we have a new crossover (change from previous confirmed state)
-    const previousConfirmedState = this.indicatorState.confirmedState;
-    
-    // Check if current raw state is different from confirmed state and we're not already tracking a pending cross
-    if (currentRawState !== previousConfirmedState && currentRawState !== 0.5 && !this.indicatorState.pendingCross) {
-      // New crossover detected - start tracking with dynamic confirmation
-      this.indicatorState.pendingCross = {
-        targetState: currentRawState,
-        startCandle: this.indicatorState.crossoverHistory.length - 1,
-        candlesRequired: dynamicConfirmation
-      };
-      this.indicatorState.candlesSinceCross = 1;
-      console.log(`🔄 New Bid Spread L20 MA crossover detected: ${currentRawState === 1.0 ? 'HIGH SPREAD' : 'LOW SPREAD'} - waiting for ${dynamicConfirmation} candle confirmation (MA-based)`);
-    }
-    
-    // If we have a pending crossover, check confirmation progress
-    if (this.indicatorState.pendingCross) {
-      this.indicatorState.candlesSinceCross++;
+      // Set complete dataset
+      priceSeries.setData(priceData);
+      ma20.setData(ma20Data);
+      ma50.setData(ma50Data);
+      ma100.setData(ma100Data);
+      ma200.setData(ma200Data);
+      cumulativeMA.setData(cumulativeData);
+      realtimeL20.setData(realtimeData);
       
-      // Check if the crossover is still valid (MAs haven't crossed back)
-      if (currentRawState === this.indicatorState.pendingCross.targetState) {
-        // Crossover still valid, check if we've waited long enough
-        if (this.indicatorState.candlesSinceCross >= this.indicatorState.pendingCross.candlesRequired) {
-          // Confirmation complete - update confirmed state
-          this.indicatorState.confirmedState = this.indicatorState.pendingCross.targetState;
-          console.log(`✅ Bid Spread L20 MA Crossover CONFIRMED after ${this.indicatorState.candlesSinceCross} candles: ${this.indicatorState.confirmedState === 1.0 ? 'HIGH SPREAD' : 'LOW SPREAD'}`);
-          this.indicatorState.pendingCross = null;
-          this.indicatorState.candlesSinceCross = 0;
-          
-          // Update indicator line color when all MAs above 0.03
-          this.updateIndicatorLineColor(ma_50, ma_100, ma_200);
-        } else {
-          // Still waiting for confirmation
-          const remaining = this.indicatorState.pendingCross.candlesRequired - this.indicatorState.candlesSinceCross;
-          if (remaining % 5 === 0 || remaining <= 3) { // Log every 5 candles or last 3
-            console.log(`⏳ Bid Spread L20 MA crossover confirmation: ${this.indicatorState.candlesSinceCross}/${this.indicatorState.pendingCross.candlesRequired} candles (${remaining} remaining)`);
-          }
-        }
-      } else {
-        // Crossover invalidated - MAs crossed back before confirmation
-        console.log(`❌ Bid Spread L20 MA Crossover INVALIDATED after ${this.indicatorState.candlesSinceCross} candles - MAs crossed back`);
-        this.indicatorState.pendingCross = null;
-        this.indicatorState.candlesSinceCross = 0;
-      }
+      // Fit content to show all data
+      chart.timeScale().fitContent();
     }
-    
-    // Update spread color (for status display)
-    if (ma_50 > 0.03) {
-      this.indicatorState.lastSpreadColor = '#ff4444'; // Red
-    } else if (ma_50 > 0.02) {
-      this.indicatorState.lastSpreadColor = '#ff8800'; // Orange
-    } else if (ma_50 > 0.01) {
-      this.indicatorState.lastSpreadColor = '#ffcc00'; // Yellow
-    } else {
-      this.indicatorState.lastSpreadColor = '#26a69a'; // Green
-    }
-    
-    // Update indicator line color based on MA values
-    this.updateIndicatorLineColor(ma_50, ma_100, ma_200);
-    
-    // Return the confirmed state (not the raw state)
-    return this.indicatorState.confirmedState;
-  }
 
-  // Calculate dynamic confirmation based purely on MA behavior
-  calculateMABasedConfirmation(ma_50, ma_100, ma_200) {
-    // Base confirmation periods by timeframe
-    const baseConfirmation = {
-      '1m': 16,
-      '5m': 12, 
-      '15m': 8,
-      '1h': 6,
-      '4h': 4,
-      '1d': 3
-    };
-    
-    const base = baseConfirmation[this.currentTimeframe] || 16;
-    
-    // Factor 1: MA Separation Strength (60% weight)
-    const separation = Math.abs(ma_50 - ma_200) / ma_200;
-    let strengthFactor;
-    if (separation > 0.01) {        // 1%+ separation = very strong
-      strengthFactor = 0.5;
-    } else if (separation > 0.005) { // 0.5%+ = strong  
-      strengthFactor = 0.7;
-    } else if (separation > 0.002) { // 0.2%+ = medium
-      strengthFactor = 1.0;
-    } else {                        // <0.2% = weak
-      strengthFactor = 1.5;
-    }
-    
-    // Factor 2: MA Convergence Speed (40% weight)
-    const convergenceSpeed = this.getMAConvergenceSpeed();
-    let speedFactor;
-    if (convergenceSpeed > 0.003) {     // Fast convergence
-      speedFactor = 0.7;
-    } else if (convergenceSpeed > 0.001) { // Medium speed
-      speedFactor = 1.0;
-    } else {                          // Slow convergence
-      speedFactor = 1.3;
-    }
-    
-    // Combine factors (weighted average)
-    const finalMultiplier = (strengthFactor * 0.6) + (speedFactor * 0.4);
-    const confirmationCandles = Math.max(4, Math.min(25, Math.round(base * finalMultiplier)));
-    
-    console.log(`📊 MA-Based Confirmation: ${confirmationCandles} candles (separation: ${(separation * 100).toFixed(3)}%, speed: ${convergenceSpeed.toFixed(4)}, factors: ${strengthFactor.toFixed(2)}/${speedFactor.toFixed(2)})`);
-    
-    return confirmationCandles;
-  }
-
-  // Calculate how fast the MAs converged
-  getMAConvergenceSpeed() {
-    // Track MA gap changes for speed calculation
-    const currentGap = Math.abs(this.indicatorState.crossoverHistory[this.indicatorState.crossoverHistory.length - 1]?.ma50 - 
-                               this.indicatorState.crossoverHistory[this.indicatorState.crossoverHistory.length - 1]?.ma200) || 0;
-    
-    this.indicatorState.maGapHistory.push(currentGap);
-    
-    // Keep only last 10 gaps for speed calculation
-    if (this.indicatorState.maGapHistory.length > 10) {
-      this.indicatorState.maGapHistory.shift();
-    }
-    
-    // Need at least 5 points to calculate speed
-    if (this.indicatorState.maGapHistory.length < 5) {
-      return 0.001; // Default medium speed
-    }
-    
-    // Calculate average change per candle over last 5 candles
-    const recent = this.indicatorState.maGapHistory.slice(-5);
-    let totalChange = 0;
-    for (let i = 1; i < recent.length; i++) {
-      totalChange += Math.abs(recent[i] - recent[i-1]);
-    }
-    
-    return totalChange / (recent.length - 1);
-  }
-
-  // Update indicator line color when all MAs are above 0.03
-  updateIndicatorLineColor(ma_50, ma_100, ma_200) {
-    if (!customIndicatorSeries) return;
-    
-    // Check if all MAs are above 0.03
-    const allMAsAbove003 = ma_50 > 0.03 && ma_100 > 0.03 && ma_200 > 0.03;
-    
-    // Store current color state to avoid unnecessary updates
-    if (!this.lastIndicatorColor) {
-      this.lastIndicatorColor = '#00d4ff'; // Default blue
-    }
-    
-    const newColor = allMAsAbove003 ? '#00ff00' : '#00d4ff'; // Bright green or blue
-    
-    // Only update if color changed
-    if (newColor !== this.lastIndicatorColor) {
-      customIndicatorSeries.applyOptions({
-        color: newColor
-      });
-      this.lastIndicatorColor = newColor;
-      
-      console.log(`🎨 Indicator line color: ${allMAsAbove003 ? 'BRIGHT GREEN (all MAs > 0.03)' : 'BLUE (normal)'}`);
-    }
-  }
-
-  // Update spread status display (ultra-light)
-  updateSpreadStatus(data) {
-    if (data.length === 0 || !this.indicatorState || this.isInitialLoad) return;
-    
-    // Skip during heavy processing
-    if (data.length > 5000) return;
-    
-    const latest = data[data.length - 1];
-    const spreadValue = latest.ma_50;
-    
-    // Use requestAnimationFrame for smooth DOM updates
-    if (!this.pendingStatusUpdate) {
-      this.pendingStatusUpdate = true;
-      requestAnimationFrame(() => {
-        this.updateStatusDOM(spreadValue);
-        this.pendingStatusUpdate = false;
-      });
-    }
-  }
-
-  updateStatusDOM(spreadValue) {
-    const spreadElement = document.getElementById('spread-value');
-    const statusElement = document.getElementById('spread-status-text');
-    
-    if (spreadElement && spreadValue !== null) {
-      spreadElement.textContent = spreadValue.toFixed(4);
-      spreadElement.style.color = this.indicatorState.lastSpreadColor;
-    }
-    
-    if (statusElement && this.indicatorState && this.rawData.length > 0) {
-      // Get latest MA data to determine current status
-      const latest = this.rawData[this.rawData.length - 1];
-      if (latest && latest.ma_50 !== null && latest.ma_100 !== null && latest.ma_200 !== null) {
-        const ma50AboveMA200 = latest.ma_50 > latest.ma_200;
-        const ma100AboveMA200 = latest.ma_100 > latest.ma_200;
-        
-        let statusText;
-        
-        // Check if we're in a pending confirmation period
-        if (this.indicatorState.pendingCross) {
-          const remaining = this.indicatorState.pendingCross.candlesRequired - this.indicatorState.candlesSinceCross;
-          const targetDirection = this.indicatorState.pendingCross.targetState === 1.0 ? 'BULLISH' : 'BEARISH';
-          statusText = `CONFIRMING ${targetDirection} (${remaining} candles left)`;
-        } else {
-          // Show confirmed state
-          if (ma50AboveMA200 && ma100AboveMA200) {
-            statusText = this.indicatorState.confirmedState === 1.0 ? "CONFIRMED BULLISH" : "BULLISH - Not Confirmed";
-          } else if (!ma50AboveMA200 && !ma100AboveMA200) {
-            statusText = this.indicatorState.confirmedState === 0.0 ? "CONFIRMED BEARISH" : "BEARISH - Not Confirmed";
-          } else {
-            statusText = "MIXED - MAs Diverging";
-          }
-        }
-        
-        statusElement.textContent = statusText;
-        statusElement.style.color = this.indicatorState.lastSpreadColor;
-      } else {
-        statusElement.textContent = "LOADING...";
-      }
-    }
-  }
-
-  // Force sync indicator chart to main chart with full configuration
-  syncTimeScales() {
-    try {
-      const timeRange = chart.timeScale().getVisibleTimeRange();
-      const logicalRange = chart.timeScale().getVisibleLogicalRange();
-      
-      if (timeRange) {
-        indicatorChart.timeScale().setVisibleTimeRange(timeRange);
-      }
-      
-      if (logicalRange) {
-        indicatorChart.timeScale().setVisibleLogicalRange(logicalRange);
-      }
-      
-      // Force identical time scale configuration
-      const mainOptions = chart.timeScale().options();
-      indicatorChart.timeScale().applyOptions({
-        rightOffset: mainOptions.rightOffset,
-        barSpacing: mainOptions.barSpacing,
-        minBarSpacing: mainOptions.minBarSpacing,
-      });
-      
-      console.log(`🔗 Sync completed - TF: ${this.currentTimeframe}`);
-    } catch (err) {
-      console.error('❌ Sync failed:', err);
-    }
+    console.log(`✅ Chart updated with ${priceData.length} candles and bid spread MAs`);
   }
 
   async initializeChart() {
     try {
-      this.showLoading();
-      console.log('🚀 Loading chart...');
+      console.log('🚀 Loading chart with bid spread data...');
       
       // Phase 1: Load recent data first (fast startup)
       const recentRes = await fetch('https://btc-spread-test-pipeline.onrender.com/recent.json');
@@ -844,12 +431,10 @@ class TimeframeManager {
         const fallbackData = await fallbackRes.json();
         this.rawData = fallbackData;
         this.processAndSetData(fallbackData);
-        console.log('✅ Fallback loaded');
+        console.log('✅ Fallback data loaded');
       } catch (fallbackErr) {
         console.error('❌ All endpoints failed');
       }
-    } finally {
-      this.hideLoading();
     }
   }
 
@@ -898,65 +483,21 @@ class TimeframeManager {
   switchTimeframe(timeframe) {
     if (timeframe === this.currentTimeframe) return;
     
-    this.showLoading();
-    this.disableDropdown();
+    console.log(`🔄 Switching to ${timeframe} timeframe`);
     
-    console.log(`🔄 Switching to ${timeframe} timeframe - ensuring perfect alignment`);
-    
-    const oldTimeframe = this.currentTimeframe;
     this.currentTimeframe = timeframe;
-    this.setActiveDropdown(timeframe);
     
-    // Reset sync state for clean timeframe switch
-    this.referenceLinesSet = false;
+    // Update dropdown
+    const dropdown = document.getElementById('timeframe-dropdown');
+    if (dropdown) {
+      dropdown.value = timeframe;
+    }
     
-    // Reprocess data with new timeframe
-    this.lastTimestamp = 0; // Reset to reprocess all data
+    // Reset timestamp and reprocess data
+    this.lastTimestamp = 0;
     this.processAndSetData(this.rawData);
     
-    // Aggressive multi-stage synchronization after timeframe switch
-    setTimeout(() => {
-      console.log(`📊 Stage 1: Initial sync from ${oldTimeframe} to ${timeframe}`);
-      this.syncTimeScales();
-      
-      // Get ranges for verification
-      const mainRange = chart.timeScale().getVisibleTimeRange();
-      const indicatorRange = indicatorChart.timeScale().getVisibleTimeRange();
-      
-      if (mainRange && indicatorRange) {
-        console.log(`🕐 Post-switch ranges:`);
-        console.log(`   Main: ${new Date(mainRange.from * 1000).toISOString()} → ${new Date(mainRange.to * 1000).toISOString()}`);
-        console.log(`   Indicator: ${new Date(indicatorRange.from * 1000).toISOString()} → ${new Date(indicatorRange.to * 1000).toISOString()}`);
-        
-        // Force exact alignment
-        indicatorChart.timeScale().setVisibleTimeRange(mainRange);
-      }
-    }, 200);
-    
-    // Second sync wave
-    setTimeout(() => {
-      console.log(`📊 Stage 2: Secondary sync verification`);
-      this.syncTimeScales();
-      
-      // Final verification
-      const finalMain = chart.timeScale().getVisibleTimeRange();
-      const finalIndicator = indicatorChart.timeScale().getVisibleTimeRange();
-      
-      if (finalMain && finalIndicator) {
-        const timeDiff = Math.abs(finalMain.from - finalIndicator.from);
-        if (timeDiff > 1) {
-          console.log(`❌ Still misaligned by ${timeDiff}s - forcing correction`);
-          indicatorChart.timeScale().setVisibleTimeRange(finalMain);
-        } else {
-          console.log(`✅ Perfect alignment achieved (diff: ${timeDiff}s)`);
-        }
-      }
-    }, 600);
-    
-    this.hideLoading();
-    this.enableDropdown();
-    
-    console.log(`✅ Switched to ${this.timeframes[timeframe].label} - Multi-stage sync initiated`);
+    console.log(`✅ Switched to ${this.timeframes[timeframe].label}`);
   }
 
   startUpdateCycle() {
@@ -964,7 +505,7 @@ class TimeframeManager {
     if (this.updateInterval) clearInterval(this.updateInterval);
     if (this.refreshInterval) clearInterval(this.refreshInterval);
 
-    // Update with recent data every 30 seconds (reduced frequency)
+    // Update with recent data every 30 seconds
     this.updateInterval = setInterval(() => this.fetchAndUpdate(), 30000);
 
     // Refresh complete historical data every hour
@@ -972,171 +513,15 @@ class TimeframeManager {
   }
 }
 
-// Global timeframe manager instance
-const timeframeManager = new TimeframeManager();
+// Global instance
+const manager = new TimeframeManager();
 
-// Global function for timeframe buttons
+// Global function for timeframe dropdown
 function setTimeframe(timeframe) {
-  timeframeManager.switchTimeframe(timeframe);
+  manager.switchTimeframe(timeframe);
 }
 
-// Helper function to setup custom indicators
-function setupCustomIndicator(indicatorConfig) {
-  // Remove existing series if any
-  if (customIndicatorSeries) {
-    indicatorChart.removeSeries(customIndicatorSeries);
-  }
-  if (topReferenceLine) {
-    indicatorChart.removeSeries(topReferenceLine);
-  }
-  if (middleReferenceLine) {
-    indicatorChart.removeSeries(middleReferenceLine);
-  }
-  if (bottomReferenceLine) {
-    indicatorChart.removeSeries(bottomReferenceLine);
-  }
-
-  // Add reference lines for better visualization
-  topReferenceLine = indicatorChart.addLineSeries({
-    color: '#444444',
-    lineWidth: 1,
-    lineStyle: LightweightCharts.LineStyle.Dashed,
-    priceLineVisible: false,
-    lastValueVisible: false,
-  });
-
-  middleReferenceLine = indicatorChart.addLineSeries({
-    color: '#666666',
-    lineWidth: 1,
-    lineStyle: LightweightCharts.LineStyle.Dotted,
-    priceLineVisible: false,
-    lastValueVisible: false,
-  });
-
-  bottomReferenceLine = indicatorChart.addLineSeries({
-    color: '#444444',
-    lineWidth: 1,
-    lineStyle: LightweightCharts.LineStyle.Dashed,
-    priceLineVisible: false,
-    lastValueVisible: false,
-  });
-
-  // Create main indicator series
-  customIndicatorSeries = indicatorChart.addLineSeries({
-    color: indicatorConfig.color || '#00d4ff',
-    lineWidth: indicatorConfig.lineWidth || 3,
-    title: indicatorConfig.title || 'Custom Indicator'
-  });
-
-  // Update the calculation function
-  timeframeManager.calculateCustomIndicator = indicatorConfig.calculate;
-
-  // Reprocess current data with new indicator
-  timeframeManager.processAndSetData(timeframeManager.rawData);
-
-  console.log(`✅ Custom indicator "${indicatorConfig.title}" configured and active!`);
-}
-
-// Setup chart synchronization - main chart controls indicator
-function setupChartSync() {
-  console.log('🔗 Setting up chart synchronization...');
-  
-  // Only sync FROM main chart TO indicator chart (one-way)
-  chart.timeScale().subscribeVisibleTimeRangeChange(() => {
-    try {
-      const range = chart.timeScale().getVisibleTimeRange();
-      if (range) {
-        indicatorChart.timeScale().setVisibleTimeRange(range);
-        console.log('📅 Synced to range:', range);
-      }
-    } catch (e) {
-      console.error('❌ Sync error:', e);
-    }
-  });
-
-  // Also sync logical range for zoom levels
-  chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
-    try {
-      const logicalRange = chart.timeScale().getVisibleLogicalRange();
-      if (logicalRange) {
-        indicatorChart.timeScale().setVisibleLogicalRange(logicalRange);
-      }
-    } catch (e) {
-      console.error('❌ Logical sync error:', e);
-    }
-  });
-
-  console.log('✅ Chart sync listeners attached');
-}
-
-// Initialize chart and start update cycle
-timeframeManager.initializeChart().then(() => {
-  timeframeManager.startUpdateCycle();
-  
-  // Setup the Bid Spread L20 MA Crossover Indicator
-  setupCustomIndicator({
-    type: 'line',
-    title: 'Bid Spread L20 MA Crossover',
-    color: '#00d4ff',
-    lineWidth: 3,
-    calculate: timeframeManager.calculateCustomIndicator.bind(timeframeManager)
-  });
-  
-  // Setup synchronization AFTER all data is loaded
-  setTimeout(() => {
-    setupChartSync();
-    
-    // Force immediate lock
-    const timeRange = chart.timeScale().getVisibleTimeRange();
-    const logicalRange = chart.timeScale().getVisibleLogicalRange();
-    
-    if (timeRange) {
-      indicatorChart.timeScale().setVisibleTimeRange(timeRange);
-      console.log('🔗 Locked time range:', timeRange);
-    }
-    
-    if (logicalRange) {
-      indicatorChart.timeScale().setVisibleLogicalRange(logicalRange);
-      console.log('🔗 Locked logical range:', logicalRange);
-    }
-    
-    // Final alignment verification and correction
-    const finalMainRange = chart.timeScale().getVisibleTimeRange();
-    const finalIndicatorRange = indicatorChart.timeScale().getVisibleTimeRange();
-    
-    if (finalMainRange && finalIndicatorRange) {
-      console.log('🎯 Final Alignment Check:');
-      console.log(`   Main Chart: ${new Date(finalMainRange.from * 1000).toISOString()} → ${new Date(finalMainRange.to * 1000).toISOString()}`);
-      console.log(`   Indicator: ${new Date(finalIndicatorRange.from * 1000).toISOString()} → ${new Date(finalIndicatorRange.to * 1000).toISOString()}`);
-      
-      // Force absolute perfect alignment
-      indicatorChart.timeScale().setVisibleTimeRange(finalMainRange);
-      
-      setTimeout(() => {
-        const verifyRange = indicatorChart.timeScale().getVisibleTimeRange();
-        if (verifyRange) {
-          console.log(`🔒 Final Sync: ${new Date(verifyRange.from * 1000).toISOString()} → ${new Date(verifyRange.to * 1000).toISOString()}`);
-        }
-      }, 100);
-    }
-    
-    console.log('✅ Charts are now LOCKED TOGETHER!');
-    console.log('📊 X-axis: Locked together (scroll main chart)');
-    console.log('📊 Y-axis: Independent (scroll/zoom indicator panel)');
-  }, 1000);
-  
-  console.log('📊 Bid Spread L20 MA Crossover indicator loaded (20 candle confirmation delay)');
-  console.log('🎯 Logic: 1.0=Both Spread MAs above MA200 (Higher spreads) | 0.0=Both below (Lower spreads) | 0.5=Mixed/Unconfirmed');
-  console.log('⏱️ Confirmation: Waits 20 candles after crossover before confirming signal');
-  console.log('🎮 Controls:');
-  console.log('   • Horizontal scroll/zoom: Use MAIN chart');
-  console.log('   • Vertical scroll/zoom: Use INDICATOR panel');
-  console.log('   • Mouse wheel on indicator: Y-axis zoom');
-  console.log('   • Right-click drag on indicator: Y-axis pan');
-  console.log('   • Use zoom buttons: +/- for zoom, ⌐ for fit all');
-});
-
-// Zoom and navigation functions
+// FIXED: Enhanced zoom functions with MASSIVE zoom range like TradingView
 function zoomIn() {
   if (window.chart) {
     const timeScale = window.chart.timeScale();
@@ -1144,7 +529,7 @@ function zoomIn() {
     if (visibleRange) {
       const middle = (visibleRange.from + visibleRange.to) / 2;
       const range = visibleRange.to - visibleRange.from;
-      const newRange = range * 0.7; // Zoom in by 30%
+      const newRange = range * 0.6; // Zoom in
       timeScale.setVisibleRange({
         from: middle - newRange / 2,
         to: middle + newRange / 2
@@ -1160,7 +545,7 @@ function zoomOut() {
     if (visibleRange) {
       const middle = (visibleRange.from + visibleRange.to) / 2;
       const range = visibleRange.to - visibleRange.from;
-      const newRange = range * 1.3; // Zoom out by 30%
+      const newRange = range * 1.8; // Zoom out MORE
       timeScale.setVisibleRange({
         from: middle - newRange / 2,
         to: middle + newRange / 2
@@ -1173,42 +558,9 @@ function fitContent() {
   if (window.chart) {
     window.chart.timeScale().fitContent();
   }
-  if (window.indicatorChart) {
-    window.indicatorChart.timeScale().fitContent();
-  }
 }
 
-// Enhanced mobile touch handling with independent axis control
-function addMobileOptimizations() {
-  const chartElement = document.getElementById('main-chart');
-  const indicatorElement = document.getElementById('indicator-panel');
-  
-  if (chartElement && indicatorElement) {
-    // Enhanced touch handling for both charts
-    [chartElement, indicatorElement].forEach((element, index) => {
-      const chart = index === 0 ? window.chart : window.indicatorChart;
-      
-      element.addEventListener('touchstart', (e) => {
-        // Allow all touch interactions
-        e.stopPropagation();
-      }, { passive: true });
-      
-      element.addEventListener('touchmove', (e) => {
-        // Allow chart manipulation
-        e.stopPropagation();
-      }, { passive: true });
-      
-      element.addEventListener('touchend', (e) => {
-        e.stopPropagation();
-      }, { passive: true });
-    });
-  }
-  
-     // Add gesture support for independent Y-axis scaling
-   console.log('Mobile optimizations initialized - touch zoom and pan enabled on all axes');
-}
-
-// Enhanced zoom functions with Y-axis control
+// Enhanced Y-axis scale functions for dual axis
 function resetLeftScale() {
   if (window.chart) {
     window.chart.priceScale('left').applyOptions({ autoScale: true });
@@ -1227,15 +579,114 @@ function resetRightScale() {
   }
 }
 
-function resetIndicatorScale() {
-  if (window.indicatorChart) {
-    window.indicatorChart.priceScale('right').applyOptions({ autoScale: true });
-    setTimeout(() => {
-      window.indicatorChart.priceScale('right').applyOptions({ autoScale: false });
-    }, 100);
+// Mobile touch optimization
+function addMobileOptimizations() {
+  const chartElement = document.getElementById('main-chart');
+  if (!chartElement) return;
+  
+  console.log('📱 Adding mobile optimizations...');
+  
+  // Enhanced touch handling for better pinch zoom
+  let touchState = {
+    touches: new Map(),
+    gestureStartDistance: null,
+    lastPinchScale: 1,
+    isPinching: false
+  };
+  
+  chartElement.addEventListener('touchstart', (e) => {
+    const touches = Array.from(e.touches);
+    
+    if (touches.length === 2) {
+      touchState.isPinching = true;
+      touchState.gestureStartDistance = getTouchDistance(touches[0], touches[1]);
+    }
+    
+    touches.forEach(touch => {
+      touchState.touches.set(touch.identifier, {
+        startX: touch.clientX,
+        startY: touch.clientY,
+        lastX: touch.clientX,
+        lastY: touch.clientY
+      });
+    });
+  }, { passive: false });
+  
+  chartElement.addEventListener('touchmove', (e) => {
+    const touches = Array.from(e.touches);
+    
+    if (touches.length === 2 && touchState.isPinching) {
+      const currentDistance = getTouchDistance(touches[0], touches[1]);
+      if (touchState.gestureStartDistance) {
+        const scale = currentDistance / touchState.gestureStartDistance;
+        const scaleChange = scale / touchState.lastPinchScale;
+        
+        if (Math.abs(scaleChange - 1) > 0.02) {
+          handlePinchZoom(scaleChange);
+          touchState.lastPinchScale = scale;
+        }
+      }
+    }
+    
+    e.preventDefault();
+  }, { passive: false });
+  
+  chartElement.addEventListener('touchend', (e) => {
+    if (e.touches.length < 2) {
+      touchState.isPinching = false;
+      touchState.gestureStartDistance = null;
+      touchState.lastPinchScale = 1;
+    }
+    
+    Array.from(e.changedTouches).forEach(touch => {
+      touchState.touches.delete(touch.identifier);
+    });
+  }, { passive: false });
+  
+  console.log('✅ Mobile optimizations added');
+}
+
+function getTouchDistance(touch1, touch2) {
+  const dx = touch1.clientX - touch2.clientX;
+  const dy = touch1.clientY - touch2.clientY;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function handlePinchZoom(scaleChange) {
+  if (!window.chart) return;
+  
+  try {
+    const timeScale = window.chart.timeScale();
+    const visibleRange = timeScale.getVisibleTimeRange();
+    
+    if (visibleRange) {
+      const center = (visibleRange.from + visibleRange.to) / 2;
+      const currentSize = visibleRange.to - visibleRange.from;
+      const newSize = currentSize / scaleChange;
+      
+      // MASSIVE zoom limits for TradingView-like extensive viewing
+      const minSize = 30; // 30 seconds minimum (extreme detail)
+      const maxSize = 86400 * 365 * 10; // 10 YEARS maximum (extreme wide view)
+      const clampedSize = Math.max(minSize, Math.min(maxSize, newSize));
+      
+      timeScale.setVisibleTimeRange({
+        from: center - clampedSize / 2,
+        to: center + clampedSize / 2
+      });
+    }
+  } catch (error) {
+    console.error('Error handling pinch zoom:', error);
   }
 }
 
-// Initialize mobile optimizations after charts are loaded
-setTimeout(addMobileOptimizations, 1000);
+// Initialize everything
+manager.initializeChart().then(() => {
+  console.log('🎯 Chart ready with bid spread data and dual y-axis!');
+  
+  // Start update cycle
+  manager.startUpdateCycle();
+  
+  // Add mobile optimizations after chart is ready
+  setTimeout(addMobileOptimizations, 1000);
+});
 

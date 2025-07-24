@@ -2,79 +2,63 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>BTC Price + Bid Spread L20 MAs Chart</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, minimum-scale=0.5, user-scalable=yes, viewport-fit=cover" />
+  <title>BTC Chart - Clean</title>
   <style>
     * {
       box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
     }
     
-    body {
+    html, body {
       margin: 0;
       padding: 0;
+      width: 100%;
+      height: 100%;
       background-color: #131722;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       overflow: hidden;
+      position: fixed;
       touch-action: manipulation;
     }
     
     #chart-container {
       width: 100vw;
       height: 100vh;
-      display: flex;
-      flex-direction: column;
       position: relative;
     }
     
     #main-chart {
       width: 100%;
-      height: 70%;
-      border-bottom: 1px solid #2a2e39;
-      touch-action: manipulation;
-    }
-    
-    #indicator-panel {
-      width: 100%;
-      height: 30%;
-      background: #131722;
-      touch-action: manipulation;
-    }
-    
-    #top-controls {
-      position: absolute;
-      top: 5px;
-      left: 5px;
-      right: 5px;
-      z-index: 100;
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 8px;
-      flex-wrap: wrap;
+      height: 100%;
+      touch-action: pan-x pan-y pinch-zoom;
     }
     
     #timeframe-controls {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 100;
       display: flex;
       align-items: center;
       gap: 8px;
-      background: rgba(25, 28, 35, 0.95);
-      padding: 6px 10px;
-      border-radius: 6px;
+      background: rgba(25, 28, 35, 0.9);
+      padding: 8px 12px;
+      border-radius: 8px;
       backdrop-filter: blur(10px);
       border: 1px solid rgba(255, 255, 255, 0.1);
-      flex-wrap: wrap;
     }
     
     #timeframe-dropdown {
       background: #2a2e39;
       border: 1px solid #4a4e59;
       color: #d1d4dc;
-      padding: 4px 8px;
-      border-radius: 4px;
+      padding: 6px 10px;
+      border-radius: 6px;
       cursor: pointer;
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 500;
-      min-width: 50px;
+      min-width: 80px;
     }
     
     #timeframe-dropdown:hover {
@@ -88,295 +72,65 @@
       box-shadow: 0 0 0 2px rgba(41, 98, 255, 0.2);
     }
     
-    .control-btn {
-      background: #2962ff;
-      border: none;
-      color: white;
-      padding: 4px 8px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 11px;
-      font-weight: 500;
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      transition: all 0.2s ease;
-      white-space: nowrap;
-    }
-    
-    .control-btn:hover {
-      background: #1e53e5;
-    }
-    
-    .control-btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-    
-    #zoom-controls {
-      display: flex;
-      gap: 4px;
-      align-items: center;
-    }
-    
-    .zoom-btn {
-      background: #363a45;
-      border: 1px solid #4a4e59;
+    .timeframe-label {
       color: #d1d4dc;
-      padding: 4px 8px;
-      border-radius: 3px;
-      cursor: pointer;
-      font-size: 10px;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-width: 24px;
-      height: 24px;
-    }
-    
-    .zoom-btn:hover {
-      background: #4a4e59;
-      border-color: #5a5e69;
-    }
-    
-    .zoom-btn:active {
-      background: #2962ff;
-    }
-    
-    #loading-indicator {
-      position: absolute;
-      top: 50px;
-      left: 5px;
-      z-index: 99;
-      background: rgba(25, 28, 35, 0.95);
-      color: #d1d4dc;
-      padding: 6px 10px;
-      border-radius: 4px;
-      font-size: 11px;
-      display: none;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-    }
-    
-    #spread-status {
-      background: rgba(25, 28, 35, 0.95);
-      color: #d1d4dc;
-      padding: 6px 10px;
-      border-radius: 6px;
-      font-size: 10px;
-      font-weight: 500;
-      backdrop-filter: blur(10px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      max-width: 200px;
-    }
-    
-    .spread-value {
-      font-family: 'Courier New', monospace;
-      font-weight: bold;
-      font-size: 9px;
-    }
-    
-    #ma-legend {
-      position: absolute;
-      top: 50px;
-      right: 5px;
-      z-index: 99;
-      background: rgba(25, 28, 35, 0.95);
-      color: #d1d4dc;
-      padding: 8px;
-      border-radius: 6px;
-      font-size: 10px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      backdrop-filter: blur(10px);
-    }
-    
-    .ma-item {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      margin-bottom: 2px;
-    }
-    
-    .ma-color {
-      width: 12px;
-      height: 2px;
-      border-radius: 1px;
-    }
-    
-    .ma-50-color { background-color: #FF6B6B; }
-    .ma-100-color { background-color: #4ADF86; }
-    .ma-200-color { background-color: #FFD700; }
-    
-    .ma-label {
-      font-size: 9px;
+      font-size: 12px;
       font-weight: 500;
     }
     
-    /* Mobile Styles */
+    /* Mobile optimizations */
     @media (max-width: 768px) {
-      #top-controls {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 4px;
-      }
-      
       #timeframe-controls {
-        justify-content: space-between;
-        padding: 4px 8px;
-        flex-wrap: wrap;
+        top: 5px;
+        left: 5px;
+        padding: 6px 10px;
       }
       
-      #timeframe-controls label {
-        font-size: 10px !important;
+      #timeframe-dropdown {
+        font-size: 11px;
+        padding: 4px 8px;
+        min-width: 70px;
+      }
+      
+      .timeframe-label {
+        font-size: 11px;
+      }
+    }
+    
+    @media (max-width: 480px) {
+      #timeframe-controls {
+        padding: 4px 8px;
       }
       
       #timeframe-dropdown {
         font-size: 10px;
         padding: 3px 6px;
-        min-width: 45px;
+        min-width: 60px;
       }
       
-      .control-btn {
+      .timeframe-label {
         font-size: 10px;
-        padding: 3px 6px;
-      }
-      
-      #spread-status {
-        font-size: 9px;
-        padding: 4px 8px;
-        max-width: none;
-      }
-      
-      .spread-value {
-        font-size: 8px;
-      }
-      
-      #ma-legend {
-        top: auto;
-        bottom: 35%;
-        right: 5px;
-        font-size: 9px;
-        padding: 6px;
-      }
-      
-      .ma-label {
-        font-size: 8px;
-      }
-      
-      .zoom-btn {
-        min-width: 18px;
-        height: 18px;
-        font-size: 8px;
-        padding: 2px 4px;
-      }
-      
-      #zoom-controls {
-        gap: 2px;
-        flex-wrap: wrap;
-      }
-    }
-    
-    @media (max-width: 480px) {
-      #main-chart {
-        height: 75%;
-      }
-      
-      #indicator-panel {
-        height: 25%;
-      }
-      
-      #timeframe-controls {
-        flex-wrap: wrap;
-        gap: 2px;
-      }
-      
-      #spread-status {
-        font-size: 8px;
-        line-height: 1.2;
-      }
-      
-      .spread-value {
-        font-size: 7px;
-      }
-      
-      .zoom-btn {
-        min-width: 16px;
-        height: 16px;
-        font-size: 7px;
-        padding: 1px 2px;
-      }
-      
-      #zoom-controls {
-        gap: 1px;
-      }
-    }
-    
-    /* Landscape orientation adjustments */
-    @media (orientation: landscape) and (max-height: 500px) {
-      #top-controls {
-        flex-direction: row;
-        gap: 4px;
-      }
-      
-      #ma-legend {
-        top: 40px;
-        right: 5px;
       }
     }
   </style>
 </head>
 <body>
-  <div id="top-controls">
+  <div id="chart-container">
     <div id="timeframe-controls">
-      <label for="timeframe-dropdown" style="color: #d1d4dc; font-size: 11px; font-weight: 500;">Timeframe:</label>
+      <label class="timeframe-label" for="timeframe-dropdown">Timeframe:</label>
       <select id="timeframe-dropdown" onchange="setTimeframe(this.value)">
-        <option value="1m" selected>1 Minute</option>
-        <option value="5m">5 Minutes</option>
-        <option value="15m">15 Minutes</option>
-        <option value="1h">1 Hour</option>
-        <option value="4h">4 Hours</option>
-        <option value="1d">1 Day</option>
+        <option value="1m" selected>1m</option>
+        <option value="5m">5m</option>
+        <option value="15m">15m</option>
+        <option value="1h">1h</option>
+        <option value="4h">4h</option>
+        <option value="1d">1d</option>
       </select>
-      <div id="zoom-controls">
-        <button class="zoom-btn" onclick="zoomIn()" title="Zoom In">+</button>
-        <button class="zoom-btn" onclick="zoomOut()" title="Zoom Out">−</button>
-        <button class="zoom-btn" onclick="fitContent()" title="Fit All">⌐</button>
-        <button class="zoom-btn" onclick="resetLeftScale()" title="Reset Left Scale">L</button>
-        <button class="zoom-btn" onclick="resetRightScale()" title="Reset Right Scale">R</button>
-        <button class="zoom-btn" onclick="resetIndicatorScale()" title="Reset Indicator Scale">I</button>
-      </div>
-      <a href="signals.html" class="control-btn">📈 Signals</a>
     </div>
     
-    <div id="spread-status">
-      <div>Bid Spread L20 MA50: <span class="spread-value" id="spread-value">--</span></div>
-      <div>Status: <span id="spread-status-text">Loading...</span></div>
-    </div>
-  </div>
-  
-  <div id="loading-indicator">
-    Loading chart data...
-  </div>
-  
-  <div id="ma-legend">
-    <div class="ma-item">
-      <div class="ma-color ma-50-color"></div>
-      <span class="ma-label">MA50</span>
-    </div>
-    <div class="ma-item">
-      <div class="ma-color ma-100-color"></div>
-      <span class="ma-label">MA100</span>
-    </div>
-    <div class="ma-item">
-      <div class="ma-color ma-200-color"></div>
-      <span class="ma-label">MA200</span>
-    </div>
-  </div>
-  
-  <div id="chart-container">
     <div id="main-chart"></div>
-    <div id="indicator-panel"></div>
   </div>
+  
   <script src="https://unpkg.com/lightweight-charts@4.0.0/dist/lightweight-charts.standalone.production.js"></script>
   <script src="chart.js"></script>
 </body>
