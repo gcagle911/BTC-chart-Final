@@ -25,7 +25,7 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
     secondsVisible: false,
     borderVisible: false,
     rightOffset: 12,
-    barSpacing: 4, // Tighter spacing for more data
+    barSpacing: 6, // Better spacing for visibility
     minBarSpacing: 0.5, // Allow much tighter spacing when zoomed out
     fixLeftEdge: false,
     fixRightEdge: false,
@@ -68,11 +68,11 @@ const priceSeries = chart.addCandlestickSeries({
   borderDownColor: '#ef5350',
 });
 
-// Simple MA lines
+// Bid Spread Moving Averages - these are the special MAs from your data
 const ma50 = chart.addLineSeries({
   color: '#FF6B6B',
   lineWidth: 2,
-  title: 'MA50',
+  title: 'Bid Spread MA50',
   lastValueVisible: false,
   priceLineVisible: false,
 });
@@ -80,7 +80,7 @@ const ma50 = chart.addLineSeries({
 const ma100 = chart.addLineSeries({
   color: '#4ADF86',
   lineWidth: 2,
-  title: 'MA100',
+  title: 'Bid Spread MA100',
   lastValueVisible: false,
   priceLineVisible: false,
 });
@@ -88,16 +88,20 @@ const ma100 = chart.addLineSeries({
 const ma200 = chart.addLineSeries({
   color: '#FFD700',
   lineWidth: 2,
-  title: 'MA200',
+  title: 'Bid Spread MA200',
   lastValueVisible: false,
   priceLineVisible: false,
 });
 
-// Simple timeframe manager
-class SimpleTimeframeManager {
+// Restored timeframe manager with your original data source
+class TimeframeManager {
   constructor() {
     this.currentTimeframe = '1m';
-    this.data = [];
+    this.rawData = [];
+    this.lastTimestamp = 0;
+    this.isFullDataLoaded = false;
+    this.updateInterval = null;
+    this.refreshInterval = null;
     
     this.timeframes = {
       '1m': { seconds: 60, label: '1 Minute' },
@@ -109,128 +113,299 @@ class SimpleTimeframeManager {
     };
   }
 
-  async fetchData(timeframe) {
-    const now = Math.floor(Date.now() / 1000);
-    const granularitySeconds = this.timeframes[timeframe].seconds;
-    
-    // Fetch much more data for better zoom out capability
-    const daysBack = timeframe === '1m' ? 7 : timeframe === '5m' ? 30 : timeframe === '15m' ? 90 : timeframe === '1h' ? 180 : timeframe === '4h' ? 365 : 730;
-    const startTime = now - (daysBack * 86400);
-    
-    const startISO = new Date(startTime * 1000).toISOString();
-    const endISO = new Date(now * 1000).toISOString();
-    
-    let granularity;
-    switch(timeframe) {
-      case '1m': granularity = 60; break;
-      case '5m': granularity = 300; break;
-      case '15m': granularity = 900; break;
-      case '1h': granularity = 3600; break;
-      case '4h': granularity = 14400; break;
-      case '1d': granularity = 86400; break;
-      default: granularity = 60;
+  toUnixTimestamp(dateStr) {
+    return Math.floor(new Date(dateStr).getTime() / 1000);
+  }
+
+  // Aggregate data maintaining the bid spread MAs
+  aggregateData(data, timeframeSeconds) {
+    // For 1-minute data, create synthetic OHLC from single price points
+    if (timeframeSeconds === 60) {
+      return data.map(item => ({
+        ...item,
+        open: item.price,
+        high: item.price,
+        low: item.price,
+        close: item.price
+      }));
     }
+
+    const aggregated = [];
+    const buckets = new Map();
+
+    // Sort data by timestamp to ensure proper ordering
+    const sortedData = data.sort((a, b) => new Date(a.time) - new Date(b.time));
+
+    sortedData.forEach(item => {
+      const timestamp = this.toUnixTimestamp(item.time);
+      const bucketTime = Math.floor(timestamp / timeframeSeconds) * timeframeSeconds;
+      
+      if (!buckets.has(bucketTime)) {
+        buckets.set(bucketTime, {
+          timestamp: bucketTime,
+          dataPoints: []
+        });
+      }
+
+      buckets.get(bucketTime).dataPoints.push({
+        timestamp: timestamp,
+        price: item.price,
+        ma_50: item.ma_50,
+        ma_100: item.ma_100,
+        ma_200: item.ma_200,
+        spread_avg_L20_pct: item.spread_avg_L20_pct
+      });
+    });
+
+    // Convert buckets - Create proper OHLC from multiple price points
+    for (const [bucketTime, bucket] of buckets) {
+      if (bucket.dataPoints.length > 0) {
+        // Sort by timestamp
+        bucket.dataPoints.sort((a, b) => a.timestamp - b.timestamp);
+        
+        // Create OHLC from price data within the bucket
+        const openPoint = bucket.dataPoints[0];
+        const closePoint = bucket.dataPoints[bucket.dataPoints.length - 1];
+        const highPrice = Math.max(...bucket.dataPoints.map(p => p.price));
+        const lowPrice = Math.min(...bucket.dataPoints.map(p => p.price));
+        
+        // Keep MAs from close time to maintain exact same values
+        const closeMAs = closePoint;
+        
+        // Use consistent bucket timestamp for all timeframes
+        const bucketTimestamp = new Date(bucketTime * 1000).toISOString();
+        
+        aggregated.push({
+          time: bucketTimestamp,
+          // Proper OHLC data for candlestick display
+          open: openPoint.price,
+          high: highPrice,
+          low: lowPrice,
+          close: closePoint.price,
+          price: closePoint.price,
+          
+          // Bid Spread L20 MAs - keep exact values
+          ma_50: closeMAs.ma_50,
+          ma_100: closeMAs.ma_100,
+          ma_200: closeMAs.ma_200,
+          
+          // Keep original spread data
+          spread_avg_L20_pct: closePoint.spread_avg_L20_pct,
+          
+          // Store bucket info
+          bucketStart: bucketTime,
+          dataPoints: bucket.dataPoints.length
+        });
+      }
+    }
+
+    return aggregated.sort((a, b) => new Date(a.time) - new Date(b.time));
+  }
+
+  // Process and set chart data
+  processAndSetData(data, isUpdate = false) {
+    const timeframeSeconds = this.timeframes[this.currentTimeframe].seconds;
     
-    const url = `https://api.exchange.coinbase.com/products/BTC-USD/candles?start=${startISO}&end=${endISO}&granularity=${granularity}`;
-    
-    try {
-      console.log(`Fetching ${timeframe} data from ${startISO} to ${endISO}`);
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+    // Use 1-minute data for MAs, aggregated data for prices
+    const rawMinuteData = this.currentTimeframe === '1m' ? data : this.rawData || data;
+    const aggregatedPriceData = this.aggregateData(data, timeframeSeconds);
+
+    const priceData = [];
+    const ma50Data = [];
+    const ma100Data = [];
+    const ma200Data = [];
+
+    // Process aggregated price data for candlesticks
+    for (let i = 0; i < aggregatedPriceData.length; i++) {
+      const d = aggregatedPriceData[i];
+      const t = this.toUnixTimestamp(d.time);
+      
+      // For updates, only add new data
+      if (isUpdate && t <= this.lastTimestamp) continue;
+      
+      const sharedTime = t;
+      
+      // Price data (candlestick format)
+      priceData.push({ 
+        time: sharedTime, 
+        open: parseFloat(d.open),
+        high: parseFloat(d.high),
+        low: parseFloat(d.low),
+        close: parseFloat(d.close)
+      });
+      
+      if (t > this.lastTimestamp) this.lastTimestamp = t;
+    }
+
+    // Process RAW MINUTE DATA for bid spread MAs
+    for (let i = 0; i < rawMinuteData.length; i++) {
+      const d = rawMinuteData[i];
+      const t = this.toUnixTimestamp(d.time);
+      
+      // For updates, only add new data
+      if (isUpdate && t <= this.lastTimestamp) continue;
+      
+      const sharedTime = t;
+      
+      // Bid Spread MA data from 1-minute data
+      if (d.ma_50 !== null && d.ma_50 !== undefined) {
+        ma50Data.push({ 
+          time: sharedTime, 
+          value: parseFloat(d.ma_50)
+        });
       }
       
-      const data = await response.json();
-      const formattedData = data.map(([timestamp, low, high, open, close, volume]) => ({
-        time: timestamp,
-        open: parseFloat(open),
-        high: parseFloat(high),
-        low: parseFloat(low),
-        close: parseFloat(close),
-        volume: parseFloat(volume)
-      })).sort((a, b) => a.time - b.time);
+      if (d.ma_100 !== null && d.ma_100 !== undefined) {
+        ma100Data.push({ 
+          time: sharedTime, 
+          value: parseFloat(d.ma_100)
+        });
+      }
       
-      console.log(`✅ Loaded ${formattedData.length} ${timeframe} candles`);
-      return formattedData;
-    } catch (error) {
-      console.error(`Error fetching ${timeframe} data:`, error);
-      return [];
+      if (d.ma_200 !== null && d.ma_200 !== undefined) {
+        ma200Data.push({ 
+          time: sharedTime, 
+          value: parseFloat(d.ma_200)
+        });
+      }
+    }
+
+    console.log(`📊 ${this.currentTimeframe} Data Processing:`);
+    console.log(`   Candlestick Data: ${priceData.length} points`);
+    console.log(`   Bid Spread MA Data: ${ma50Data.length} points`);
+
+    if (isUpdate) {
+      // Add new data points
+      if (priceData.length > 0) {
+        priceData.forEach(p => priceSeries.update(p));
+      }
+      ma50Data.forEach(p => ma50.update(p));
+      ma100Data.forEach(p => ma100.update(p));
+      ma200Data.forEach(p => ma200.update(p));
+    } else {
+      // Set complete dataset
+      priceSeries.setData(priceData);
+      ma50.setData(ma50Data);
+      ma100.setData(ma100Data);
+      ma200.setData(ma200Data);
+      
+      // Fit content to show all data
+      chart.timeScale().fitContent();
+    }
+
+    console.log(`✅ Chart updated with ${priceData.length} candles and bid spread MAs`);
+  }
+
+  async initializeChart() {
+    try {
+      console.log('🚀 Loading chart with bid spread data...');
+      
+      // Load recent data first for fast startup
+      const recentRes = await fetch('https://btc-spread-test-pipeline.onrender.com/recent.json');
+      const recentData = await recentRes.json();
+      
+      this.rawData = recentData;
+      this.processAndSetData(recentData);
+      console.log(`✅ Recent data loaded (${recentData.length} points)`);
+      
+      // Load complete historical data
+      const historicalRes = await fetch('https://btc-spread-test-pipeline.onrender.com/historical.json');
+      const historicalData = await historicalRes.json();
+      
+      this.rawData = historicalData;
+      this.processAndSetData(historicalData);
+      this.isFullDataLoaded = true;
+      console.log(`✅ Full data loaded (${historicalData.length} points)`);
+      
+    } catch (err) {
+      console.error('❌ Loading error:', err);
+      
+      // Fallback
+      try {
+        const fallbackRes = await fetch('https://btc-spread-test-pipeline.onrender.com/output-latest.json');
+        const fallbackData = await fallbackRes.json();
+        this.rawData = fallbackData;
+        this.processAndSetData(fallbackData);
+        console.log('✅ Fallback data loaded');
+      } catch (fallbackErr) {
+        console.error('❌ All endpoints failed');
+      }
     }
   }
 
-  calculateMA(data, period) {
-    if (data.length < period) return [];
-    
-    const result = [];
-    for (let i = period - 1; i < data.length; i++) {
-      const slice = data.slice(i - period + 1, i + 1);
-      const average = slice.reduce((sum, item) => sum + item.close, 0) / period;
-      result.push({
-        time: data[i].time,
-        value: average
+  async fetchAndUpdate() {
+    try {
+      const res = await fetch('https://btc-spread-test-pipeline.onrender.com/recent.json');
+      const data = await res.json();
+
+      // Find new data points
+      const newData = data.filter(d => {
+        const t = this.toUnixTimestamp(d.time);
+        return t > this.lastTimestamp;
       });
+
+      if (newData.length > 0) {
+        // Add new data to our raw data store
+        this.rawData = [...this.rawData, ...newData].sort((a, b) => 
+          new Date(a.time) - new Date(b.time)
+        );
+
+        // Process and update chart with new data
+        this.processAndSetData(newData, true);
+        console.log(`📈 Updated chart with ${newData.length} new data points`);
+      }
+
+    } catch (err) {
+      console.error('❌ Fetch/update error:', err);
     }
-    return result;
   }
 
-  setChartData(data) {
-    if (!data || data.length === 0) return;
+  switchTimeframe(timeframe) {
+    if (timeframe === this.currentTimeframe) return;
     
-    console.log(`Setting chart data: ${data.length} candles`);
-    
-    // Set price data
-    priceSeries.setData(data);
-    
-    // Calculate and set MA data
-    const ma50Data = this.calculateMA(data, 50);
-    const ma100Data = this.calculateMA(data, 100);
-    const ma200Data = this.calculateMA(data, 200);
-    
-    ma50.setData(ma50Data);
-    ma100.setData(ma100Data);
-    ma200.setData(ma200Data);
-    
-    // Fit content to show all data
-    chart.timeScale().fitContent();
-    
-    console.log(`✅ Chart updated with ${data.length} candles and MAs`);
-  }
-
-  async switchTimeframe(timeframe) {
-    if (!this.timeframes[timeframe] || timeframe === this.currentTimeframe) {
-      return;
-    }
-    
-    console.log(`🔄 Switching to ${timeframe}`);
+    console.log(`🔄 Switching to ${timeframe} timeframe`);
     
     this.currentTimeframe = timeframe;
+    
+    // Update dropdown
     const dropdown = document.getElementById('timeframe-dropdown');
     if (dropdown) {
       dropdown.value = timeframe;
     }
     
-    const data = await this.fetchData(timeframe);
-    if (data && data.length > 0) {
-      this.data = data;
-      this.setChartData(data);
-    }
+    // Reset timestamp and reprocess data
+    this.lastTimestamp = 0;
+    this.processAndSetData(this.rawData);
+    
+    console.log(`✅ Switched to ${this.timeframes[timeframe].label}`);
   }
 
-  async initialize() {
-    console.log('🚀 Initializing simple chart...');
-    
-    const data = await this.fetchData(this.currentTimeframe);
-    if (data && data.length > 0) {
-      this.data = data;
-      this.setChartData(data);
-    }
-    
-    console.log('✅ Chart initialized');
+  startUpdateCycle() {
+    // Clear existing intervals
+    if (this.updateInterval) clearInterval(this.updateInterval);
+    if (this.refreshInterval) clearInterval(this.refreshInterval);
+
+    // Update with recent data every 30 seconds
+    this.updateInterval = setInterval(() => this.fetchAndUpdate(), 30000);
+
+    // Refresh complete historical data every hour
+    this.refreshInterval = setInterval(() => {
+      if (!this.isFullDataLoaded) return;
+      
+      fetch('https://btc-spread-test-pipeline.onrender.com/historical.json')
+        .then(res => res.json())
+        .then(data => {
+          this.rawData = data;
+          this.processAndSetData(data);
+          console.log(`✅ Historical data refreshed: ${data.length} total points`);
+        })
+        .catch(err => console.error('❌ Historical refresh failed:', err));
+    }, 3600000);
   }
 }
 
 // Global instance
-const manager = new SimpleTimeframeManager();
+const manager = new TimeframeManager();
 
 // Global function for timeframe dropdown
 function setTimeframe(timeframe) {
@@ -377,8 +552,11 @@ function handlePinchZoom(scaleChange) {
 }
 
 // Initialize everything
-manager.initialize().then(() => {
-  console.log('🎯 Chart ready!');
+manager.initializeChart().then(() => {
+  console.log('🎯 Chart ready with bid spread data!');
+  
+  // Start update cycle
+  manager.startUpdateCycle();
   
   // Add mobile optimizations after chart is ready
   setTimeout(addMobileOptimizations, 1000);
