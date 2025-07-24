@@ -87,6 +87,15 @@ const priceSeries = chart.addCandlestickSeries({
 });
 
 // Bid Spread Moving Averages on LEFT y-axis (separate scale!)
+const ma20 = chart.addLineSeries({
+  priceScaleId: 'left', // LEFT y-axis for MAs
+  color: '#00BFFF',
+  lineWidth: 0.5,
+  title: 'MA20',
+  lastValueVisible: false,
+  priceLineVisible: false,
+});
+
 const ma50 = chart.addLineSeries({
   priceScaleId: 'left', // LEFT y-axis for MAs
   color: '#FF6B6B',
@@ -242,6 +251,7 @@ class TimeframeManager {
     const aggregatedPriceData = this.aggregateData(data, timeframeSeconds);
 
     const priceData = [];
+    const ma20Data = [];
     const ma50Data = [];
     const ma100Data = [];
     const ma200Data = [];
@@ -284,6 +294,23 @@ class TimeframeManager {
       const sharedTime = t;
       
       // MA data ALWAYS from 1-minute data - IDENTICAL across all timeframes
+      
+      // Calculate MA20 from L20 spread data (20-period moving average)
+      if (d.spread_avg_L20_pct !== null && d.spread_avg_L20_pct !== undefined && i >= 19) {
+        const recent20 = rawMinuteData.slice(i - 19, i + 1);
+        const validSpreadData = recent20.filter(item => item.spread_avg_L20_pct !== null && item.spread_avg_L20_pct !== undefined);
+        
+        if (validSpreadData.length === 20) {
+          const sum = validSpreadData.reduce((acc, item) => acc + parseFloat(item.spread_avg_L20_pct), 0);
+          const ma20Value = sum / 20;
+          
+          ma20Data.push({
+            time: sharedTime,
+            value: ma20Value
+          });
+        }
+      }
+      
       if (d.ma_50 !== null && d.ma_50 !== undefined) {
         ma50Data.push({ 
           time: sharedTime, 
@@ -322,7 +349,7 @@ class TimeframeManager {
     if (priceData.length > 0 && ma50Data.length > 0) {
       console.log(`🕐 ${this.currentTimeframe} Data Processing:`);
       console.log(`   Candlestick Data: ${priceData.length} points (RIGHT y-axis)`);
-      console.log(`   Bid Spread L20 MA Data: ${ma50Data.length} points (LEFT y-axis)`);
+      console.log(`   Bid Spread L20 MA Data: MA20(${ma20Data.length}), MA50(${ma50Data.length}), MA100(${ma100Data.length}), MA200(${ma200Data.length}) points (LEFT y-axis)`);
       console.log(`   Cumulative L20 Avg: ${cumulativeData.length} points (LEFT y-axis)`);
     }
 
@@ -331,6 +358,7 @@ class TimeframeManager {
       if (priceData.length > 0) {
         priceData.forEach(p => priceSeries.update(p));
       }
+      ma20Data.forEach(p => ma20.update(p));
       ma50Data.forEach(p => ma50.update(p));
       ma100Data.forEach(p => ma100.update(p));
       ma200Data.forEach(p => ma200.update(p));
@@ -338,6 +366,7 @@ class TimeframeManager {
     } else {
       // Set complete dataset
       priceSeries.setData(priceData);
+      ma20.setData(ma20Data);
       ma50.setData(ma50Data);
       ma100.setData(ma100Data);
       ma200.setData(ma200Data);
