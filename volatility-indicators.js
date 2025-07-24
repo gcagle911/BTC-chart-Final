@@ -10,7 +10,7 @@ class VolatilityIndicators {
   initializeIndicators() {
     // Spread Velocity - Rate of spread change
     this.spreadVelocity = this.chart.addLineSeries({
-      priceScaleId: 'left',
+      priceScaleId: 'right',
       color: '#FF69B4',
       lineWidth: 1,
       title: 'Spread Velocity (%/min)',
@@ -18,9 +18,9 @@ class VolatilityIndicators {
       priceLineVisible: false,
     });
 
-    // Spread Acceleration - Rate of velocity change
+    // Spread Acceleration - Rate of velocity change  
     this.spreadAcceleration = this.chart.addLineSeries({
-      priceScaleId: 'left',
+      priceScaleId: 'right',
       color: '#FF4500',
       lineWidth: 1,
       title: 'Spread Acceleration',
@@ -30,7 +30,7 @@ class VolatilityIndicators {
 
     // Spread Volatility Index - Standard deviation of spreads
     this.spreadVolatilityIndex = this.chart.addLineSeries({
-      priceScaleId: 'left',
+      priceScaleId: 'right',
       color: '#9370DB',
       lineWidth: 2,
       title: 'Spread Volatility Index',
@@ -40,7 +40,7 @@ class VolatilityIndicators {
 
     // Spread Z-Score - Deviation from normal levels
     this.spreadZScore = this.chart.addLineSeries({
-      priceScaleId: 'left',
+      priceScaleId: 'right',
       color: '#DC143C',
       lineWidth: 1.5,
       title: 'Spread Z-Score',
@@ -48,14 +48,42 @@ class VolatilityIndicators {
       priceLineVisible: false,
     });
 
-    // Composite Volatility Predictor
+    // Composite Volatility Predictor - Main indicator like RSI
     this.volatilityPredictor = this.chart.addLineSeries({
-      priceScaleId: 'left',
+      priceScaleId: 'right',
       color: '#FFD700',
       lineWidth: 3,
       title: 'Volatility Predictor (0-100)',
       lastValueVisible: true,
       priceLineVisible: true,
+    });
+
+    // Add horizontal reference lines like RSI
+    this.addReferenceLevels();
+  }
+
+  addReferenceLevels() {
+    // Add reference lines at key volatility levels (similar to RSI 30/70 lines)
+    const referenceLines = [
+      { value: 80, color: '#FF0000', title: 'EXTREME' },
+      { value: 65, color: '#FF4500', title: 'HIGH' },
+      { value: 50, color: '#FFFF00', title: 'ELEVATED' },
+      { value: 35, color: '#90EE90', title: 'MODERATE' },
+    ];
+
+    referenceLines.forEach(line => {
+      this.chart.addLineSeries({
+        priceScaleId: 'right',
+        color: line.color,
+        lineWidth: 1,
+        lineStyle: LightweightCharts.LineStyle.Dashed,
+        title: line.title,
+        lastValueVisible: false,
+        priceLineVisible: false,
+      }).setData([
+        { time: 1640995200, value: line.value }, // Start time
+        { time: 2000000000, value: line.value }, // End time (far future)
+      ]);
     });
   }
 

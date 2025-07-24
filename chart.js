@@ -1,8 +1,8 @@
 // Simplified Bitcoin Chart - Clean Interface
 // Main price chart with Bid Spread MAs on LEFT y-axis and enhanced zoom capability
 
-// Chart configuration with LEFT/RIGHT dual y-axis and massive zoom range
-window.chart = LightweightCharts.createChart(document.getElementById('main-chart'), {
+// Main price chart configuration with LEFT/RIGHT dual y-axis and massive zoom range
+window.mainChart = LightweightCharts.createChart(document.getElementById('main-chart'), {
   layout: {
     background: { color: '#131722' },
     textColor: '#D1D4DC',
@@ -73,8 +73,52 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
   },
 });
 
+// Volatility indicators chart (bottom panel)
+window.volatilityChart = LightweightCharts.createChart(document.getElementById('volatility-panel'), {
+  layout: {
+    background: { color: '#131722' },
+    textColor: '#D1D4DC',
+  },
+  grid: {
+    vertLines: { color: '#2B2B43' },
+    horzLines: { color: '#2B2B43' },
+  },
+  rightPriceScale: { 
+    visible: true,
+    scaleMargins: {
+      top: 0.1,
+      bottom: 0.1,
+    },
+    borderVisible: false,
+    autoScale: true,
+  },
+  timeScale: { 
+    visible: true, // Show time scale for bottom chart
+    borderVisible: false,
+    timeVisible: true,
+    secondsVisible: false,
+  },
+  crosshair: {
+    mode: LightweightCharts.CrosshairMode.Normal,
+  },
+  handleScroll: {
+    mouseWheel: false, // Disable independent scrolling
+    pressedMouseMove: false,
+    horzTouchDrag: false,
+    vertTouchDrag: true,
+  },
+  handleScale: {
+    mouseWheel: false, // Disable independent scaling
+    pinch: false,
+    axisPressedMouseMove: {
+      time: false,
+      price: true, // Allow Y-axis scaling only
+    },
+  },
+});
+
 // Price series on RIGHT y-axis
-const priceSeries = chart.addCandlestickSeries({
+const priceSeries = mainChart.addCandlestickSeries({
   priceScaleId: 'right', // RIGHT y-axis for price
   upColor: '#26a69a',
   downColor: '#ef5350',
@@ -87,7 +131,7 @@ const priceSeries = chart.addCandlestickSeries({
 });
 
 // Bid Spread Moving Averages on LEFT y-axis (separate scale!)
-const ma20 = chart.addLineSeries({
+const ma20 = mainChart.addLineSeries({
   priceScaleId: 'left', // LEFT y-axis for MAs
   color: '#00BFFF',
   lineWidth: 0.5,
@@ -96,7 +140,7 @@ const ma20 = chart.addLineSeries({
   priceLineVisible: false,
 });
 
-const ma50 = chart.addLineSeries({
+const ma50 = mainChart.addLineSeries({
   priceScaleId: 'left', // LEFT y-axis for MAs
   color: '#FF6B6B',
   lineWidth: 0.5,
@@ -105,7 +149,7 @@ const ma50 = chart.addLineSeries({
   priceLineVisible: false,
 });
 
-const ma100 = chart.addLineSeries({
+const ma100 = mainChart.addLineSeries({
   priceScaleId: 'left', // LEFT y-axis for MAs
   color: '#4ADF86',
   lineWidth: 0.5,
@@ -114,7 +158,7 @@ const ma100 = chart.addLineSeries({
   priceLineVisible: false,
 });
 
-const ma200 = chart.addLineSeries({
+const ma200 = mainChart.addLineSeries({
   priceScaleId: 'left', // LEFT y-axis for MAs
   color: '#FFD700',
   lineWidth: 0.5,
@@ -124,7 +168,7 @@ const ma200 = chart.addLineSeries({
 });
 
 // Cumulative Average of ALL L20 spread data
-const cumulativeMA = chart.addLineSeries({
+const cumulativeMA = mainChart.addLineSeries({
   priceScaleId: 'left', // LEFT y-axis for MAs
   color: '#FFFFFF',
   lineWidth: 0.5,
@@ -134,6 +178,16 @@ const cumulativeMA = chart.addLineSeries({
 });
 
 // Real-time L20 spread line (MA1 - raw data) - REMOVED
+
+// Initialize volatility indicators in bottom panel
+let volatilityIndicators = null;
+
+// Chart synchronization - sync time scales between main and volatility charts
+mainChart.timeScale().subscribeVisibleTimeRangeChange((timeRange) => {
+  if (timeRange) {
+    volatilityChart.timeScale().setVisibleTimeRange(timeRange);
+  }
+});
 
 // Restored proper timeframe manager
 class TimeframeManager {
@@ -367,6 +421,11 @@ class TimeframeManager {
       ma100Data.forEach(p => ma100.update(p));
       ma200Data.forEach(p => ma200.update(p));
       cumulativeData.forEach(p => cumulativeMA.update(p));
+      
+      // Update volatility indicators
+      if (volatilityIndicators) {
+        volatilityIndicators.updateIndicators(this.rawData, isUpdate);
+      }
     } else {
       // Set complete dataset
       priceSeries.setData(priceData);
@@ -376,8 +435,13 @@ class TimeframeManager {
       ma200.setData(ma200Data);
       cumulativeMA.setData(cumulativeData);
       
+      // Update volatility indicators
+      if (volatilityIndicators) {
+        volatilityIndicators.updateIndicators(this.rawData, isUpdate);
+      }
+      
       // Fit content to show all data
-      chart.timeScale().fitContent();
+      mainChart.timeScale().fitContent();
     }
 
     console.log(`✅ Chart updated with ${priceData.length} candles and bid spread MAs`);
@@ -505,58 +569,84 @@ function setTimeframe(timeframe) {
 
 // FIXED: Enhanced zoom functions with MASSIVE zoom range like TradingView
 function zoomIn() {
-  if (window.chart) {
-    const timeScale = window.chart.timeScale();
+  if (window.mainChart) {
+    const timeScale = window.mainChart.timeScale();
     const visibleRange = timeScale.getVisibleRange();
     if (visibleRange) {
       const middle = (visibleRange.from + visibleRange.to) / 2;
       const range = visibleRange.to - visibleRange.from;
       const newRange = range * 0.6; // Zoom in
-      timeScale.setVisibleRange({
+      const newTimeRange = {
         from: middle - newRange / 2,
         to: middle + newRange / 2
-      });
+      };
+      timeScale.setVisibleRange(newTimeRange);
+      // Sync volatility chart
+      if (window.volatilityChart) {
+        window.volatilityChart.timeScale().setVisibleRange(newTimeRange);
+      }
     }
   }
 }
 
 function zoomOut() {
-  if (window.chart) {
-    const timeScale = window.chart.timeScale();
+  if (window.mainChart) {
+    const timeScale = window.mainChart.timeScale();
     const visibleRange = timeScale.getVisibleRange();
     if (visibleRange) {
       const middle = (visibleRange.from + visibleRange.to) / 2;
       const range = visibleRange.to - visibleRange.from;
       const newRange = range * 1.8; // Zoom out MORE
-      timeScale.setVisibleRange({
+      const newTimeRange = {
         from: middle - newRange / 2,
         to: middle + newRange / 2
-      });
+      };
+      timeScale.setVisibleRange(newTimeRange);
+      // Sync volatility chart
+      if (window.volatilityChart) {
+        window.volatilityChart.timeScale().setVisibleRange(newTimeRange);
+      }
     }
   }
 }
 
 function fitContent() {
-  if (window.chart) {
-    window.chart.timeScale().fitContent();
+  if (window.mainChart) {
+    window.mainChart.timeScale().fitContent();
+    // Sync volatility chart
+    if (window.volatilityChart) {
+      const visibleRange = window.mainChart.timeScale().getVisibleRange();
+      if (visibleRange) {
+        window.volatilityChart.timeScale().setVisibleRange(visibleRange);
+      }
+    }
   }
 }
 
 // Enhanced Y-axis scale functions for dual axis
 function resetLeftScale() {
-  if (window.chart) {
-    window.chart.priceScale('left').applyOptions({ autoScale: true });
+  if (window.mainChart) {
+    window.mainChart.priceScale('left').applyOptions({ autoScale: true });
     setTimeout(() => {
-      window.chart.priceScale('left').applyOptions({ autoScale: false });
+      window.mainChart.priceScale('left').applyOptions({ autoScale: false });
     }, 100);
   }
 }
 
 function resetRightScale() {
-  if (window.chart) {
-    window.chart.priceScale('right').applyOptions({ autoScale: true });
+  if (window.mainChart) {
+    window.mainChart.priceScale('right').applyOptions({ autoScale: true });
     setTimeout(() => {
-      window.chart.priceScale('right').applyOptions({ autoScale: false });
+      window.mainChart.priceScale('right').applyOptions({ autoScale: false });
+    }, 100);
+  }
+}
+
+function resetVolatilityScale() {
+  if (window.volatilityChart) {
+    window.volatilityChart.priceScale('right').applyOptions({ autoScale: true });
+    setTimeout(() => {
+      window.volatilityChart.priceScale('right').applyOptions({ autoScale: false });
     }, 100);
   }
 }
@@ -635,10 +725,10 @@ function getTouchDistance(touch1, touch2) {
 }
 
 function handlePinchZoom(scaleChange) {
-  if (!window.chart) return;
+  if (!window.mainChart) return;
   
   try {
-    const timeScale = window.chart.timeScale();
+    const timeScale = window.mainChart.timeScale();
     const visibleRange = timeScale.getVisibleTimeRange();
     
     if (visibleRange) {
@@ -651,10 +741,17 @@ function handlePinchZoom(scaleChange) {
       const maxSize = 86400 * 365 * 10; // 10 YEARS maximum (extreme wide view)
       const clampedSize = Math.max(minSize, Math.min(maxSize, newSize));
       
-      timeScale.setVisibleTimeRange({
+      const newTimeRange = {
         from: center - clampedSize / 2,
         to: center + clampedSize / 2
-      });
+      };
+      
+      timeScale.setVisibleTimeRange(newTimeRange);
+      
+      // Sync volatility chart
+      if (window.volatilityChart) {
+        window.volatilityChart.timeScale().setVisibleTimeRange(newTimeRange);
+      }
     }
   } catch (error) {
     console.error('Error handling pinch zoom:', error);
@@ -664,6 +761,12 @@ function handlePinchZoom(scaleChange) {
 // Initialize everything
 manager.initializeChart().then(() => {
   console.log('🎯 Chart ready with bid spread data and dual y-axis!');
+  
+  // Initialize volatility indicators in bottom panel
+  if (window.VolatilityIndicators && window.volatilityChart) {
+    volatilityIndicators = new VolatilityIndicators(window.volatilityChart);
+    console.log('📊 Volatility indicators initialized in bottom panel');
+  }
   
   // Start update cycle
   manager.startUpdateCycle();
