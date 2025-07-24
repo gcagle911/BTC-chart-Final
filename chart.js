@@ -204,49 +204,47 @@ class TimeframeManager {
         price: item.price,
         ma_50: item.ma_50,
         ma_100: item.ma_100,
-        ma_200: item.ma_200
+        ma_200: item.ma_200,
+        spread_avg_L20_pct: item.spread_avg_L20_pct
       });
     });
 
-    // Convert buckets maintaining MA technical accuracy
+    // Convert buckets - ONLY aggregate price data, keep MAs from close time
     for (const [bucketTime, bucket] of buckets) {
       if (bucket.dataPoints.length > 0) {
         // Sort by timestamp
         bucket.dataPoints.sort((a, b) => a.timestamp - b.timestamp);
         
-        // For price: Use proper OHLC aggregation
+        // For price: Use proper OHLC aggregation (THIS CHANGES with timeframe)
         const openPoint = bucket.dataPoints[0];
         const closePoint = bucket.dataPoints[bucket.dataPoints.length - 1];
         const highPrice = Math.max(...bucket.dataPoints.map(p => p.price));
         const lowPrice = Math.min(...bucket.dataPoints.map(p => p.price));
         
-        // For MAs: Use the MA value at the close time of the timeframe period
-        // This maintains the technical accuracy of the MA calculations
-        // The MA at the close represents the true MA value for that timeframe period
+        // SOLUTION: Keep MAs from close time to maintain exact same values
+        // This ensures MAs don't change when switching timeframes
         const closeMAs = closePoint;
-        
-        // Alternative approach: For maximum accuracy, we could interpolate or use
-        // the MA value that best represents the timeframe, but using close time
-        // is the standard professional approach
         
         // CRITICAL: Use consistent bucket timestamp for all timeframes
         const bucketTimestamp = new Date(bucketTime * 1000).toISOString();
         
         aggregated.push({
           time: bucketTimestamp, // Consistent bucket timestamp
-          // OHLC price data
+          // ONLY PRICE DATA CHANGES with timeframe - OHLC aggregation
           price: closePoint.price, // Close price for line chart
           open: openPoint.price,
           high: highPrice,
           low: lowPrice,
           close: closePoint.price,
           
-          // MAs maintain their original technical calculation accuracy
-          // These are the actual MA values calculated from full 1-minute granularity
-          // at the close of each timeframe period
+          // MAs STAY THE SAME - using exact values from close time
+          // This ensures MAs remain identical across all timeframes
           ma_50: closeMAs.ma_50,
           ma_100: closeMAs.ma_100,
           ma_200: closeMAs.ma_200,
+          
+          // Keep original spread data
+          spread_avg_L20_pct: closePoint.spread_avg_L20_pct,
           
           // Store bucket info for debugging
           bucketStart: bucketTime,
@@ -261,7 +259,10 @@ class TimeframeManager {
   // Process and set chart data (performance optimized)
   processAndSetData(data, isUpdate = false) {
     const timeframeSeconds = this.timeframes[this.currentTimeframe].seconds;
-    const aggregatedData = this.aggregateData(data, timeframeSeconds);
+    
+    // SOLUTION: Always use 1-minute data for MAs, only aggregate prices
+    const rawMinuteData = this.currentTimeframe === '1m' ? data : this.rawData || data;
+    const aggregatedPriceData = this.aggregateData(data, timeframeSeconds);
 
     const priceData = [];
     const ma50Data = [];
@@ -270,13 +271,13 @@ class TimeframeManager {
     const indicatorData = [];
 
     // Set loading flag to skip heavy indicator calculations during initial load
-    if (!isUpdate && aggregatedData.length > 1000) {
+    if (!isUpdate && aggregatedPriceData.length > 1000) {
       this.isInitialLoad = true;
     }
 
-    // Process all data points and ensure perfect timestamp alignment
-    for (let i = 0; i < aggregatedData.length; i++) {
-      const d = aggregatedData[i];
+    // Process aggregated price data for price series
+    for (let i = 0; i < aggregatedPriceData.length; i++) {
+      const d = aggregatedPriceData[i];
       const t = this.toUnixTimestamp(d.time);
       
       // For updates, only add new data
@@ -285,7 +286,7 @@ class TimeframeManager {
       // CRITICAL: Create all data points with IDENTICAL timestamps
       const sharedTime = t; // Ensure all series use the exact same timestamp
       
-      // Price data (main chart)
+      // Price data (main chart) - CHANGES with timeframe
       priceData.push({ 
         time: sharedTime, 
         open: parseFloat(d.open),
@@ -294,7 +295,20 @@ class TimeframeManager {
         close: parseFloat(d.close)
       });
       
-      // MA data (main chart)
+      if (t > this.lastTimestamp) this.lastTimestamp = t;
+    }
+
+    // Process RAW MINUTE DATA for MAs - NEVER CHANGES regardless of timeframe
+    for (let i = 0; i < rawMinuteData.length; i++) {
+      const d = rawMinuteData[i];
+      const t = this.toUnixTimestamp(d.time);
+      
+      // For updates, only add new data
+      if (isUpdate && t <= this.lastTimestamp) continue;
+      
+      const sharedTime = t;
+      
+      // MA data ALWAYS from 1-minute data - IDENTICAL across all timeframes
       if (d.ma_50 !== null && d.ma_50 !== undefined) {
         ma50Data.push({ 
           time: sharedTime, 
@@ -316,7 +330,7 @@ class TimeframeManager {
         });
       }
       
-      // Indicator data (bottom chart) - MUST use identical timestamp
+      // Indicator data from raw minute data as well
       const indicatorValue = this.calculateCustomIndicator(d);
       if (indicatorValue !== null) {
         indicatorData.push({ 
@@ -324,79 +338,61 @@ class TimeframeManager {
           value: indicatorValue
         });
       }
-      
-      if (t > this.lastTimestamp) this.lastTimestamp = t;
     }
 
     // Log timestamp alignment for debugging
-    if (priceData.length > 0 && indicatorData.length > 0) {
-      const priceStart = priceData[0].time;
-      const priceEnd = priceData[priceData.length - 1].time;
-      const indicatorStart = indicatorData[0].time;
-      const indicatorEnd = indicatorData[indicatorData.length - 1].time;
-      
-      console.log(`🕐 ${this.currentTimeframe} Timestamp Alignment:`);
-      console.log(`   Price Data: ${priceData.length} points | ${new Date(priceStart * 1000).toISOString()} → ${new Date(priceEnd * 1000).toISOString()}`);
-      console.log(`   Indicator Data: ${indicatorData.length} points | ${new Date(indicatorStart * 1000).toISOString()} → ${new Date(indicatorEnd * 1000).toISOString()}`);
-      console.log(`   Perfect Match: ${priceStart === indicatorStart && priceEnd === indicatorEnd ? '✅ YES' : '❌ NO'}`);
-      
-      // Show sample timestamps for verification
-      if (priceData.length >= 3 && indicatorData.length >= 3) {
-        console.log(`   Sample timestamps:`);
-        for (let i = 0; i < Math.min(3, priceData.length); i++) {
-          const pTime = priceData[i].time;
-          const iTime = indicatorData[i] ? indicatorData[i].time : 'MISSING';
-          const match = pTime === iTime ? '✅' : '❌';
-          console.log(`     [${i}] Price: ${new Date(pTime * 1000).toISOString()} | Indicator: ${iTime !== 'MISSING' ? new Date(iTime * 1000).toISOString() : 'MISSING'} ${match}`);
-        }
-      }
+    if (priceData.length > 0 && ma50Data.length > 0) {
+      console.log(`🕐 ${this.currentTimeframe} Data Processing:`);
+      console.log(`   Price Data: ${priceData.length} points (aggregated by timeframe)`);
+      console.log(`   MA Data: ${ma50Data.length} points (always 1-minute granularity)`);
+      console.log(`   Result: MAs stay identical across timeframes, only price OHLC changes`);
     }
 
     // Clear loading flag
     this.isInitialLoad = false;
 
-    if (isUpdate) {
-      // Add new data points
-      priceData.forEach(p => priceSeries.update(p));
-      ma50Data.forEach(p => ma50.update(p));
-      ma100Data.forEach(p => ma100.update(p));
-      ma200Data.forEach(p => ma200.update(p));
-      
-      // Update indicator panel with perfect time sync
-      if (customIndicatorSeries && indicatorData.length > 0) {
-        indicatorData.forEach(p => customIndicatorSeries.update(p));
+           if (isUpdate) {
+         // Add new data points
+         priceData.forEach(p => priceSeries.update(p));
+         ma50Data.forEach(p => ma50.update(p));
+        ma100Data.forEach(p => ma100.update(p));
+        ma200Data.forEach(p => ma200.update(p));
         
-        // Update reference lines with exact same timestamps
-        if (topReferenceLine && indicatorData.length > 0) {
-          indicatorData.forEach(p => topReferenceLine.update({ time: p.time, value: 1.0 }));
+        // Update indicator panel with perfect time sync
+        if (customIndicatorSeries && indicatorData.length > 0) {
+          indicatorData.forEach(p => customIndicatorSeries.update(p));
+          
+          // Update reference lines with exact same timestamps
+          if (topReferenceLine && indicatorData.length > 0) {
+            indicatorData.forEach(p => topReferenceLine.update({ time: p.time, value: 1.0 }));
+          }
+          if (middleReferenceLine && indicatorData.length > 0) {
+            indicatorData.forEach(p => middleReferenceLine.update({ time: p.time, value: 0.5 }));
+          }
+          if (bottomReferenceLine && indicatorData.length > 0) {
+            indicatorData.forEach(p => bottomReferenceLine.update({ time: p.time, value: 0.0 }));
+          }
         }
-        if (middleReferenceLine && indicatorData.length > 0) {
-          indicatorData.forEach(p => middleReferenceLine.update({ time: p.time, value: 0.5 }));
-        }
-        if (bottomReferenceLine && indicatorData.length > 0) {
-          indicatorData.forEach(p => bottomReferenceLine.update({ time: p.time, value: 0.0 }));
+      } else {
+        // Set complete dataset
+        priceSeries.setData(priceData);
+        ma50.setData(ma50Data);
+        ma100.setData(ma100Data);
+        ma200.setData(ma200Data);
+        
+        // Set indicator panel data (optimized)
+        if (customIndicatorSeries && indicatorData.length > 0) {
+          customIndicatorSeries.setData(indicatorData);
+          
+          // Simplified reference lines (only set once)
+          this.setReferenceLinesOnce(indicatorData);
         }
       }
-    } else {
-      // Set complete dataset
-      priceSeries.setData(priceData);
-      ma50.setData(ma50Data);
-      ma100.setData(ma100Data);
-      ma200.setData(ma200Data);
-      
-      // Set indicator panel data (optimized)
-      if (customIndicatorSeries && indicatorData.length > 0) {
-        customIndicatorSeries.setData(indicatorData);
-        
-        // Simplified reference lines (only set once)
-        this.setReferenceLinesOnce(indicatorData);
-      }
-    }
 
-    // Throttled status updates
-    if (!isUpdate || this.shouldUpdateStatus()) {
-      this.updateSpreadStatus(aggregatedData);
-    }
+      // Throttled status updates
+      if (!isUpdate || this.shouldUpdateStatus()) {
+        this.updateSpreadStatus(rawMinuteData);
+      }
     
     // Force immediate and aggressive time scale sync
     setTimeout(() => {
