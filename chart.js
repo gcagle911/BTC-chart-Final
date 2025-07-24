@@ -382,9 +382,9 @@ class TimeframeManager {
 
     console.log(`✅ Chart updated with ${priceData.length} candles and bid spread MAs`);
     
-    // Update volatility indicators with SAME aggregated data as main chart
-    if (window.volatilityIndicators && aggregatedPriceData && aggregatedPriceData.length > 0) {
-      window.volatilityIndicators.updateData(aggregatedPriceData, this.currentTimeframe);
+    // Update RSI-style volatility with SAME aggregated data as main chart
+    if (window.rsiVolatility && aggregatedPriceData && aggregatedPriceData.length > 0) {
+      window.rsiVolatility.updateWithTimeframeData(aggregatedPriceData, this.currentTimeframe);
     }
   }
 
@@ -484,13 +484,13 @@ class TimeframeManager {
     this.lastTimestamp = 0;
     this.processAndSetData(this.rawData);
     
-    // Force sync volatility chart after timeframe change with aggregated data
-    if (window.volatilityIndicators) {
+    // Force sync RSI volatility chart after timeframe change
+    if (window.rsiVolatility) {
       setTimeout(() => {
         const timeframeSeconds = this.timeframes[this.currentTimeframe].seconds;
         const aggregatedData = this.aggregateData(this.rawData, timeframeSeconds);
-        window.volatilityIndicators.updateData(aggregatedData, this.currentTimeframe);
-        window.volatilityIndicators.forceSync();
+        window.rsiVolatility.updateWithTimeframeData(aggregatedData, this.currentTimeframe);
+        window.rsiVolatility.forceSync();
       }, 100);
     }
     
@@ -533,13 +533,9 @@ function zoomIn() {
       };
       timeScale.setVisibleRange(newTimeRange);
       
-      // Aggressively sync volatility chart
-      if (window.volatilityIndicators) {
-        window.volatilityIndicators.forceSync();
-        // Double-check after a moment
-        setTimeout(() => {
-          window.volatilityIndicators.forceSync();
-        }, 100);
+      // Sync RSI volatility chart
+      if (window.rsiVolatility) {
+        window.rsiVolatility.forceSync();
       }
     }
   }
@@ -559,13 +555,9 @@ function zoomOut() {
       };
       timeScale.setVisibleRange(newTimeRange);
       
-      // Aggressively sync volatility chart
-      if (window.volatilityIndicators) {
-        window.volatilityIndicators.forceSync();
-        // Double-check after a moment
-        setTimeout(() => {
-          window.volatilityIndicators.forceSync();
-        }, 100);
+      // Sync RSI volatility chart
+      if (window.rsiVolatility) {
+        window.rsiVolatility.forceSync();
       }
     }
   }
@@ -575,14 +567,10 @@ function fitContent() {
   if (window.chart) {
     window.chart.timeScale().fitContent();
     
-    // Immediately sync volatility chart
-    if (window.volatilityIndicators && window.volatilityIndicators.chart) {
+    // Sync RSI volatility chart
+    if (window.rsiVolatility) {
       setTimeout(() => {
-        const visibleRange = window.chart.timeScale().getVisibleRange();
-        if (visibleRange) {
-          window.volatilityIndicators.chart.timeScale().setVisibleRange(visibleRange);
-          console.log(`🔄 FitContent synced: ${visibleRange.from} to ${visibleRange.to}`);
-        }
+        window.rsiVolatility.forceSync();
       }, 100);
     }
   }
@@ -711,16 +699,16 @@ function handlePinchZoom(scaleChange) {
 manager.initializeChart().then(() => {
   console.log('🎯 Chart ready with bid spread data and dual y-axis!');
   
-  // Initialize volatility panel if available
-  if (typeof SimpleVolatilityIndicators !== 'undefined' && document.getElementById('volatility-panel')) {
-    window.volatilityIndicators = new SimpleVolatilityIndicators();
-    window.volatilityIndicators.initialize();
+  // Initialize RSI-style volatility panel
+  if (typeof RSIStyleVolatility !== 'undefined' && document.getElementById('volatility-panel')) {
+    window.rsiVolatility = new RSIStyleVolatility();
+    window.rsiVolatility.initialize();
     
     // Update with initial aggregated data
     if (manager.rawData && manager.rawData.length > 0) {
       const timeframeSeconds = manager.timeframes[manager.currentTimeframe].seconds;
       const aggregatedData = manager.aggregateData(manager.rawData, timeframeSeconds);
-      window.volatilityIndicators.updateData(aggregatedData, manager.currentTimeframe);
+      window.rsiVolatility.updateWithTimeframeData(aggregatedData, manager.currentTimeframe);
     }
   }
   
