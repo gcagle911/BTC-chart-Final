@@ -16,6 +16,9 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
     },
     borderVisible: false,
     autoScale: true,
+    entireTextOnly: false,
+    ticksVisible: true,
+    mode: LightweightCharts.PriceScaleMode.Normal,
   },
   leftPriceScale: { 
     visible: true, // Show left scale for MA data
@@ -25,6 +28,8 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
     },
     borderVisible: false,
     autoScale: true,
+    entireTextOnly: false,
+    ticksVisible: true,
     mode: LightweightCharts.PriceScaleMode.Normal,
     alignLabels: false,
   },
@@ -48,8 +53,14 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
   handleScale: {
     mouseWheel: true,
     pinch: true,
-    axisPressedMouseMove: true,
-    axisDoubleClickReset: true,
+    axisPressedMouseMove: {
+      time: true,
+      price: true,
+    },
+    axisDoubleClickReset: {
+      time: true,
+      price: true,
+    },
   },
 });
 
@@ -127,18 +138,18 @@ window.indicatorChart = LightweightCharts.createChart(document.getElementById('i
   handleScroll: {
     mouseWheel: true,     // Enable mouse wheel for Y-axis
     pressedMouseMove: true, // Enable drag for Y-axis
-    horzTouchDrag: false,  // Disable horizontal touch drag
+    horzTouchDrag: true,   // Enable horizontal touch drag for time sync
     vertTouchDrag: true,   // Enable vertical touch drag
   },
   handleScale: {
     mouseWheel: true,      // Enable Y-axis zoom with mouse wheel
     pinch: true,           // Enable pinch zoom for Y-axis
     axisPressedMouseMove: {
-      time: false,         // Disable X-axis drag
+      time: true,          // Enable X-axis drag for time sync
       price: true,         // Enable Y-axis drag
     },
     axisDoubleClickReset: {
-      time: false,         // Disable X-axis reset
+      time: true,          // Enable X-axis reset for time sync
       price: true,         // Enable Y-axis reset
     },
   },
@@ -1167,32 +1178,61 @@ function fitContent() {
   }
 }
 
-// Improved mobile touch handling
+// Enhanced mobile touch handling with independent axis control
 function addMobileOptimizations() {
   const chartElement = document.getElementById('main-chart');
   const indicatorElement = document.getElementById('indicator-panel');
   
   if (chartElement && indicatorElement) {
-    // Prevent default touch behaviors that interfere with chart interaction
-    [chartElement, indicatorElement].forEach(element => {
+    // Enhanced touch handling for both charts
+    [chartElement, indicatorElement].forEach((element, index) => {
+      const chart = index === 0 ? window.chart : window.indicatorChart;
+      
       element.addEventListener('touchstart', (e) => {
-        if (e.touches.length === 1) {
-          // Single touch - allow chart interaction
-          e.stopPropagation();
-        }
-      }, { passive: false });
+        // Allow all touch interactions
+        e.stopPropagation();
+      }, { passive: true });
       
       element.addEventListener('touchmove', (e) => {
-        if (e.touches.length === 1) {
-          // Single touch - allow chart panning
-          e.stopPropagation();
-        } else if (e.touches.length === 2) {
-          // Two finger touch - allow pinch zoom
-          e.preventDefault();
-          e.stopPropagation();
-        }
-      }, { passive: false });
+        // Allow chart manipulation
+        e.stopPropagation();
+      }, { passive: true });
+      
+      element.addEventListener('touchend', (e) => {
+        e.stopPropagation();
+      }, { passive: true });
     });
+  }
+  
+     // Add gesture support for independent Y-axis scaling
+   console.log('Mobile optimizations initialized - touch zoom and pan enabled on all axes');
+}
+
+// Enhanced zoom functions with Y-axis control
+function resetLeftScale() {
+  if (window.chart) {
+    window.chart.priceScale('left').applyOptions({ autoScale: true });
+    setTimeout(() => {
+      window.chart.priceScale('left').applyOptions({ autoScale: false });
+    }, 100);
+  }
+}
+
+function resetRightScale() {
+  if (window.chart) {
+    window.chart.priceScale('right').applyOptions({ autoScale: true });
+    setTimeout(() => {
+      window.chart.priceScale('right').applyOptions({ autoScale: false });
+    }, 100);
+  }
+}
+
+function resetIndicatorScale() {
+  if (window.indicatorChart) {
+    window.indicatorChart.priceScale('right').applyOptions({ autoScale: true });
+    setTimeout(() => {
+      window.indicatorChart.priceScale('right').applyOptions({ autoScale: false });
+    }, 100);
   }
 }
 
