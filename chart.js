@@ -114,6 +114,16 @@ const ma200 = chart.addLineSeries({
   priceLineVisible: false,
 });
 
+// Cumulative Average of ALL L20 spread data
+const cumulativeMA = chart.addLineSeries({
+  priceScaleId: 'left', // LEFT y-axis for MAs
+  color: '#FFFFFF',
+  lineWidth: 0.5,
+  title: 'Cumulative Avg',
+  lastValueVisible: false,
+  priceLineVisible: false,
+});
+
 // Restored proper timeframe manager
 class TimeframeManager {
   constructor() {
@@ -235,6 +245,7 @@ class TimeframeManager {
     const ma50Data = [];
     const ma100Data = [];
     const ma200Data = [];
+    const cumulativeData = [];
 
     // Process aggregated price data for price series
     for (let i = 0; i < aggregatedPriceData.length; i++) {
@@ -260,6 +271,9 @@ class TimeframeManager {
     }
 
     // Process RAW MINUTE DATA for MAs - NEVER CHANGES regardless of timeframe
+    let cumulativeSum = 0;
+    let cumulativeCount = 0;
+    
     for (let i = 0; i < rawMinuteData.length; i++) {
       const d = rawMinuteData[i];
       const t = this.toUnixTimestamp(d.time);
@@ -290,6 +304,18 @@ class TimeframeManager {
           value: parseFloat(d.ma_200)
         });
       }
+      
+      // Calculate cumulative average of L20 spread data
+      if (d.spread_avg_L20_pct !== null && d.spread_avg_L20_pct !== undefined) {
+        cumulativeSum += parseFloat(d.spread_avg_L20_pct);
+        cumulativeCount++;
+        const cumulativeAverage = cumulativeSum / cumulativeCount;
+        
+        cumulativeData.push({
+          time: sharedTime,
+          value: cumulativeAverage
+        });
+      }
     }
 
     // Log timestamp alignment for debugging
@@ -297,6 +323,7 @@ class TimeframeManager {
       console.log(`🕐 ${this.currentTimeframe} Data Processing:`);
       console.log(`   Candlestick Data: ${priceData.length} points (RIGHT y-axis)`);
       console.log(`   Bid Spread L20 MA Data: ${ma50Data.length} points (LEFT y-axis)`);
+      console.log(`   Cumulative L20 Avg: ${cumulativeData.length} points (LEFT y-axis)`);
     }
 
     if (isUpdate) {
@@ -307,12 +334,14 @@ class TimeframeManager {
       ma50Data.forEach(p => ma50.update(p));
       ma100Data.forEach(p => ma100.update(p));
       ma200Data.forEach(p => ma200.update(p));
+      cumulativeData.forEach(p => cumulativeMA.update(p));
     } else {
       // Set complete dataset
       priceSeries.setData(priceData);
       ma50.setData(ma50Data);
       ma100.setData(ma100Data);
       ma200.setData(ma200Data);
+      cumulativeMA.setData(cumulativeData);
       
       // Fit content to show all data
       chart.timeScale().fitContent();
