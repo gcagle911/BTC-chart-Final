@@ -92,22 +92,34 @@ class SimpleVolatilityIndicators {
 
   setupSync() {
     if (window.chart) {
-      // Throttle sync updates to improve performance
-      let syncTimeout = null;
+      console.log('🔗 Setting up chart synchronization...');
       
+      // Subscribe to visible time range changes (scrolling/zooming)
       window.chart.timeScale().subscribeVisibleTimeRangeChange((timeRange) => {
         if (timeRange && this.chart) {
-          // Clear previous timeout
-          if (syncTimeout) {
-            clearTimeout(syncTimeout);
-          }
-          
-          // Throttle updates to every 16ms (60fps)
-          syncTimeout = setTimeout(() => {
+          // Immediate sync for perfect alignment
+          try {
             this.chart.timeScale().setVisibleTimeRange(timeRange);
-          }, 16);
+            console.log(`🔄 Synced volatility chart: ${timeRange.from} to ${timeRange.to}`);
+          } catch (error) {
+            console.error('❌ Sync error:', error);
+          }
         }
       });
+      
+      // Also sync on logical range changes (timeframe switches)
+      window.chart.timeScale().subscribeVisibleLogicalRangeChange((logicalRange) => {
+        if (logicalRange && this.chart) {
+          try {
+            this.chart.timeScale().setVisibleLogicalRange(logicalRange);
+            console.log(`🔄 Synced logical range: ${logicalRange.from} to ${logicalRange.to}`);
+          } catch (error) {
+            console.error('❌ Logical sync error:', error);
+          }
+        }
+      });
+      
+      console.log('✅ Chart synchronization active');
     }
   }
 
@@ -126,16 +138,71 @@ class SimpleVolatilityIndicators {
       if (volatilityData.length > 0) {
         this.indicators.predictor.setData(volatilityData);
         this.lastUpdateTime = Date.now();
+        
+        // Force sync after data update
+        this.forceSync();
+        
         console.log(`✅ Volatility updated with ${volatilityData.length} points`);
       }
     } catch (error) {
       console.error('❌ Error updating volatility:', error);
     }
   }
+  
+  // Force synchronization between charts
+  forceSync() {
+    if (window.chart && this.chart) {
+      try {
+        const visibleRange = window.chart.timeScale().getVisibleRange();
+        const logicalRange = window.chart.timeScale().getVisibleLogicalRange();
+        
+        if (visibleRange) {
+          this.chart.timeScale().setVisibleRange(visibleRange);
+          console.log(`🔄 Force synced time range: ${visibleRange.from} to ${visibleRange.to}`);
+        }
+        
+        if (logicalRange) {
+          this.chart.timeScale().setVisibleLogicalRange(logicalRange);
+          console.log(`🔄 Force synced logical range: ${logicalRange.from} to ${logicalRange.to}`);
+        }
+        
+        this.verifyAlignment();
+      } catch (error) {
+        console.error('❌ Force sync error:', error);
+      }
+    }
+  }
+  
+  // Verify alignment between charts
+  verifyAlignment() {
+    if (window.chart && this.chart) {
+      const mainVisible = window.chart.timeScale().getVisibleRange();
+      const volatilityVisible = this.chart.timeScale().getVisibleRange();
+      
+      if (mainVisible && volatilityVisible) {
+        const timeDiff = Math.abs(mainVisible.from - volatilityVisible.from) + Math.abs(mainVisible.to - volatilityVisible.to);
+        
+        if (timeDiff < 1) { // Less than 1 second difference
+          console.log('✅ Charts perfectly aligned');
+        } else {
+          console.warn(`⚠️ Charts misaligned by ${timeDiff.toFixed(2)} seconds`);
+          console.log(`Main: ${mainVisible.from} to ${mainVisible.to}`);
+          console.log(`Volatility: ${volatilityVisible.from} to ${volatilityVisible.to}`);
+        }
+      }
+    }
+  }
+
+  // Use EXACT same timestamp conversion as TimeframeManager
+  toUnixTimestamp(dateStr) {
+    return Math.floor(new Date(dateStr).getTime() / 1000);
+  }
 
   calculateSimpleVolatility(data) {
     const result = [];
     const lookback = 20;
+
+    console.log(`📊 Calculating volatility for ${data.length} data points...`);
 
     for (let i = lookback; i < data.length; i++) {
       const recentData = data.slice(i - lookback, i + 1);
@@ -156,14 +223,19 @@ class SimpleVolatilityIndicators {
         // Convert to 0-100 scale
         const volatilityScore = Math.max(0, Math.min(100, (zScore + 3) * 16.67));
 
-        // Use EXACT same timestamp conversion as main chart for perfect alignment
-        const timestamp = Math.floor(new Date(data[i].time).getTime() / 1000);
+        // Use IDENTICAL timestamp conversion as main chart TimeframeManager
+        const timestamp = this.toUnixTimestamp(data[i].time);
 
         result.push({
           time: timestamp,
           value: volatilityScore
         });
       }
+    }
+
+    console.log(`📈 Generated ${result.length} volatility points`);
+    if (result.length > 0) {
+      console.log(`📅 Time range: ${new Date(result[0].time * 1000).toISOString()} to ${new Date(result[result.length - 1].time * 1000).toISOString()}`);
     }
 
     return result;

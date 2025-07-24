@@ -484,6 +484,14 @@ class TimeframeManager {
     this.lastTimestamp = 0;
     this.processAndSetData(this.rawData);
     
+    // Force sync volatility chart after timeframe change
+    if (window.volatilityIndicators) {
+      setTimeout(() => {
+        window.volatilityIndicators.updateData(this.rawData);
+        window.volatilityIndicators.forceSync();
+      }, 100);
+    }
+    
     console.log(`✅ Switched to ${this.timeframes[timeframe].label}`);
   }
 
@@ -517,10 +525,16 @@ function zoomIn() {
       const middle = (visibleRange.from + visibleRange.to) / 2;
       const range = visibleRange.to - visibleRange.from;
       const newRange = range * 0.6; // Zoom in
-      timeScale.setVisibleRange({
+      const newTimeRange = {
         from: middle - newRange / 2,
         to: middle + newRange / 2
-      });
+      };
+      timeScale.setVisibleRange(newTimeRange);
+      
+      // Immediately sync volatility chart
+      if (window.volatilityIndicators && window.volatilityIndicators.chart) {
+        window.volatilityIndicators.chart.timeScale().setVisibleRange(newTimeRange);
+      }
     }
   }
 }
@@ -533,10 +547,16 @@ function zoomOut() {
       const middle = (visibleRange.from + visibleRange.to) / 2;
       const range = visibleRange.to - visibleRange.from;
       const newRange = range * 1.8; // Zoom out MORE
-      timeScale.setVisibleRange({
+      const newTimeRange = {
         from: middle - newRange / 2,
         to: middle + newRange / 2
-      });
+      };
+      timeScale.setVisibleRange(newTimeRange);
+      
+      // Immediately sync volatility chart
+      if (window.volatilityIndicators && window.volatilityIndicators.chart) {
+        window.volatilityIndicators.chart.timeScale().setVisibleRange(newTimeRange);
+      }
     }
   }
 }
@@ -545,14 +565,15 @@ function fitContent() {
   if (window.chart) {
     window.chart.timeScale().fitContent();
     
-    // Sync volatility chart if it exists (throttled)
+    // Immediately sync volatility chart
     if (window.volatilityIndicators && window.volatilityIndicators.chart) {
       setTimeout(() => {
         const visibleRange = window.chart.timeScale().getVisibleRange();
         if (visibleRange) {
           window.volatilityIndicators.chart.timeScale().setVisibleRange(visibleRange);
+          console.log(`🔄 FitContent synced: ${visibleRange.from} to ${visibleRange.to}`);
         }
-      }, 50);
+      }, 100);
     }
   }
 }
