@@ -1,4 +1,14 @@
-// Main chart setup
+// Advanced Mobile Trading Chart with TradingView-like functionality
+// Enhanced touch handling, pinch-to-zoom, and multi-timeframe support
+
+// Global variables for mobile optimization
+let miniCharts = {};
+let timeframePanelsVisible = false;
+let touchStartTime = 0;
+let lastTouchEnd = 0;
+let gestureHintTimeout = null;
+
+// Main chart setup with enhanced mobile configuration
 window.chart = LightweightCharts.createChart(document.getElementById('main-chart'), {
   layout: {
     background: { color: '#131722' },
@@ -21,7 +31,7 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
     mode: LightweightCharts.PriceScaleMode.Normal,
   },
   leftPriceScale: { 
-    visible: true, // Show left scale for MA data
+    visible: true,
     scaleMargins: {
       top: 0.05,
       bottom: 0.05,
@@ -37,12 +47,24 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
     timeVisible: true, 
     secondsVisible: false,
     borderVisible: false,
-    rightOffset: 50, // Add space on right for better viewing
-    barSpacing: 8, // Increase spacing between candlesticks
-    minBarSpacing: 2, // Minimum spacing when zoomed in
+    rightOffset: 50,
+    barSpacing: 8,
+    minBarSpacing: 2,
+    fixLeftEdge: false,
+    fixRightEdge: false,
   },
   crosshair: {
     mode: LightweightCharts.CrosshairMode.Normal,
+    vertLine: {
+      width: 1,
+      color: '#758696',
+      style: LightweightCharts.LineStyle.Dashed,
+    },
+    horzLine: {
+      width: 1,
+      color: '#758696',
+      style: LightweightCharts.LineStyle.Dashed,
+    },
   },
   handleScroll: {
     mouseWheel: true,
@@ -62,6 +84,10 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
       price: true,
     },
   },
+  kineticScroll: {
+    touch: true,
+    mouse: false,
+  },
 });
 
 const priceSeries = chart.addCandlestickSeries({
@@ -75,7 +101,7 @@ const priceSeries = chart.addCandlestickSeries({
   borderDownColor: '#ff4976',
 });
 
-// Keep MA lines on left scale but improve visibility
+// MA lines with enhanced mobile visibility
 const ma50 = chart.addLineSeries({
   priceScaleId: 'left',
   color: '#FF6B6B',
@@ -106,7 +132,7 @@ const ma200 = chart.addLineSeries({
   priceLineVisible: false,
 });
 
-// Indicator panel setup - X-axis locked, Y-axis independent
+// Enhanced indicator panel with mobile optimization
 window.indicatorChart = LightweightCharts.createChart(document.getElementById('indicator-panel'), {
   layout: {
     background: { color: '#131722' },
@@ -123,35 +149,49 @@ window.indicatorChart = LightweightCharts.createChart(document.getElementById('i
       bottom: 0.05,
     },
     borderVisible: false,
-    autoScale: true, // Allow Y-axis auto-scaling
+    autoScale: true,
     entireTextOnly: false,
     ticksVisible: true,
     mode: LightweightCharts.PriceScaleMode.Normal,
   },
   timeScale: { 
-    visible: false, // Hide to avoid confusion - follows main chart
+    visible: false,
     borderVisible: false,
   },
   crosshair: {
     mode: LightweightCharts.CrosshairMode.Normal,
+    vertLine: {
+      width: 1,
+      color: '#758696',
+      style: LightweightCharts.LineStyle.Dashed,
+    },
+    horzLine: {
+      width: 1,
+      color: '#758696',
+      style: LightweightCharts.LineStyle.Dashed,
+    },
   },
   handleScroll: {
-    mouseWheel: true,     // Enable mouse wheel for Y-axis
-    pressedMouseMove: true, // Enable drag for Y-axis
-    horzTouchDrag: true,   // Enable horizontal touch drag for time sync
-    vertTouchDrag: true,   // Enable vertical touch drag
+    mouseWheel: true,
+    pressedMouseMove: true,
+    horzTouchDrag: true,
+    vertTouchDrag: true,
   },
   handleScale: {
-    mouseWheel: true,      // Enable Y-axis zoom with mouse wheel
-    pinch: true,           // Enable pinch zoom for Y-axis
+    mouseWheel: true,
+    pinch: true,
     axisPressedMouseMove: {
-      time: true,          // Enable X-axis drag for time sync
-      price: true,         // Enable Y-axis drag
+      time: true,
+      price: true,
     },
     axisDoubleClickReset: {
-      time: true,          // Enable X-axis reset for time sync
-      price: true,         // Enable Y-axis reset
+      time: true,
+      price: true,
     },
+  },
+  kineticScroll: {
+    touch: true,
+    mouse: false,
   },
 });
 
@@ -161,7 +201,114 @@ let topReferenceLine = null;
 let middleReferenceLine = null;
 let bottomReferenceLine = null;
 
-// Timeframe management
+// Multi-timeframe mini chart setup
+function initializeMiniCharts() {
+  const timeframes = ['1m', '5m', '15m', '1h', '4h', '1d'];
+  
+  timeframes.forEach(tf => {
+    const container = document.getElementById(`mini-chart-${tf}`);
+    if (container) {
+      try {
+        miniCharts[tf] = LightweightCharts.createChart(container, {
+          layout: {
+            background: { color: '#1e222d' },
+            textColor: '#d1d4dc',
+          },
+          grid: {
+            vertLines: { visible: false },
+            horzLines: { visible: false },
+          },
+          rightPriceScale: { 
+            visible: false,
+          },
+          leftPriceScale: { 
+            visible: false,
+          },
+          timeScale: { 
+            visible: false,
+            borderVisible: false,
+          },
+          crosshair: {
+            mode: LightweightCharts.CrosshairMode.Hidden,
+          },
+          handleScroll: {
+            mouseWheel: false,
+            pressedMouseMove: false,
+            horzTouchDrag: false,
+            vertTouchDrag: false,
+          },
+          handleScale: {
+            mouseWheel: false,
+            pinch: false,
+            axisPressedMouseMove: false,
+            axisDoubleClickReset: false,
+          },
+        });
+        
+        // Add candlestick series to mini chart
+        miniCharts[tf].series = miniCharts[tf].addCandlestickSeries({
+          upColor: '#00ff88',
+          downColor: '#ff4976',
+          borderVisible: false,
+          wickUpColor: '#00ff88',
+          wickDownColor: '#ff4976',
+          borderUpColor: '#00ff88',
+          borderDownColor: '#ff4976',
+        });
+        
+        // Add click handler for timeframe switching
+        container.parentElement.addEventListener('click', () => {
+          setTimeframe(tf);
+          showGestureHint('Switched to ' + tf.toUpperCase());
+        });
+        
+        console.log(`✅ Mini chart initialized for ${tf}`);
+      } catch (error) {
+        console.error(`❌ Failed to initialize mini chart for ${tf}:`, error);
+      }
+    }
+  });
+}
+
+// Toggle timeframe panels visibility
+function toggleTimeframePanels() {
+  const panels = document.getElementById('timeframe-panels');
+  const controls = document.getElementById('top-controls');
+  
+  timeframePanelsVisible = !timeframePanelsVisible;
+  
+  if (timeframePanelsVisible) {
+    panels.classList.add('visible');
+    controls.classList.remove('panels-hidden');
+    showGestureHint('Tap any timeframe to switch');
+  } else {
+    panels.classList.remove('visible');
+    controls.classList.add('panels-hidden');
+  }
+}
+
+// Show gesture hints to help users
+function showGestureHint(message) {
+  if (gestureHintTimeout) {
+    clearTimeout(gestureHintTimeout);
+  }
+  
+  const existingHint = document.querySelector('.gesture-hint');
+  if (existingHint) {
+    existingHint.remove();
+  }
+  
+  const hint = document.createElement('div');
+  hint.className = 'gesture-hint';
+  hint.textContent = message;
+  document.body.appendChild(hint);
+  
+  gestureHintTimeout = setTimeout(() => {
+    hint.remove();
+  }, 3000);
+}
+
+// Enhanced Timeframe Manager with multi-chart support
 class TimeframeManager {
   constructor() {
     this.currentTimeframe = '1m';
@@ -170,6 +317,7 @@ class TimeframeManager {
     this.isFullDataLoaded = false;
     this.updateInterval = null;
     this.refreshInterval = null;
+    this.miniChartsData = {};
     
     this.timeframes = {
       '1m': { seconds: 60, label: '1 Minute' },
@@ -197,6 +345,16 @@ class TimeframeManager {
     const dropdown = document.getElementById('timeframe-dropdown');
     if (dropdown) {
       dropdown.value = timeframe;
+    }
+    
+    // Update active mini chart
+    document.querySelectorAll('.timeframe-mini-chart').forEach(chart => {
+      chart.classList.remove('active');
+    });
+    
+    const activeChart = document.querySelector(`[data-timeframe="${timeframe}"]`);
+    if (activeChart) {
+      activeChart.classList.add('active');
     }
   }
 
@@ -398,7 +556,7 @@ class TimeframeManager {
 
            if (isUpdate) {
          // Add new data points
-         priceData.forEach(p => priceSeries.update(p));
+         priceSeries.update(priceData);
          ma50Data.forEach(p => ma50.update(p));
         ma100Data.forEach(p => ma100.update(p));
         ma200Data.forEach(p => ma200.update(p));
@@ -1178,34 +1336,400 @@ function fitContent() {
   }
 }
 
-// Enhanced mobile touch handling with independent axis control
+// Advanced TradingView-like mobile touch handling system
 function addMobileOptimizations() {
   const chartElement = document.getElementById('main-chart');
   const indicatorElement = document.getElementById('indicator-panel');
   
-  if (chartElement && indicatorElement) {
-    // Enhanced touch handling for both charts
-    [chartElement, indicatorElement].forEach((element, index) => {
-      const chart = index === 0 ? window.chart : window.indicatorChart;
+  if (!chartElement || !indicatorElement) return;
+  
+  console.log('🚀 Initializing advanced mobile touch system...');
+  
+  // Touch state tracking
+  let touchState = {
+    touches: new Map(),
+    gestureStartDistance: null,
+    gestureStartScale: null,
+    lastPinchScale: 1,
+    isPinching: false,
+    lastTapTime: 0,
+    tapCount: 0,
+    longPressTimer: null,
+    panStartPosition: null,
+    isScrolling: false,
+    scrollDirection: null
+  };
+  
+  // Enhanced touch handlers for main chart
+  setupChartTouchHandlers(chartElement, 'main', touchState);
+  setupChartTouchHandlers(indicatorElement, 'indicator', touchState);
+  
+  // Add mobile-specific chart optimizations
+  addMobileChartOptimizations();
+  
+  // Initialize gesture hints
+  setTimeout(() => {
+    showGestureHint('👆 Pinch to zoom • 👆👆 Double-tap to fit • ←→ Swipe to scroll');
+  }, 2000);
+  
+  console.log('✅ Advanced mobile touch system initialized');
+}
+
+function setupChartTouchHandlers(element, chartType, touchState) {
+  const chart = chartType === 'main' ? window.chart : window.indicatorChart;
+  
+  // Touch start handler
+  element.addEventListener('touchstart', (e) => {
+    touchStartTime = Date.now();
+    const touches = Array.from(e.touches);
+    
+    // Clear long press timer
+    if (touchState.longPressTimer) {
+      clearTimeout(touchState.longPressTimer);
+      touchState.longPressTimer = null;
+    }
+    
+    // Handle single touch
+    if (touches.length === 1) {
+      const touch = touches[0];
+      touchState.touches.set(touch.identifier, {
+        startX: touch.clientX,
+        startY: touch.clientY,
+        lastX: touch.clientX,
+        lastY: touch.clientY,
+        startTime: touchStartTime
+      });
       
-      element.addEventListener('touchstart', (e) => {
-        // Allow all touch interactions
-        e.stopPropagation();
-      }, { passive: true });
+      // Detect double tap
+      const currentTime = Date.now();
+      if (currentTime - touchState.lastTapTime < 300) {
+        touchState.tapCount++;
+        if (touchState.tapCount === 2) {
+          handleDoubleTap(chartType);
+          touchState.tapCount = 0;
+        }
+      } else {
+        touchState.tapCount = 1;
+      }
+      touchState.lastTapTime = currentTime;
       
-      element.addEventListener('touchmove', (e) => {
-        // Allow chart manipulation
-        e.stopPropagation();
-      }, { passive: true });
+      // Set up long press detection
+      touchState.longPressTimer = setTimeout(() => {
+        handleLongPress(touch, chartType);
+      }, 500);
       
-      element.addEventListener('touchend', (e) => {
-        e.stopPropagation();
-      }, { passive: true });
+    }
+    // Handle pinch gesture
+    else if (touches.length === 2) {
+      touchState.isPinching = true;
+      touchState.gestureStartDistance = getTouchDistance(touches[0], touches[1]);
+      touchState.gestureStartScale = 1;
+      
+      touches.forEach(touch => {
+        touchState.touches.set(touch.identifier, {
+          startX: touch.clientX,
+          startY: touch.clientY,
+          lastX: touch.clientX,
+          lastY: touch.clientY,
+          startTime: touchStartTime
+        });
+      });
+      
+      showGestureHint('🔍 Pinch to zoom');
+    }
+    
+    e.preventDefault();
+  }, { passive: false });
+  
+  // Touch move handler
+  element.addEventListener('touchmove', (e) => {
+    const touches = Array.from(e.touches);
+    
+    // Clear long press timer on move
+    if (touchState.longPressTimer) {
+      clearTimeout(touchState.longPressTimer);
+      touchState.longPressTimer = null;
+    }
+    
+    if (touches.length === 1 && !touchState.isPinching) {
+      handleSingleTouchMove(touches[0], chartType, touchState);
+    }
+    else if (touches.length === 2) {
+      handlePinchMove(touches, chartType, touchState);
+    }
+    
+    e.preventDefault();
+  }, { passive: false });
+  
+  // Touch end handler
+  element.addEventListener('touchend', (e) => {
+    const endTime = Date.now();
+    const touchDuration = endTime - touchStartTime;
+    
+    // Clear long press timer
+    if (touchState.longPressTimer) {
+      clearTimeout(touchState.longPressTimer);
+      touchState.longPressTimer = null;
+    }
+    
+    // Handle quick tap (< 200ms)
+    if (touchDuration < 200 && touchState.tapCount === 1) {
+      handleQuickTap(chartType);
+    }
+    
+    // Reset pinch state
+    if (e.touches.length < 2) {
+      touchState.isPinching = false;
+      touchState.gestureStartDistance = null;
+      touchState.lastPinchScale = 1;
+    }
+    
+    // Clean up touch tracking
+    Array.from(e.changedTouches).forEach(touch => {
+      touchState.touches.delete(touch.identifier);
+    });
+    
+    // Reset scroll state
+    touchState.isScrolling = false;
+    touchState.scrollDirection = null;
+    
+    lastTouchEnd = endTime;
+  }, { passive: false });
+}
+
+function handleSingleTouchMove(touch, chartType, touchState) {
+  const touchData = touchState.touches.get(touch.identifier);
+  if (!touchData) return;
+  
+  const deltaX = touch.clientX - touchData.lastX;
+  const deltaY = touch.clientY - touchData.lastY;
+  const totalDeltaX = Math.abs(touch.clientX - touchData.startX);
+  const totalDeltaY = Math.abs(touch.clientY - touchData.startY);
+  
+  // Determine scroll direction if not already set
+  if (!touchState.isScrolling && (totalDeltaX > 10 || totalDeltaY > 10)) {
+    touchState.isScrolling = true;
+    touchState.scrollDirection = totalDeltaX > totalDeltaY ? 'horizontal' : 'vertical';
+  }
+  
+  if (touchState.isScrolling) {
+    if (touchState.scrollDirection === 'horizontal') {
+      // Horizontal scrolling - pan time axis
+      handleHorizontalPan(deltaX, chartType);
+      showGestureHint('📅 Scrolling timeline');
+    } else if (chartType === 'indicator') {
+      // Vertical scrolling on indicator - pan price axis
+      handleVerticalPan(deltaY, chartType);
+      showGestureHint('📊 Scrolling price axis');
+    }
+  }
+  
+  // Update touch position
+  touchData.lastX = touch.clientX;
+  touchData.lastY = touch.clientY;
+}
+
+function handlePinchMove(touches, chartType, touchState) {
+  if (touches.length !== 2) return;
+  
+  const currentDistance = getTouchDistance(touches[0], touches[1]);
+  if (!touchState.gestureStartDistance) return;
+  
+  const scale = currentDistance / touchState.gestureStartDistance;
+  const scaleChange = scale / touchState.lastPinchScale;
+  
+  // Apply zoom
+  if (Math.abs(scaleChange - 1) > 0.01) {
+    handlePinchZoom(scaleChange, chartType);
+    touchState.lastPinchScale = scale;
+    showGestureHint(`🔍 Zoom: ${Math.round(scale * 100)}%`);
+  }
+}
+
+function handleDoubleTap(chartType) {
+  console.log(`📱 Double tap detected on ${chartType} chart`);
+  if (chartType === 'main') {
+    fitContent();
+  } else {
+    resetIndicatorScale();
+  }
+  showGestureHint('🎯 Fit to screen');
+}
+
+function handleLongPress(touch, chartType) {
+  console.log(`📱 Long press detected on ${chartType} chart`);
+  
+  // Enable crosshair mode
+  const chart = chartType === 'main' ? window.chart : window.indicatorChart;
+  if (chart) {
+    chart.applyOptions({
+      crosshair: {
+        mode: LightweightCharts.CrosshairMode.Magnet,
+      }
+    });
+    
+    setTimeout(() => {
+      chart.applyOptions({
+        crosshair: {
+          mode: LightweightCharts.CrosshairMode.Normal,
+        }
+      });
+    }, 3000);
+  }
+  
+  showGestureHint('🎯 Crosshair activated');
+}
+
+function handleQuickTap(chartType) {
+  // Toggle timeframe panels on quick tap
+  if (!timeframePanelsVisible) {
+    toggleTimeframePanels();
+  }
+}
+
+function handleHorizontalPan(deltaX, chartType) {
+  const chart = chartType === 'main' ? window.chart : window.indicatorChart;
+  if (!chart) return;
+  
+  try {
+    const timeScale = chart.timeScale();
+    const visibleRange = timeScale.getVisibleTimeRange();
+    
+    if (visibleRange) {
+      const rangeSize = visibleRange.to - visibleRange.from;
+      const panFactor = deltaX / window.innerWidth;
+      const panAmount = rangeSize * panFactor * 0.1;
+      
+      timeScale.setVisibleTimeRange({
+        from: visibleRange.from - panAmount,
+        to: visibleRange.to - panAmount
+      });
+    }
+  } catch (error) {
+    console.error('Error handling horizontal pan:', error);
+  }
+}
+
+function handleVerticalPan(deltaY, chartType) {
+  const chart = chartType === 'main' ? window.chart : window.indicatorChart;
+  if (!chart) return;
+  
+  try {
+    const priceScale = chart.priceScale('right');
+    priceScale.applyOptions({ autoScale: false });
+    
+    // Implement custom vertical panning logic here
+    // This is a simplified version - you may need to adjust based on chart library capabilities
+    
+  } catch (error) {
+    console.error('Error handling vertical pan:', error);
+  }
+}
+
+function handlePinchZoom(scaleChange, chartType) {
+  if (scaleChange > 0.98 && scaleChange < 1.02) return; // Ignore very small changes
+  
+  const chart = chartType === 'main' ? window.chart : window.indicatorChart;
+  if (!chart) return;
+  
+  try {
+    const timeScale = chart.timeScale();
+    const visibleRange = timeScale.getVisibleTimeRange();
+    
+    if (visibleRange) {
+      const center = (visibleRange.from + visibleRange.to) / 2;
+      const currentSize = visibleRange.to - visibleRange.from;
+      const newSize = currentSize / scaleChange;
+      
+      // Limit zoom levels
+      const minSize = 3600; // 1 hour minimum
+      const maxSize = 86400 * 30; // 30 days maximum
+      const clampedSize = Math.max(minSize, Math.min(maxSize, newSize));
+      
+      timeScale.setVisibleTimeRange({
+        from: center - clampedSize / 2,
+        to: center + clampedSize / 2
+      });
+    }
+  } catch (error) {
+    console.error('Error handling pinch zoom:', error);
+  }
+}
+
+function getTouchDistance(touch1, touch2) {
+  const dx = touch1.clientX - touch2.clientX;
+  const dy = touch1.clientY - touch2.clientY;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function addMobileChartOptimizations() {
+  // Prevent default browser zoom
+  document.addEventListener('gesturestart', (e) => e.preventDefault());
+  document.addEventListener('gesturechange', (e) => e.preventDefault());
+  document.addEventListener('gestureend', (e) => e.preventDefault());
+  
+  // Prevent double-tap zoom on iOS
+  let lastTouchEnd = 0;
+  document.addEventListener('touchend', (e) => {
+    const now = Date.now();
+    if (now - lastTouchEnd <= 300) {
+      e.preventDefault();
+    }
+    lastTouchEnd = now;
+  }, false);
+  
+  // Add viewport meta tag enforcement
+  const viewport = document.querySelector('meta[name=viewport]');
+  if (viewport) {
+    viewport.setAttribute('content', 
+      'width=device-width, initial-scale=1.0, maximum-scale=5.0, minimum-scale=0.5, user-scalable=yes, viewport-fit=cover'
+    );
+  }
+  
+  // Optimize chart performance for mobile
+  if (window.chart) {
+    window.chart.applyOptions({
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: true,
+      },
+      handleScale: {
+        mouseWheel: true,
+        pinch: true,
+        axisPressedMouseMove: true,
+        axisDoubleClickReset: true,
+      },
+      kineticScroll: {
+        touch: true,
+        mouse: false,
+      }
     });
   }
   
-     // Add gesture support for independent Y-axis scaling
-   console.log('Mobile optimizations initialized - touch zoom and pan enabled on all axes');
+  if (window.indicatorChart) {
+    window.indicatorChart.applyOptions({
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: true,
+      },
+      handleScale: {
+        mouseWheel: true,
+        pinch: true,
+        axisPressedMouseMove: true,
+        axisDoubleClickReset: true,
+      },
+      kineticScroll: {
+        touch: true,
+        mouse: false,
+      }
+    });
+  }
+  
+  console.log('📱 Mobile chart optimizations applied');
 }
 
 // Enhanced zoom functions with Y-axis control
