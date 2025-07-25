@@ -137,8 +137,8 @@ const cumulativeMA = chart.addLineSeries({
 const spreadVelocity = chart.addLineSeries({
   priceScaleId: 'left', // LEFT y-axis for velocity
   color: '#FF00FF', // Magenta for visibility
-  lineWidth: 1.5,
-  title: 'Spread Velocity',
+  lineWidth: 2, // Thicker line for better visibility
+  title: 'Spread Velocity (Smoothed)',
   lastValueVisible: false,
   priceLineVisible: false,
   visible: false, // Start hidden
@@ -459,7 +459,10 @@ class TimeframeManager {
   calculateVelocityFromRawData(data) {
     const velocityData = [];
     const lookbackPeriods = 5; // 5 minute lookback for velocity
+    const smoothingPeriods = 10; // Smooth over 10 periods to reduce noise
     
+    // First pass: Calculate raw velocity
+    const rawVelocity = [];
     for (let i = lookbackPeriods; i < data.length; i++) {
       const current = data[i];
       const past = data[i - lookbackPeriods];
@@ -469,11 +472,29 @@ class TimeframeManager {
         const pastSpread = parseFloat(past.spread_avg_L20_pct);
         const velocity = (currentSpread - pastSpread) / lookbackPeriods;
         
-        velocityData.push({
+        rawVelocity.push({
           time: this.toUnixTimestamp(current.time),
           value: velocity
         });
       }
+    }
+    
+    // Second pass: Apply smoothing and noise filtering
+    for (let i = smoothingPeriods; i < rawVelocity.length; i++) {
+      const recentVelocities = rawVelocity.slice(i - smoothingPeriods, i);
+      
+      // Calculate moving average for smoothing
+      const sum = recentVelocities.reduce((acc, v) => acc + v.value, 0);
+      const smoothedVelocity = sum / smoothingPeriods;
+      
+      // Filter out tiny meaningless changes (noise threshold)
+      const noiseThreshold = 0.001; // Only show velocity changes > 0.001%
+      const filteredVelocity = Math.abs(smoothedVelocity) > noiseThreshold ? smoothedVelocity : 0;
+      
+      velocityData.push({
+        time: rawVelocity[i - 1].time,
+        value: filteredVelocity
+      });
     }
     
     return velocityData;
