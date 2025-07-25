@@ -400,14 +400,18 @@ class TimeframeManager {
       this.processAndSetData(recentData);
       console.log(`✅ Recent data loaded (${recentData.length} points)`);
       
-      // Phase 2: Load complete historical data
+      // Phase 2: Load complete historical data (limited for performance)
       const historicalRes = await fetch('https://btc-spread-test-pipeline.onrender.com/historical.json');
       const historicalData = await historicalRes.json();
       
-      this.rawData = historicalData;
-      this.processAndSetData(historicalData);
+      // Limit to last 3000 points for better performance
+      const limitedData = historicalData.length > 3000 ? 
+        historicalData.slice(-3000) : historicalData;
+      
+      this.rawData = limitedData;
+      this.processAndSetData(limitedData);
       this.isFullDataLoaded = true;
-      console.log(`✅ Full data loaded (${historicalData.length} points)`);
+      console.log(`✅ Full data loaded (${limitedData.length} points)`);
       
     } catch (err) {
       console.error('❌ Loading error:', err);
@@ -502,11 +506,11 @@ class TimeframeManager {
     if (this.updateInterval) clearInterval(this.updateInterval);
     if (this.refreshInterval) clearInterval(this.refreshInterval);
 
-    // Update with recent data every 30 seconds
-    this.updateInterval = setInterval(() => this.fetchAndUpdate(), 30000);
+    // Update with recent data every 60 seconds (slightly reduced)
+    this.updateInterval = setInterval(() => this.fetchAndUpdate(), 60000);
 
-    // Refresh complete historical data every hour
-    this.refreshInterval = setInterval(() => this.refreshHistoricalData(), 3600000);
+    // Refresh complete historical data every 2 hours (slightly reduced)
+    this.refreshInterval = setInterval(() => this.refreshHistoricalData(), 7200000);
   }
 }
 
