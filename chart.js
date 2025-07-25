@@ -458,8 +458,8 @@ class TimeframeManager {
   // Calculate velocity from raw data - NEW FEATURE
   calculateVelocityFromRawData(data) {
     const velocityData = [];
-    const lookbackPeriods = 15; // Longer lookback for more stable velocity (15 minutes)
-    const smoothingPeriods = 30; // Much more aggressive smoothing (30 periods)
+    const lookbackPeriods = 20; // Even longer lookback for stability (20 minutes)
+    const smoothingPeriods = 50; // Very heavy smoothing (50 periods)
     
     // First pass: Calculate raw velocity
     const rawVelocity = [];
@@ -479,7 +479,7 @@ class TimeframeManager {
       }
     }
     
-    // Second pass: Apply aggressive smoothing and strict filtering
+    // Second pass: Apply very aggressive smoothing and realistic filtering
     for (let i = smoothingPeriods; i < rawVelocity.length; i++) {
       const recentVelocities = rawVelocity.slice(i - smoothingPeriods, i);
       
@@ -487,11 +487,12 @@ class TimeframeManager {
       const sum = recentVelocities.reduce((acc, v) => acc + v.value, 0);
       const smoothedVelocity = sum / smoothingPeriods;
       
-      // Much stricter noise threshold - only show SIGNIFICANT changes
-      const significanceThreshold = 0.01; // Only show velocity changes > 0.01% (10x stricter)
+      // REALISTIC threshold based on actual data analysis
+      // Your spreads range 0.015-0.025, so meaningful velocity = ~0.0005 per minute
+      const meaningfulThreshold = 0.0002; // 0.02% change per minute is significant
       
       // Additional filtering: Only show sustained velocity (not single spikes)
-      const sustainedPeriods = 5;
+      const sustainedPeriods = 10; // Must last 10+ periods
       if (i >= sustainedPeriods) {
         const recentSmoothed = [];
         for (let j = 0; j < sustainedPeriods; j++) {
@@ -500,9 +501,9 @@ class TimeframeManager {
           recentSmoothed.push(checkSum / checkPeriod.length);
         }
         
-        // Only add point if velocity is both significant AND sustained
-        const allSignificant = recentSmoothed.every(v => Math.abs(v) > significanceThreshold);
-        const finalValue = allSignificant ? smoothedVelocity : 0;
+        // Only add point if velocity is both meaningful AND sustained
+        const allMeaningful = recentSmoothed.every(v => Math.abs(v) > meaningfulThreshold);
+        const finalValue = allMeaningful ? smoothedVelocity * 1000 : 0; // Scale up for visibility
         
         velocityData.push({
           time: rawVelocity[i - 1].time,
