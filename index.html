@@ -95,6 +95,20 @@
       .timeframe-label {
         font-size: 11px;
       }
+      
+      #velocity-controls {
+        top: 5px;
+        right: 5px;
+        padding: 4px 8px;
+      }
+      
+      .velocity-label {
+        font-size: 10px;
+      }
+      
+      .velocity-toggle {
+        transform: scale(0.8);
+      }
     }
     
     @media (max-width: 480px) {
@@ -111,6 +125,81 @@
       .timeframe-label {
         font-size: 10px;
       }
+      
+      #velocity-controls {
+        padding: 3px 6px;
+      }
+      
+      .velocity-label {
+        font-size: 9px;
+      }
+      
+      .velocity-toggle {
+        transform: scale(0.7);
+      }
+    }
+
+    /* Spread Velocity Toggle Controls */
+    #velocity-controls {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(25, 28, 35, 0.9);
+      padding: 8px 12px;
+      border-radius: 8px;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .velocity-label {
+      color: #d1d4dc;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    
+    .velocity-toggle {
+      position: relative;
+      width: 36px;
+      height: 18px;
+      background: #4a4e59;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background 0.3s ease;
+      border: 1px solid #5a5e69;
+    }
+    
+    .velocity-toggle.active {
+      background: #2962ff;
+      border-color: #4285f4;
+    }
+    
+    .velocity-toggle::after {
+      content: '';
+      position: absolute;
+      top: 1px;
+      left: 1px;
+      width: 14px;
+      height: 14px;
+      background: white;
+      border-radius: 50%;
+      transition: transform 0.3s ease;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+    
+    .velocity-toggle.active::after {
+      transform: translateX(18px);
+    }
+    
+    .velocity-toggle:hover {
+      background: #5a5e69;
+    }
+    
+    .velocity-toggle.active:hover {
+      background: #4285f4;
     }
   </style>
 </head>
@@ -126,6 +215,11 @@
         <option value="4h">4h</option>
         <option value="1d">1d</option>
       </select>
+    </div>
+    
+    <div id="velocity-controls">
+      <label class="velocity-label">Spread Velocity:</label>
+      <div class="velocity-toggle" id="velocity-toggle" onclick="toggleSpreadVelocity()"></div>
     </div>
     
     <div id="main-chart"></div>

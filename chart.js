@@ -133,6 +133,62 @@ const cumulativeMA = chart.addLineSeries({
   priceLineVisible: false,
 });
 
+// Spread Velocity Indicator - NEW FEATURE
+const spreadVelocity = chart.addLineSeries({
+  priceScaleId: 'left', // LEFT y-axis for velocity
+  color: '#FF00FF', // Magenta for visibility
+  lineWidth: 1.5,
+  title: 'Spread Velocity',
+  lastValueVisible: false,
+  priceLineVisible: false,
+  visible: false, // Start hidden
+});
+
+// Spread Velocity feature state
+let velocityEnabled = false;
+let velocityData = [];
+
+// Toggle function for Spread Velocity
+function toggleSpreadVelocity() {
+  velocityEnabled = !velocityEnabled;
+  const toggle = document.getElementById('velocity-toggle');
+  
+  if (velocityEnabled) {
+    toggle.classList.add('active');
+    spreadVelocity.applyOptions({ visible: true });
+    // Recalculate and show velocity data if we have data
+    if (window.timeframeManager && window.timeframeManager.rawData) {
+      const velocityData = window.timeframeManager.calculateVelocityFromRawData(window.timeframeManager.rawData);
+      spreadVelocity.setData(velocityData);
+    }
+  } else {
+    toggle.classList.remove('active');
+    spreadVelocity.applyOptions({ visible: false });
+  }
+}
+
+// Make function globally accessible
+window.toggleSpreadVelocity = toggleSpreadVelocity;
+
+// Function to calculate spread velocity
+function calculateSpreadVelocity(data) {
+  const velocityData = [];
+  const lookbackPeriods = 5; // 5 periods for velocity calculation
+  
+  for (let i = lookbackPeriods; i < data.length; i++) {
+    const currentSpread = data[i].l20_spread;
+    const pastSpread = data[i - lookbackPeriods].l20_spread;
+    const velocity = (currentSpread - pastSpread) / lookbackPeriods;
+    
+    velocityData.push({
+      time: data[i].time,
+      value: velocity
+    });
+  }
+  
+  return velocityData;
+}
+
 // Real-time L20 spread line (MA1 - raw data) - REMOVED
 
 // Restored proper timeframe manager
@@ -367,6 +423,15 @@ class TimeframeManager {
       ma100Data.forEach(p => ma100.update(p));
       ma200Data.forEach(p => ma200.update(p));
       cumulativeData.forEach(p => cumulativeMA.update(p));
+      
+      // Calculate and set Spread Velocity data - NEW FEATURE
+      if (velocityEnabled) {
+        const velocityData = this.calculateVelocityFromRawData(rawMinuteData);
+        spreadVelocity.setData(velocityData);
+      }
+      
+      // Fit content to show all data
+      chart.timeScale().fitContent();
     } else {
       // Set complete dataset
       priceSeries.setData(priceData);
@@ -380,7 +445,38 @@ class TimeframeManager {
       chart.timeScale().fitContent();
     }
 
+    // Update velocity data if enabled - NEW FEATURE
+    if (velocityEnabled && isUpdate) {
+      const velocityData = this.calculateVelocityFromRawData(rawMinuteData);
+      const newVelocityPoints = velocityData.slice(-1); // Get latest point
+      newVelocityPoints.forEach(p => spreadVelocity.update(p));
+    }
+
     console.log(`✅ Chart updated with ${priceData.length} candles and bid spread MAs`);
+  }
+
+  // Calculate velocity from raw data - NEW FEATURE
+  calculateVelocityFromRawData(data) {
+    const velocityData = [];
+    const lookbackPeriods = 5; // 5 minute lookback for velocity
+    
+    for (let i = lookbackPeriods; i < data.length; i++) {
+      const current = data[i];
+      const past = data[i - lookbackPeriods];
+      
+      if (current.spread_avg_L20_pct !== null && past.spread_avg_L20_pct !== null) {
+        const currentSpread = parseFloat(current.spread_avg_L20_pct);
+        const pastSpread = parseFloat(past.spread_avg_L20_pct);
+        const velocity = (currentSpread - pastSpread) / lookbackPeriods;
+        
+        velocityData.push({
+          time: this.toUnixTimestamp(current.time),
+          value: velocity
+        });
+      }
+    }
+    
+    return velocityData;
   }
 
   async initializeChart() {
@@ -497,6 +593,7 @@ class TimeframeManager {
 
 // Global instance
 const manager = new TimeframeManager();
+window.timeframeManager = manager; // Make globally accessible for velocity toggle
 
 // Global function for timeframe dropdown
 function setTimeframe(timeframe) {
