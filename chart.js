@@ -136,9 +136,9 @@ const cumulativeMA = chart.addLineSeries({
 // Spread Velocity Indicator - NEW FEATURE
 const spreadVelocity = chart.addLineSeries({
   priceScaleId: 'left', // LEFT y-axis for velocity
-  color: '#FF00FF', // Magenta for visibility
-  lineWidth: 2, // Thicker line for better visibility
-  title: 'Spread Velocity (Smoothed)',
+  color: '#00FFFF', // Bright cyan for high contrast
+  lineWidth: 3, // Even thicker for significance
+  title: 'Spread Velocity (Significant Only)',
   lastValueVisible: false,
   priceLineVisible: false,
   visible: false, // Start hidden
@@ -458,8 +458,8 @@ class TimeframeManager {
   // Calculate velocity from raw data - NEW FEATURE
   calculateVelocityFromRawData(data) {
     const velocityData = [];
-    const lookbackPeriods = 5; // 5 minute lookback for velocity
-    const smoothingPeriods = 10; // Smooth over 10 periods to reduce noise
+    const lookbackPeriods = 15; // Longer lookback for more stable velocity (15 minutes)
+    const smoothingPeriods = 30; // Much more aggressive smoothing (30 periods)
     
     // First pass: Calculate raw velocity
     const rawVelocity = [];
@@ -479,7 +479,7 @@ class TimeframeManager {
       }
     }
     
-    // Second pass: Apply smoothing and noise filtering
+    // Second pass: Apply aggressive smoothing and strict filtering
     for (let i = smoothingPeriods; i < rawVelocity.length; i++) {
       const recentVelocities = rawVelocity.slice(i - smoothingPeriods, i);
       
@@ -487,14 +487,28 @@ class TimeframeManager {
       const sum = recentVelocities.reduce((acc, v) => acc + v.value, 0);
       const smoothedVelocity = sum / smoothingPeriods;
       
-      // Filter out tiny meaningless changes (noise threshold)
-      const noiseThreshold = 0.001; // Only show velocity changes > 0.001%
-      const filteredVelocity = Math.abs(smoothedVelocity) > noiseThreshold ? smoothedVelocity : 0;
+      // Much stricter noise threshold - only show SIGNIFICANT changes
+      const significanceThreshold = 0.01; // Only show velocity changes > 0.01% (10x stricter)
       
-      velocityData.push({
-        time: rawVelocity[i - 1].time,
-        value: filteredVelocity
-      });
+      // Additional filtering: Only show sustained velocity (not single spikes)
+      const sustainedPeriods = 5;
+      if (i >= sustainedPeriods) {
+        const recentSmoothed = [];
+        for (let j = 0; j < sustainedPeriods; j++) {
+          const checkPeriod = rawVelocity.slice(i - smoothingPeriods - j, i - j);
+          const checkSum = checkPeriod.reduce((acc, v) => acc + v.value, 0);
+          recentSmoothed.push(checkSum / checkPeriod.length);
+        }
+        
+        // Only add point if velocity is both significant AND sustained
+        const allSignificant = recentSmoothed.every(v => Math.abs(v) > significanceThreshold);
+        const finalValue = allSignificant ? smoothedVelocity : 0;
+        
+        velocityData.push({
+          time: rawVelocity[i - 1].time,
+          value: finalValue
+        });
+      }
     }
     
     return velocityData;
