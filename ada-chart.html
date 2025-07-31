@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, minimum-scale=0.5, user-scalable=yes, viewport-fit=cover" />
+  <title>ADA Chart - Clean</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+    
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #131722;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      overflow: hidden;
+      position: fixed;
+      touch-action: manipulation;
+    }
+    
+    #chart-container {
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+    }
+    
+    #main-chart {
+      width: 100%;
+      height: 100%;
+      touch-action: pan-x pan-y pinch-zoom;
+    }
+    
+    #timeframe-controls {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(25, 28, 35, 0.9);
+      padding: 8px 12px;
+      border-radius: 8px;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    #timeframe-dropdown {
+      background: #2a2e39;
+      border: 1px solid #4a4e59;
+      color: #d1d4dc;
+      padding: 6px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      min-width: 80px;
+    }
+    
+    #timeframe-dropdown:hover {
+      background: #363a45;
+      border-color: #5a5e69;
+    }
+    
+    #timeframe-dropdown:focus {
+      outline: none;
+      border-color: #2962ff;
+      box-shadow: 0 0 0 2px rgba(41, 98, 255, 0.2);
+    }
+    
+    .timeframe-label {
+      color: #d1d4dc;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    
+    /* Mobile optimizations */
+    @media (max-width: 768px) {
+      #timeframe-controls {
+        top: 5px;
+        left: 5px;
+        padding: 6px 10px;
+      }
+      
+      #timeframe-dropdown {
+        font-size: 11px;
+        padding: 4px 8px;
+        min-width: 70px;
+      }
+      
+      .timeframe-label {
+        font-size: 11px;
+      }
+    }
+    
+    @media (max-width: 480px) {
+      #timeframe-controls {
+        padding: 4px 8px;
+      }
+      
+      #timeframe-dropdown {
+        font-size: 10px;
+        padding: 3px 6px;
+        min-width: 60px;
+      }
+      
+      .timeframe-label {
+        font-size: 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="chart-container">
+    <div id="timeframe-controls">
+      <label class="timeframe-label" for="timeframe-dropdown">Timeframe:</label>
+      <select id="timeframe-dropdown" onchange="setTimeframe(this.value)">
+        <option value="1m" selected>1m</option>
+        <option value="5m">5m</option>
+        <option value="15m">15m</option>
+        <option value="1h">1h</option>
+        <option value="4h">4h</option>
+        <option value="1d">1d</option>
+      </select>
+    </div>
+    
+    <div id="main-chart"></div>
+  </div>
+  
+  <script src="https://unpkg.com/lightweight-charts@4.0.0/dist/lightweight-charts.standalone.production.js"></script>
+  <script src="ada-chart.js"></script>
+</body>
+</html>
