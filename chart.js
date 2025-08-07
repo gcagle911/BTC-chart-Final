@@ -246,154 +246,139 @@ class TimeframeManager {
 
   // Process and set chart data (performance optimized)
   processAndSetData(data, isUpdate = false) {
-    try {
-      console.log(`🔄 Processing ${data.length} data points for ${this.currentTimeframe} timeframe...`);
-      
-      const timeframeSeconds = this.timeframes[this.currentTimeframe].seconds;
-      
-      // SOLUTION: Always use 1-minute data for MAs, only aggregate prices
-      const rawMinuteData = this.currentTimeframe === '1m' ? data : this.rawData || data;
-      const aggregatedPriceData = this.aggregateData(data, timeframeSeconds);
+    const timeframeSeconds = this.timeframes[this.currentTimeframe].seconds;
+    
+    // SOLUTION: Always use 1-minute data for MAs, only aggregate prices
+    const rawMinuteData = this.currentTimeframe === '1m' ? data : this.rawData || data;
+    const aggregatedPriceData = this.aggregateData(data, timeframeSeconds);
 
-      const priceData = [];
-      const ma20Data = [];
-      const ma50Data = [];
-      const ma100Data = [];
-      const ma200Data = [];
-      const cumulativeData = [];
+    const priceData = [];
+    const ma20Data = [];
+    const ma50Data = [];
+    const ma100Data = [];
+    const ma200Data = [];
+    const cumulativeData = [];
 
-      // Process aggregated price data for price series
-      for (let i = 0; i < aggregatedPriceData.length; i++) {
-        const d = aggregatedPriceData[i];
-        const t = this.toUnixTimestamp(d.time);
-        
-        // For updates, only add new data
-        if (isUpdate && t <= this.lastTimestamp) continue;
-        
-        // CRITICAL: Create all data points with IDENTICAL timestamps
-        const sharedTime = t;
-        
-        // Price data (main chart) - candlestick format
-        priceData.push({ 
-          time: sharedTime, 
-          open: parseFloat(d.open),
-          high: parseFloat(d.high),
-          low: parseFloat(d.low),
-          close: parseFloat(d.close)
-        });
-        
-        if (t > this.lastTimestamp) this.lastTimestamp = t;
-      }
-
-      // Process RAW MINUTE DATA for MAs - NEVER CHANGES regardless of timeframe
-      let cumulativeSum = 0;
-      let cumulativeCount = 0;
+    // Process aggregated price data for price series
+    for (let i = 0; i < aggregatedPriceData.length; i++) {
+      const d = aggregatedPriceData[i];
+      const t = this.toUnixTimestamp(d.time);
       
-      for (let i = 0; i < rawMinuteData.length; i++) {
-        const d = rawMinuteData[i];
-        const t = this.toUnixTimestamp(d.time);
+      // For updates, only add new data
+      if (isUpdate && t <= this.lastTimestamp) continue;
+      
+      // CRITICAL: Create all data points with IDENTICAL timestamps
+      const sharedTime = t;
+      
+      // Price data (main chart) - candlestick format
+      priceData.push({ 
+        time: sharedTime, 
+        open: parseFloat(d.open),
+        high: parseFloat(d.high),
+        low: parseFloat(d.low),
+        close: parseFloat(d.close)
+      });
+      
+      if (t > this.lastTimestamp) this.lastTimestamp = t;
+    }
+
+    // Process RAW MINUTE DATA for MAs - NEVER CHANGES regardless of timeframe
+    let cumulativeSum = 0;
+    let cumulativeCount = 0;
+    
+    for (let i = 0; i < rawMinuteData.length; i++) {
+      const d = rawMinuteData[i];
+      const t = this.toUnixTimestamp(d.time);
+      
+      // For updates, only add new data
+      if (isUpdate && t <= this.lastTimestamp) continue;
+      
+      const sharedTime = t;
+      
+      // MA data ALWAYS from 1-minute data - IDENTICAL across all timeframes
+      
+      // Calculate MA20 from L20 spread data (20-period moving average)
+      if (d.spread_avg_L20_pct !== null && d.spread_avg_L20_pct !== undefined && i >= 19) {
+        const recent20 = rawMinuteData.slice(i - 19, i + 1);
+        const validSpreadData = recent20.filter(item => item.spread_avg_L20_pct !== null && item.spread_avg_L20_pct !== undefined);
         
-        // For updates, only add new data
-        if (isUpdate && t <= this.lastTimestamp) continue;
-        
-        const sharedTime = t;
-        
-        // MA data ALWAYS from 1-minute data - IDENTICAL across all timeframes
-        
-        // Calculate MA20 from L20 spread data (20-period moving average)
-        if (d.spread_avg_L20_pct !== null && d.spread_avg_L20_pct !== undefined && i >= 19) {
-          const recent20 = rawMinuteData.slice(i - 19, i + 1);
-          const validSpreadData = recent20.filter(item => item.spread_avg_L20_pct !== null && item.spread_avg_L20_pct !== undefined);
+        if (validSpreadData.length === 20) {
+          const sum = validSpreadData.reduce((acc, item) => acc + parseFloat(item.spread_avg_L20_pct), 0);
+          const ma20Value = sum / 20;
           
-          if (validSpreadData.length === 20) {
-            const sum = validSpreadData.reduce((acc, item) => acc + parseFloat(item.spread_avg_L20_pct), 0);
-            const ma20Value = sum / 20;
-            
-            ma20Data.push({
-              time: sharedTime,
-              value: ma20Value
-            });
-          }
-        }
-        
-        if (d.ma_50 !== null && d.ma_50 !== undefined) {
-          ma50Data.push({ 
-            time: sharedTime, 
-            value: parseFloat(d.ma_50)
-          });
-        }
-        
-        if (d.ma_100 !== null && d.ma_100 !== undefined) {
-          ma100Data.push({ 
-            time: sharedTime, 
-            value: parseFloat(d.ma_100)
-          });
-        }
-        
-        if (d.ma_200 !== null && d.ma_200 !== undefined) {
-          ma200Data.push({ 
-            time: sharedTime, 
-            value: parseFloat(d.ma_200)
-          });
-        }
-        
-        // Calculate cumulative average of L20 spread data
-        if (d.spread_avg_L20_pct !== null && d.spread_avg_L20_pct !== undefined) {
-          cumulativeSum += parseFloat(d.spread_avg_L20_pct);
-          cumulativeCount++;
-          const cumulativeAverage = cumulativeSum / cumulativeCount;
-          
-          cumulativeData.push({
+          ma20Data.push({
             time: sharedTime,
-            value: cumulativeAverage
+            value: ma20Value
           });
         }
       }
+      
+      if (d.ma_50 !== null && d.ma_50 !== undefined) {
+        ma50Data.push({ 
+          time: sharedTime, 
+          value: parseFloat(d.ma_50)
+        });
+      }
+      
+      if (d.ma_100 !== null && d.ma_100 !== undefined) {
+        ma100Data.push({ 
+          time: sharedTime, 
+          value: parseFloat(d.ma_100)
+        });
+      }
+      
+      if (d.ma_200 !== null && d.ma_200 !== undefined) {
+        ma200Data.push({ 
+          time: sharedTime, 
+          value: parseFloat(d.ma_200)
+        });
+      }
+      
+      // Calculate cumulative average of L20 spread data
+      if (d.spread_avg_L20_pct !== null && d.spread_avg_L20_pct !== undefined) {
+        cumulativeSum += parseFloat(d.spread_avg_L20_pct);
+        cumulativeCount++;
+        const cumulativeAverage = cumulativeSum / cumulativeCount;
+        
+        cumulativeData.push({
+          time: sharedTime,
+          value: cumulativeAverage
+        });
+      }
+    }
 
-      // Log timestamp alignment for debugging
+    // Log timestamp alignment for debugging
+    if (priceData.length > 0 && ma50Data.length > 0) {
       console.log(`🕐 ${this.currentTimeframe} Data Processing:`);
-      console.log(`   Input data points: ${data.length}`);
       console.log(`   Candlestick Data: ${priceData.length} points (RIGHT y-axis)`);
       console.log(`   Bid Spread L20 MA Data: MA20(${ma20Data.length}), MA50(${ma50Data.length}), MA100(${ma100Data.length}), MA200(${ma200Data.length}) points (LEFT y-axis)`);
       console.log(`   Cumulative L20 Avg: ${cumulativeData.length} points (LEFT y-axis)`);
-      
-      if (priceData.length > 0) {
-        console.log(`   Sample price data:`, priceData[0]);
-      }
-      if (ma50Data.length > 0) {
-        console.log(`   Sample MA50 data:`, ma50Data[0]);
-      }
-
-      if (isUpdate) {
-        // Add new data points
-        if (priceData.length > 0) {
-          priceData.forEach(p => priceSeries.update(p));
-        }
-        ma20Data.forEach(p => ma20.update(p));
-        ma50Data.forEach(p => ma50.update(p));
-        ma100Data.forEach(p => ma100.update(p));
-        ma200Data.forEach(p => ma200.update(p));
-        cumulativeData.forEach(p => cumulativeMA.update(p));
-      } else {
-        // Set complete dataset
-        console.log('📊 Setting chart data...');
-        priceSeries.setData(priceData);
-        ma20.setData(ma20Data);
-        ma50.setData(ma50Data);
-        ma100.setData(ma100Data);
-        ma200.setData(ma200Data);
-        cumulativeMA.setData(cumulativeData);
-        
-        // Fit content to show all data
-        chart.timeScale().fitContent();
-        console.log('📊 Chart data set successfully');
-      }
-
-      console.log(`✅ Chart updated with ${priceData.length} candles and bid spread MAs`);
-    } catch (error) {
-      console.error('❌ Error in processAndSetData:', error);
-      console.error('❌ Error details:', error.message);
     }
+
+    if (isUpdate) {
+      // Add new data points
+      if (priceData.length > 0) {
+        priceData.forEach(p => priceSeries.update(p));
+      }
+      ma20Data.forEach(p => ma20.update(p));
+      ma50Data.forEach(p => ma50.update(p));
+      ma100Data.forEach(p => ma100.update(p));
+      ma200Data.forEach(p => ma200.update(p));
+      cumulativeData.forEach(p => cumulativeMA.update(p));
+    } else {
+      // Set complete dataset
+      priceSeries.setData(priceData);
+      ma20.setData(ma20Data);
+      ma50.setData(ma50Data);
+      ma100.setData(ma100Data);
+      ma200.setData(ma200Data);
+      cumulativeMA.setData(cumulativeData);
+      
+      // Fit content to show all data
+      chart.timeScale().fitContent();
+    }
+
+    console.log(`✅ Chart updated with ${priceData.length} candles and bid spread MAs`);
   }
 
   async initializeChart() {
@@ -401,42 +386,16 @@ class TimeframeManager {
       console.log('🚀 Loading chart with bid spread data...');
       
       // Phase 1: Load recent data first (fast startup)
-      console.log('📡 Fetching recent data from GCS...');
       const recentRes = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/recent.json');
-      console.log('📡 Recent data response status:', recentRes.status);
-      
-      if (!recentRes.ok) {
-        throw new Error(`Recent data fetch failed: ${recentRes.status} ${recentRes.statusText}`);
-      }
-      
       const recentData = await recentRes.json();
-      console.log('📡 Recent data sample:', recentData[0]);
-      console.log('📡 Recent data length:', recentData.length);
-      
-      if (!Array.isArray(recentData) || recentData.length === 0) {
-        throw new Error('Recent data is empty or not an array');
-      }
       
       this.rawData = recentData;
       this.processAndSetData(recentData);
       console.log(`✅ Recent data loaded (${recentData.length} points)`);
       
       // Phase 2: Load complete historical data
-      console.log('📡 Fetching historical data from GCS...');
       const historicalRes = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/historical.json');
-      console.log('📡 Historical data response status:', historicalRes.status);
-      
-      if (!historicalRes.ok) {
-        throw new Error(`Historical data fetch failed: ${historicalRes.status} ${historicalRes.statusText}`);
-      }
-      
       const historicalData = await historicalRes.json();
-      console.log('📡 Historical data sample:', historicalData[0]);
-      console.log('📡 Historical data length:', historicalData.length);
-      
-      if (!Array.isArray(historicalData) || historicalData.length === 0) {
-        throw new Error('Historical data is empty or not an array');
-      }
       
       this.rawData = historicalData;
       this.processAndSetData(historicalData);
@@ -445,11 +404,9 @@ class TimeframeManager {
       
     } catch (err) {
       console.error('❌ Loading error:', err);
-      console.error('❌ Error details:', err.message);
       
-      // Fallback to old endpoints if GCS fails
+      // Fallback
       try {
-        console.log('🔄 Trying fallback endpoint...');
         const fallbackRes = await fetch('https://btc-spread-test-pipeline.onrender.com/output-latest.json');
         const fallbackData = await fallbackRes.json();
         this.rawData = fallbackData;
@@ -457,7 +414,6 @@ class TimeframeManager {
         console.log('✅ Fallback data loaded');
       } catch (fallbackErr) {
         console.error('❌ All endpoints failed');
-        console.error('❌ Fallback error:', fallbackErr.message);
       }
     }
   }
