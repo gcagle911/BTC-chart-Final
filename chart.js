@@ -388,7 +388,7 @@ class TimeframeManager {
       console.log('🚀 Loading chart with bid spread data...');
       
       // Phase 1: Load recent data first (fast startup)
-      const recentRes = await fetch('https://btc-spread-test-pipeline.onrender.com/recent.json');
+      const recentRes = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/recent.json');
       const recentData = await recentRes.json();
       
       this.rawData = recentData;
@@ -396,7 +396,7 @@ class TimeframeManager {
       console.log(`✅ Recent data loaded (${recentData.length} points)`);
       
       // Phase 2: Load complete historical data
-      const historicalRes = await fetch('https://btc-spread-test-pipeline.onrender.com/historical.json');
+      const historicalRes = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/historical.json');
       const historicalData = await historicalRes.json();
       
       this.rawData = historicalData;
@@ -407,7 +407,7 @@ class TimeframeManager {
     } catch (err) {
       console.error('❌ Loading error:', err);
       
-      // Fallback
+      // Fallback to old endpoints if GCS fails
       try {
         const fallbackRes = await fetch('https://btc-spread-test-pipeline.onrender.com/output-latest.json');
         const fallbackData = await fallbackRes.json();
@@ -422,7 +422,7 @@ class TimeframeManager {
 
   async fetchAndUpdate() {
     try {
-      const res = await fetch('https://btc-spread-test-pipeline.onrender.com/recent.json');
+      const res = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/recent.json');
       const data = await res.json();
 
       // Find new data points
@@ -452,7 +452,7 @@ class TimeframeManager {
     
     try {
       console.log('🔄 Refreshing historical data...');
-      const res = await fetch('https://btc-spread-test-pipeline.onrender.com/historical.json');
+      const res = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/historical.json');
       const data = await res.json();
       this.rawData = data;
       this.processAndSetData(data);
