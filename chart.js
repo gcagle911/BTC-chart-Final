@@ -389,7 +389,15 @@ class TimeframeManager {
       this.showStatus('Loading recent data...');
       
       // Phase 1: Load recent data first (fast startup)
-      const recentRes = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/recent.json');
+      // Try direct access first, then fallback to CORS proxy
+      let recentRes;
+      try {
+        recentRes = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/recent.json');
+      } catch (corsError) {
+        console.log('CORS error, trying proxy...');
+        recentRes = await fetch('https://api.allorigins.win/raw?url=https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/recent.json');
+      }
+      
       const recentData = await recentRes.json();
       
       this.rawData = recentData;
@@ -399,7 +407,14 @@ class TimeframeManager {
       
       // Phase 2: Load complete historical data
       this.showStatus('Loading historical data...');
-      const historicalRes = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/historical.json');
+      let historicalRes;
+      try {
+        historicalRes = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/historical.json');
+      } catch (corsError) {
+        console.log('CORS error, trying proxy...');
+        historicalRes = await fetch('https://api.allorigins.win/raw?url=https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/historical.json');
+      }
+      
       const historicalData = await historicalRes.json();
       
       this.rawData = historicalData;
@@ -467,7 +482,14 @@ class TimeframeManager {
 
   async fetchAndUpdate() {
     try {
-      const res = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/recent.json');
+      let res;
+      try {
+        res = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/recent.json');
+      } catch (corsError) {
+        console.log('CORS error, trying proxy...');
+        res = await fetch('https://api.allorigins.win/raw?url=https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/recent.json');
+      }
+      
       const data = await res.json();
 
       // Find new data points
@@ -497,7 +519,14 @@ class TimeframeManager {
     
     try {
       console.log('🔄 Refreshing historical data...');
-      const res = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/historical.json');
+      let res;
+      try {
+        res = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/historical.json');
+      } catch (corsError) {
+        console.log('CORS error, trying proxy...');
+        res = await fetch('https://api.allorigins.win/raw?url=https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/historical.json');
+      }
+      
       const data = await res.json();
       this.rawData = data;
       this.processAndSetData(data);
