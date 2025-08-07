@@ -350,11 +350,17 @@ class TimeframeManager {
     }
 
     // Log timestamp alignment for debugging
-    if (priceData.length > 0 && ma50Data.length > 0) {
-      console.log(`🕐 ${this.currentTimeframe} Data Processing:`);
-      console.log(`   Candlestick Data: ${priceData.length} points (RIGHT y-axis)`);
-      console.log(`   Bid Spread L20 MA Data: MA20(${ma20Data.length}), MA50(${ma50Data.length}), MA100(${ma100Data.length}), MA200(${ma200Data.length}) points (LEFT y-axis)`);
-      console.log(`   Cumulative L20 Avg: ${cumulativeData.length} points (LEFT y-axis)`);
+    console.log(`🕐 ${this.currentTimeframe} Data Processing:`);
+    console.log(`   Input data points: ${data.length}`);
+    console.log(`   Candlestick Data: ${priceData.length} points (RIGHT y-axis)`);
+    console.log(`   Bid Spread L20 MA Data: MA20(${ma20Data.length}), MA50(${ma50Data.length}), MA100(${ma100Data.length}), MA200(${ma200Data.length}) points (LEFT y-axis)`);
+    console.log(`   Cumulative L20 Avg: ${cumulativeData.length} points (LEFT y-axis)`);
+    
+    if (priceData.length > 0) {
+      console.log(`   Sample price data:`, priceData[0]);
+    }
+    if (ma50Data.length > 0) {
+      console.log(`   Sample MA50 data:`, ma50Data[0]);
     }
 
     if (isUpdate) {
@@ -388,16 +394,22 @@ class TimeframeManager {
       console.log('🚀 Loading chart with bid spread data...');
       
       // Phase 1: Load recent data first (fast startup)
+      console.log('📡 Fetching recent data from GCS...');
       const recentRes = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/recent.json');
+      console.log('📡 Recent data response status:', recentRes.status);
       const recentData = await recentRes.json();
+      console.log('📡 Recent data sample:', recentData[0]);
       
       this.rawData = recentData;
       this.processAndSetData(recentData);
       console.log(`✅ Recent data loaded (${recentData.length} points)`);
       
       // Phase 2: Load complete historical data
+      console.log('📡 Fetching historical data from GCS...');
       const historicalRes = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/historical.json');
+      console.log('📡 Historical data response status:', historicalRes.status);
       const historicalData = await historicalRes.json();
+      console.log('📡 Historical data sample:', historicalData[0]);
       
       this.rawData = historicalData;
       this.processAndSetData(historicalData);
@@ -406,9 +418,11 @@ class TimeframeManager {
       
     } catch (err) {
       console.error('❌ Loading error:', err);
+      console.error('❌ Error details:', err.message);
       
       // Fallback to old endpoints if GCS fails
       try {
+        console.log('🔄 Trying fallback endpoint...');
         const fallbackRes = await fetch('https://btc-spread-test-pipeline.onrender.com/output-latest.json');
         const fallbackData = await fallbackRes.json();
         this.rawData = fallbackData;
@@ -416,6 +430,7 @@ class TimeframeManager {
         console.log('✅ Fallback data loaded');
       } catch (fallbackErr) {
         console.error('❌ All endpoints failed');
+        console.error('❌ Fallback error:', fallbackErr.message);
       }
     }
   }
