@@ -385,65 +385,25 @@ class TimeframeManager {
     try {
       console.log('🚀 Loading chart with bid spread data...');
       
-      // Add visible status indicator
-      this.showStatus('Loading recent data...');
-      
       // Phase 1: Load recent data first (fast startup)
-      // Try direct access first, then fallback to CORS proxy
-      let recentRes;
-      try {
-        recentRes = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/recent.json');
-      } catch (corsError) {
-        console.log('CORS error, trying proxy...');
-        recentRes = await fetch('https://api.allorigins.win/raw?url=https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/recent.json');
-      }
-      
+      const recentRes = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/recent.json');
       const recentData = await recentRes.json();
       
       this.rawData = recentData;
       this.processAndSetData(recentData);
       console.log(`✅ Recent data loaded (${recentData.length} points)`);
-      this.showStatus(`Recent data loaded: ${recentData.length} points`);
       
       // Phase 2: Load complete historical data
-      this.showStatus('Loading historical data...');
-      let historicalRes;
-      try {
-        historicalRes = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/historical.json');
-      } catch (corsError) {
-        console.log('CORS error, trying proxy...');
-        historicalRes = await fetch('https://api.allorigins.win/raw?url=https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/historical.json');
-      }
-      
+      const historicalRes = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/historical.json');
       const historicalData = await historicalRes.json();
       
       this.rawData = historicalData;
       this.processAndSetData(historicalData);
       this.isFullDataLoaded = true;
       console.log(`✅ Full data loaded (${historicalData.length} points)`);
-      this.showStatus(`Chart ready: ${historicalData.length} data points`);
-      
-      // Hide status after 3 seconds
-      setTimeout(() => this.hideStatus(), 3000);
       
     } catch (err) {
       console.error('❌ Loading error:', err);
-      this.showStatus(`Error: ${err.message}`);
-      
-      // Fallback
-      try {
-        this.showStatus('Trying fallback...');
-        const fallbackRes = await fetch('https://btc-spread-test-pipeline.onrender.com/output-latest.json');
-        const fallbackData = await fallbackRes.json();
-        this.rawData = fallbackData;
-        this.processAndSetData(fallbackData);
-        console.log('✅ Fallback data loaded');
-        this.showStatus('Fallback data loaded');
-        setTimeout(() => this.hideStatus(), 3000);
-      } catch (fallbackErr) {
-        console.error('❌ All endpoints failed');
-        this.showStatus('All endpoints failed');
-      }
     }
   }
 
@@ -482,14 +442,7 @@ class TimeframeManager {
 
   async fetchAndUpdate() {
     try {
-      let res;
-      try {
-        res = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/recent.json');
-      } catch (corsError) {
-        console.log('CORS error, trying proxy...');
-        res = await fetch('https://api.allorigins.win/raw?url=https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/recent.json');
-      }
-      
+      const res = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/recent.json');
       const data = await res.json();
 
       // Find new data points
@@ -519,14 +472,7 @@ class TimeframeManager {
     
     try {
       console.log('🔄 Refreshing historical data...');
-      let res;
-      try {
-        res = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/historical.json');
-      } catch (corsError) {
-        console.log('CORS error, trying proxy...');
-        res = await fetch('https://api.allorigins.win/raw?url=https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/historical.json');
-      }
-      
+      const res = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/historical.json');
       const data = await res.json();
       this.rawData = data;
       this.processAndSetData(data);
