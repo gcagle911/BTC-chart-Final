@@ -385,6 +385,9 @@ class TimeframeManager {
     try {
       console.log('🚀 Loading chart with bid spread data...');
       
+      // Add visible status indicator
+      this.showStatus('Loading recent data...');
+      
       // Phase 1: Load recent data first (fast startup)
       const recentRes = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/recent.json');
       const recentData = await recentRes.json();
@@ -392,8 +395,10 @@ class TimeframeManager {
       this.rawData = recentData;
       this.processAndSetData(recentData);
       console.log(`✅ Recent data loaded (${recentData.length} points)`);
+      this.showStatus(`Recent data loaded: ${recentData.length} points`);
       
       // Phase 2: Load complete historical data
+      this.showStatus('Loading historical data...');
       const historicalRes = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/historical.json');
       const historicalData = await historicalRes.json();
       
@@ -401,20 +406,62 @@ class TimeframeManager {
       this.processAndSetData(historicalData);
       this.isFullDataLoaded = true;
       console.log(`✅ Full data loaded (${historicalData.length} points)`);
+      this.showStatus(`Chart ready: ${historicalData.length} data points`);
+      
+      // Hide status after 3 seconds
+      setTimeout(() => this.hideStatus(), 3000);
       
     } catch (err) {
       console.error('❌ Loading error:', err);
+      this.showStatus(`Error: ${err.message}`);
       
       // Fallback
       try {
+        this.showStatus('Trying fallback...');
         const fallbackRes = await fetch('https://btc-spread-test-pipeline.onrender.com/output-latest.json');
         const fallbackData = await fallbackRes.json();
         this.rawData = fallbackData;
         this.processAndSetData(fallbackData);
         console.log('✅ Fallback data loaded');
+        this.showStatus('Fallback data loaded');
+        setTimeout(() => this.hideStatus(), 3000);
       } catch (fallbackErr) {
         console.error('❌ All endpoints failed');
+        this.showStatus('All endpoints failed');
       }
+    }
+  }
+
+  showStatus(message) {
+    let statusDiv = document.getElementById('status-indicator');
+    if (!statusDiv) {
+      statusDiv = document.createElement('div');
+      statusDiv.id = 'status-indicator';
+      statusDiv.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0, 0, 0, 0.9);
+        color: white;
+        padding: 15px 20px;
+        border-radius: 8px;
+        z-index: 1000;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 14px;
+        max-width: 80%;
+        text-align: center;
+      `;
+      document.body.appendChild(statusDiv);
+    }
+    statusDiv.textContent = message;
+    statusDiv.style.display = 'block';
+  }
+
+  hideStatus() {
+    const statusDiv = document.getElementById('status-indicator');
+    if (statusDiv) {
+      statusDiv.style.display = 'none';
     }
   }
 
