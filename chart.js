@@ -383,25 +383,40 @@ class TimeframeManager {
 
   async initializeChart() {
     try {
-      console.log('🚀 Loading chart with bid spread data...');
-      
-      // Phase 1: Load recent data first (fast startup)
+      // 1. Fetch recent data
       const recentRes = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/recent.json');
       const recentData = await recentRes.json();
-      
-      this.rawData = recentData;
-      this.processAndSetData(recentData);
-      console.log(`✅ Recent data loaded (${recentData.length} points)`);
-      
-      // Phase 2: Load complete historical data
+
+      // 2. Fetch historical data
       const historicalRes = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/historical.json');
       const historicalData = await historicalRes.json();
-      
-      this.rawData = historicalData;
-      this.processAndSetData(historicalData);
+
+      // 3. Find earliest timestamp in recent.json
+      const recentStart = new Date(recentData[0].time).getTime();
+
+      // 4. Filter historical data to only include data older than recentStart
+      const filteredHistorical = historicalData.filter(d => new Date(d.time).getTime() < recentStart);
+
+      // 5. Combine and sort
+      const combined = [...filteredHistorical, ...recentData]
+        .sort((a, b) => new Date(a.time) - new Date(b.time));
+
+      // 6. Deduplicate by timestamp
+      const deduped = [];
+      const seen = new Set();
+      for (const d of combined) {
+        const t = d.time;
+        if (!seen.has(t)) {
+          deduped.push(d);
+          seen.add(t);
+        }
+      }
+
+      // 7. Set and process
+      this.rawData = deduped;
+      this.processAndSetData(deduped);
       this.isFullDataLoaded = true;
-      console.log(`✅ Full data loaded (${historicalData.length} points)`);
-      
+      console.log(`✅ Chart loaded with ${deduped.length} points`);
     } catch (err) {
       console.error('❌ Loading error:', err);
     }
