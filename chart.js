@@ -1,6 +1,30 @@
 // Simplified Bitcoin Chart - Clean Interface
 // Main price chart with Bid Spread MAs on LEFT y-axis and enhanced zoom capability
 
+// Data sources mapped by symbol
+const DATA_SOURCES = {
+  BTC: {
+    recent: 'https://ada-logger.onrender.com/BTC/recent.json',
+    historical: 'https://ada-logger.onrender.com/BTC/historical.json'
+  },
+  ETH: {
+    recent: 'https://ada-logger.onrender.com/ETH/recent.json',
+    historical: 'https://ada-logger.onrender.com/ETH/historical.json'
+  },
+  ADA: {
+    recent: 'https://ada-logger.onrender.com/ADA/recent.json',
+    historical: 'https://ada-logger.onrender.com/ADA/historical.json'
+  },
+  XRP: {
+    recent: 'https://ada-logger.onrender.com/XRP/recent.json',
+    historical: 'https://ada-logger.onrender.com/XRP/historical.json'
+  },
+  SOL: {
+    recent: 'https://ada-logger.onrender.com/SOL/recent.json',
+    historical: 'https://ada-logger.onrender.com/SOL/historical.json'
+  }
+};
+
 // Chart configuration with LEFT/RIGHT dual y-axis and massive zoom range
 window.chart = LightweightCharts.createChart(document.getElementById('main-chart'), {
   layout: {
@@ -133,12 +157,11 @@ const cumulativeMA = chart.addLineSeries({
   priceLineVisible: false,
 });
 
-// Real-time L20 spread line (MA1 - raw data) - REMOVED
-
 // Restored proper timeframe manager
 class TimeframeManager {
   constructor() {
     this.currentTimeframe = '1m';
+    this.currentSymbol = 'BTC';
     this.rawData = [];
     this.lastTimestamp = 0;
     this.isFullDataLoaded = false;
@@ -153,6 +176,10 @@ class TimeframeManager {
       '4h': { seconds: 14400, label: '4 Hours' },
       '1d': { seconds: 86400, label: '1 Day' }
     };
+  }
+
+  get dataSource() {
+    return DATA_SOURCES[this.currentSymbol];
   }
 
   toUnixTimestamp(dateStr) {
@@ -211,10 +238,10 @@ class TimeframeManager {
         const highPrice = Math.max(...bucket.dataPoints.map(p => p.price));
         const lowPrice = Math.min(...bucket.dataPoints.map(p => p.price));
         
-        // SOLUTION: Keep MAs from close time to maintain exact same values
+        // Keep MAs from close time to maintain exact same values
         const closeMAs = closePoint;
         
-        // CRITICAL: Use consistent bucket timestamp for all timeframes
+        // Use consistent bucket timestamp for all timeframes
         const bucketTimestamp = new Date(bucketTime * 1000).toISOString();
         
         aggregated.push({
@@ -248,7 +275,7 @@ class TimeframeManager {
   processAndSetData(data, isUpdate = false) {
     const timeframeSeconds = this.timeframes[this.currentTimeframe].seconds;
     
-    // SOLUTION: Always use 1-minute data for MAs, only aggregate prices
+    // Always use 1-minute data for MAs, only aggregate prices
     const rawMinuteData = this.currentTimeframe === '1m' ? data : this.rawData || data;
     const aggregatedPriceData = this.aggregateData(data, timeframeSeconds);
 
@@ -267,7 +294,7 @@ class TimeframeManager {
       // For updates, only add new data
       if (isUpdate && t <= this.lastTimestamp) continue;
       
-      // CRITICAL: Create all data points with IDENTICAL timestamps
+      // Create all data points with IDENTICAL timestamps
       const sharedTime = t;
       
       // Price data (main chart) - candlestick format
@@ -347,14 +374,6 @@ class TimeframeManager {
       }
     }
 
-    // Log timestamp alignment for debugging
-    if (priceData.length > 0 && ma50Data.length > 0) {
-      console.log(`🕐 ${this.currentTimeframe} Data Processing:`);
-      console.log(`   Candlestick Data: ${priceData.length} points (RIGHT y-axis)`);
-      console.log(`   Bid Spread L20 MA Data: MA20(${ma20Data.length}), MA50(${ma50Data.length}), MA100(${ma100Data.length}), MA200(${ma200Data.length}) points (LEFT y-axis)`);
-      console.log(`   Cumulative L20 Avg: ${cumulativeData.length} points (LEFT y-axis)`);
-    }
-
     if (isUpdate) {
       // Add new data points
       if (priceData.length > 0) {
@@ -377,18 +396,18 @@ class TimeframeManager {
       // Fit content to show all data
       chart.timeScale().fitContent();
     }
-
-    console.log(`✅ Chart updated with ${priceData.length} candles and bid spread MAs`);
   }
 
   async initializeChart() {
     try {
+      this.showStatus(`Loading ${this.currentSymbol} data...`);
+
       // 1. Fetch recent data
-      const recentRes = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/recent.json');
+      const recentRes = await fetch(this.dataSource.recent);
       const recentData = await recentRes.json();
 
       // 2. Fetch historical data
-      const historicalRes = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/historical.json');
+      const historicalRes = await fetch(this.dataSource.historical);
       const historicalData = await historicalRes.json();
 
       // 3. Find earliest timestamp in recent.json
@@ -414,11 +433,14 @@ class TimeframeManager {
 
       // 7. Set and process
       this.rawData = deduped;
+      this.lastTimestamp = 0;
       this.processAndSetData(deduped);
       this.isFullDataLoaded = true;
-      console.log(`✅ Chart loaded with ${deduped.length} points`);
+      this.hideStatus();
+      console.log(`✅ ${this.currentSymbol} chart loaded with ${deduped.length} points`);
     } catch (err) {
       console.error('❌ Loading error:', err);
+      this.showStatus('Loading error');
     }
   }
 
@@ -457,7 +479,7 @@ class TimeframeManager {
 
   async fetchAndUpdate() {
     try {
-      const res = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/recent.json');
+      const res = await fetch(this.dataSource.recent);
       const data = await res.json();
 
       // Find new data points
@@ -474,7 +496,7 @@ class TimeframeManager {
 
         // Process and update chart with new data
         this.processAndSetData(newData, true);
-        console.log(`📈 Updated chart with ${newData.length} new data points`);
+        console.log(`📈 Updated ${this.currentSymbol} with ${newData.length} new data points`);
       }
 
     } catch (err) {
@@ -486,10 +508,11 @@ class TimeframeManager {
     if (!this.isFullDataLoaded) return;
     
     try {
-      console.log('🔄 Refreshing historical data...');
-      const res = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/historical.json');
+      console.log(`🔄 Refreshing historical data for ${this.currentSymbol}...`);
+      const res = await fetch(this.dataSource.historical);
       const data = await res.json();
       this.rawData = data;
+      this.lastTimestamp = 0;
       this.processAndSetData(data);
       console.log(`✅ Historical data refreshed: ${data.length} total points`);
     } catch (err) {
@@ -517,6 +540,39 @@ class TimeframeManager {
     console.log(`✅ Switched to ${this.timeframes[timeframe].label}`);
   }
 
+  async switchSymbol(symbol) {
+    if (!DATA_SOURCES[symbol]) return;
+    if (symbol === this.currentSymbol && this.isFullDataLoaded) return;
+
+    console.log(`🔁 Switching symbol to ${symbol}`);
+
+    // Update dropdown if present
+    const symbolDropdown = document.getElementById('symbol-dropdown');
+    if (symbolDropdown) symbolDropdown.value = symbol;
+
+    // Stop intervals while switching
+    if (this.updateInterval) clearInterval(this.updateInterval);
+    if (this.refreshInterval) clearInterval(this.refreshInterval);
+
+    // Reset state
+    this.currentSymbol = symbol;
+    this.rawData = [];
+    this.lastTimestamp = 0;
+    this.isFullDataLoaded = false;
+
+    // Clear existing chart data
+    priceSeries.setData([]);
+    ma20.setData([]);
+    ma50.setData([]);
+    ma100.setData([]);
+    ma200.setData([]);
+    cumulativeMA.setData([]);
+
+    // Load data and restart update cycles
+    await this.initializeChart();
+    this.startUpdateCycle();
+  }
+
   startUpdateCycle() {
     // Clear existing intervals
     if (this.updateInterval) clearInterval(this.updateInterval);
@@ -533,12 +589,16 @@ class TimeframeManager {
 // Global instance
 const manager = new TimeframeManager();
 
-// Global function for timeframe dropdown
+// Global functions for controls
 function setTimeframe(timeframe) {
   manager.switchTimeframe(timeframe);
 }
 
-// FIXED: Enhanced zoom functions with MASSIVE zoom range like TradingView
+function setSymbol(symbol) {
+  manager.switchSymbol(symbol);
+}
+
+// Enhanced zoom functions with MASSIVE zoom range like TradingView
 function zoomIn() {
   if (window.chart) {
     const timeScale = window.chart.timeScale();

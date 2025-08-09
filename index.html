@@ -49,7 +49,7 @@
       border: 1px solid rgba(255, 255, 255, 0.1);
     }
     
-    #timeframe-dropdown {
+    #timeframe-dropdown, #symbol-dropdown {
       background: #2a2e39;
       border: 1px solid #4a4e59;
       color: #d1d4dc;
@@ -61,12 +61,12 @@
       min-width: 80px;
     }
     
-    #timeframe-dropdown:hover {
+    #timeframe-dropdown:hover, #symbol-dropdown:hover {
       background: #363a45;
       border-color: #5a5e69;
     }
     
-    #timeframe-dropdown:focus {
+    #timeframe-dropdown:focus, #symbol-dropdown:focus {
       outline: none;
       border-color: #2962ff;
       box-shadow: 0 0 0 2px rgba(41, 98, 255, 0.2);
@@ -86,7 +86,7 @@
         padding: 6px 10px;
       }
       
-      #timeframe-dropdown {
+      #timeframe-dropdown, #symbol-dropdown {
         font-size: 11px;
         padding: 4px 8px;
         min-width: 70px;
@@ -102,7 +102,7 @@
         padding: 4px 8px;
       }
       
-      #timeframe-dropdown {
+      #timeframe-dropdown, #symbol-dropdown {
         font-size: 10px;
         padding: 3px 6px;
         min-width: 60px;
@@ -117,6 +117,14 @@
 <body>
   <div id="chart-container">
     <div id="timeframe-controls">
+      <label class="timeframe-label" for="symbol-dropdown">Symbol:</label>
+      <select id="symbol-dropdown" onchange="setSymbol(this.value)">
+        <option value="BTC" selected>BTC</option>
+        <option value="ETH">ETH</option>
+        <option value="ADA">ADA</option>
+        <option value="XRP">XRP</option>
+        <option value="SOL">SOL</option>
+      </select>
       <label class="timeframe-label" for="timeframe-dropdown">Timeframe:</label>
       <select id="timeframe-dropdown" onchange="setTimeframe(this.value)">
         <option value="1m" selected>1m</option>
