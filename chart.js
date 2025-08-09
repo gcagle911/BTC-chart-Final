@@ -182,6 +182,15 @@ class TimeframeManager {
     return DATA_SOURCES[this.currentSymbol];
   }
 
+  applyAutoScale() {
+    try {
+      chart.priceScale('right').applyOptions({ autoScale: true });
+      chart.priceScale('left').applyOptions({ autoScale: true });
+    } catch (e) {
+      console.error('Failed to apply auto-scale:', e);
+    }
+  }
+
   toUnixTimestamp(dateStr) {
     return Math.floor(new Date(dateStr).getTime() / 1000);
   }
@@ -369,6 +378,8 @@ class TimeframeManager {
       
       // Fit content to show all data
       chart.timeScale().fitContent();
+      // Ensure y-axes scale to new data range
+      this.applyAutoScale();
     }
   }
 
@@ -511,6 +522,8 @@ class TimeframeManager {
     this.lastTimestamp = 0;
     this.processAndSetData(this.rawData);
     
+    // Re-apply y-axis autoscale on timeframe change
+    this.applyAutoScale();
     console.log(`✅ Switched to ${this.timeframes[timeframe].label}`);
   }
 
@@ -544,6 +557,8 @@ class TimeframeManager {
 
     // Load data and restart update cycles
     await this.initializeChart();
+    // Apply autoscale after loading new symbol
+    this.applyAutoScale();
     this.startUpdateCycle();
   }
 
