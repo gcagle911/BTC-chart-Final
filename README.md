@@ -88,3 +88,23 @@ The application is designed to stay within these limits through efficient messag
 - **No Data**: Ensure internet connection and try refreshing the page
 - **Chart Not Loading**: Verify that LightweightCharts CDN is accessible
 - **Performance**: The chart automatically manages memory by keeping only recent data points
+
+## Baseline reset (multi-crypto toggle)
+
+A baseline snapshot of the multi-crypto toggle with autoscale is available:
+- Branch: `baseline/multicrypto-v1`
+- Tag: `baseline-multicrypto-v1`
+
+Reset current branch to baseline (destructive):
+
+```bash
+git fetch --all --tags
+git reset --hard baseline/multicrypto-v1
+```
+
+Start a new branch from baseline:
+
+```bash
+git fetch --all --tags
+git checkout -b feature/experiment baseline/multicrypto-v1
+```

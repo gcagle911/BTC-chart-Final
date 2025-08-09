@@ -88,3 +88,31 @@ handleScroll: {
 - Add chart annotation tools
 - Consider dark/light theme toggle
 - Add chart export functionality
+
+## Baseline snapshot for multi-crypto toggle
+
+A permanent baseline was created at commit `a5d2f847b553` with:
+- Branch: `baseline/multicrypto-v1`
+- Tag: `baseline-multicrypto-v1`
+
+Reset your current branch hard to this baseline:
+
+```bash
+# WARNING: this discards local changes
+git fetch --all --tags
+git reset --hard baseline/multicrypto-v1
+```
+
+Create a new working branch from the baseline:
+
+```bash
+git fetch --all --tags
+git checkout -b feature/your-new-work baseline/multicrypto-v1
+```
+
+Or checkout the exact snapshot by tag:
+
+```bash
+git fetch --all --tags
+git checkout -b feature/your-new-work baseline-multicrypto-v1
+```
