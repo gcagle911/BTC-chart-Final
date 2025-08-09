@@ -218,11 +218,11 @@ class TimeframeManager {
 
       buckets.get(bucketTime).dataPoints.push({
         timestamp: timestamp,
-        price: item.price,
-        ma_50: item.ma_50,
-        ma_100: item.ma_100,
-        ma_200: item.ma_200,
-        spread_avg_L20_pct: item.spread_avg_L20_pct
+        price: parseFloat(item.price),
+        ma_50: item.ma_50 ?? null,
+        ma_100: item.ma_100 ?? null,
+        ma_200: item.ma_200 ?? null,
+        spread_avg_L20_pct: item.spread_avg_L20_pct ?? item.spread_pct ?? null
       });
     });
 
@@ -238,7 +238,6 @@ class TimeframeManager {
         const highPrice = Math.max(...bucket.dataPoints.map(p => p.price));
         const lowPrice = Math.min(...bucket.dataPoints.map(p => p.price));
         
-        // Keep MAs from close time to maintain exact same values
         const closeMAs = closePoint;
         
         // Use consistent bucket timestamp for all timeframes
@@ -246,22 +245,15 @@ class TimeframeManager {
         
         aggregated.push({
           time: bucketTimestamp,
-          // Proper OHLC data for candlestick display
           open: openPoint.price,
           high: highPrice,
           low: lowPrice,
           close: closePoint.price,
           price: closePoint.price,
-          
-          // Bid Spread L20 MAs STAY THE SAME - using exact values from close time
           ma_50: closeMAs.ma_50,
           ma_100: closeMAs.ma_100,
           ma_200: closeMAs.ma_200,
-          
-          // Keep original spread data
           spread_avg_L20_pct: closePoint.spread_avg_L20_pct,
-          
-          // Store bucket info for debugging
           bucketStart: bucketTime,
           dataPoints: bucket.dataPoints.length
         });
@@ -312,65 +304,47 @@ class TimeframeManager {
     // Process RAW MINUTE DATA for MAs - NEVER CHANGES regardless of timeframe
     let cumulativeSum = 0;
     let cumulativeCount = 0;
-    
+
+    // We'll compute SMA for 20, 50, 100, 200 using spread_pct (or spread_avg_L20_pct if present)
+    const spreadSeries = [];
     for (let i = 0; i < rawMinuteData.length; i++) {
-      const d = rawMinuteData[i];
-      const t = this.toUnixTimestamp(d.time);
-      
-      // For updates, only add new data
+      const row = rawMinuteData[i];
+      const spreadVal = row.spread_avg_L20_pct ?? row.spread_pct;
+      const t = this.toUnixTimestamp(row.time);
       if (isUpdate && t <= this.lastTimestamp) continue;
-      
-      const sharedTime = t;
-      
-      // MA data ALWAYS from 1-minute data - IDENTICAL across all timeframes
-      
-      // Calculate MA20 from L20 spread data (20-period moving average)
-      if (d.spread_avg_L20_pct !== null && d.spread_avg_L20_pct !== undefined && i >= 19) {
-        const recent20 = rawMinuteData.slice(i - 19, i + 1);
-        const validSpreadData = recent20.filter(item => item.spread_avg_L20_pct !== null && item.spread_avg_L20_pct !== undefined);
-        
-        if (validSpreadData.length === 20) {
-          const sum = validSpreadData.reduce((acc, item) => acc + parseFloat(item.spread_avg_L20_pct), 0);
-          const ma20Value = sum / 20;
-          
-          ma20Data.push({
-            time: sharedTime,
-            value: ma20Value
-          });
-        }
+      if (spreadVal === null || spreadVal === undefined) continue;
+
+      spreadSeries.push({ time: t, value: parseFloat(spreadVal) });
+
+      // Cumulative average of spread
+      cumulativeSum += parseFloat(spreadVal);
+      cumulativeCount++;
+      const cumulativeAverage = cumulativeSum / cumulativeCount;
+      cumulativeData.push({ time: t, value: cumulativeAverage });
+
+      // SMA20
+      if (spreadSeries.length >= 20) {
+        const w = spreadSeries.slice(spreadSeries.length - 20);
+        const avg = w.reduce((acc, p) => acc + p.value, 0) / 20;
+        ma20Data.push({ time: t, value: avg });
       }
-      
-      if (d.ma_50 !== null && d.ma_50 !== undefined) {
-        ma50Data.push({ 
-          time: sharedTime, 
-          value: parseFloat(d.ma_50)
-        });
+      // SMA50
+      if (spreadSeries.length >= 50) {
+        const w = spreadSeries.slice(spreadSeries.length - 50);
+        const avg = w.reduce((acc, p) => acc + p.value, 0) / 50;
+        ma50Data.push({ time: t, value: avg });
       }
-      
-      if (d.ma_100 !== null && d.ma_100 !== undefined) {
-        ma100Data.push({ 
-          time: sharedTime, 
-          value: parseFloat(d.ma_100)
-        });
+      // SMA100
+      if (spreadSeries.length >= 100) {
+        const w = spreadSeries.slice(spreadSeries.length - 100);
+        const avg = w.reduce((acc, p) => acc + p.value, 0) / 100;
+        ma100Data.push({ time: t, value: avg });
       }
-      
-      if (d.ma_200 !== null && d.ma_200 !== undefined) {
-        ma200Data.push({ 
-          time: sharedTime, 
-          value: parseFloat(d.ma_200)
-        });
-      }
-      
-      // Calculate cumulative average of L20 spread data
-      if (d.spread_avg_L20_pct !== null && d.spread_avg_L20_pct !== undefined) {
-        cumulativeSum += parseFloat(d.spread_avg_L20_pct);
-        cumulativeCount++;
-        const cumulativeAverage = cumulativeSum / cumulativeCount;
-        
-        cumulativeData.push({
-          time: sharedTime,
-          value: cumulativeAverage
-        });
+      // SMA200
+      if (spreadSeries.length >= 200) {
+        const w = spreadSeries.slice(spreadSeries.length - 200);
+        const avg = w.reduce((acc, p) => acc + p.value, 0) / 200;
+        ma200Data.push({ time: t, value: avg });
       }
     }
 
