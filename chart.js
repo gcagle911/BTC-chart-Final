@@ -277,6 +277,8 @@ class TimeframeManager {
     const rawMinuteData = this.currentTimeframe === '1m' ? data : this.rawData || data;
     const aggregatedPriceData = this.aggregateData(data, timeframeSeconds);
 
+    const useClientMAs = true; // default to client-side MA computation for smoothness
+
     const priceData = [];
     const ma20Data = [];
     const ma50Data = [];
@@ -338,25 +340,44 @@ class TimeframeManager {
         }
       }
       
-      if (d.ma_50 !== null && d.ma_50 !== undefined) {
-        ma50Data.push({ 
-          time: sharedTime, 
-          value: parseFloat(d.ma_50)
-        });
-      }
-      
-      if (d.ma_100 !== null && d.ma_100 !== undefined) {
-        ma100Data.push({ 
-          time: sharedTime, 
-          value: parseFloat(d.ma_100)
-        });
-      }
-      
-      if (d.ma_200 !== null && d.ma_200 !== undefined) {
-        ma200Data.push({ 
-          time: sharedTime, 
-          value: parseFloat(d.ma_200)
-        });
+      if (useClientMAs) {
+        // Client-side MA50/100/200 based on spread_avg_L20_pct
+        // Ignore points where spread is missing
+        if (i >= 49) {
+          const recent50 = rawMinuteData.slice(i - 49, i + 1);
+          const valid = recent50.filter(item => item.spread_avg_L20_pct !== null && item.spread_avg_L20_pct !== undefined);
+          if (valid.length === 50) {
+            const sum = valid.reduce((acc, item) => acc + parseFloat(item.spread_avg_L20_pct), 0);
+            ma50Data.push({ time: sharedTime, value: sum / 50 });
+          }
+        }
+        if (i >= 99) {
+          const recent100 = rawMinuteData.slice(i - 99, i + 1);
+          const valid = recent100.filter(item => item.spread_avg_L20_pct !== null && item.spread_avg_L20_pct !== undefined);
+          if (valid.length === 100) {
+            const sum = valid.reduce((acc, item) => acc + parseFloat(item.spread_avg_L20_pct), 0);
+            ma100Data.push({ time: sharedTime, value: sum / 100 });
+          }
+        }
+        if (i >= 199) {
+          const recent200 = rawMinuteData.slice(i - 199, i + 1);
+          const valid = recent200.filter(item => item.spread_avg_L20_pct !== null && item.spread_avg_L20_pct !== undefined);
+          if (valid.length === 200) {
+            const sum = valid.reduce((acc, item) => acc + parseFloat(item.spread_avg_L20_pct), 0);
+            ma200Data.push({ time: sharedTime, value: sum / 200 });
+          }
+        }
+      } else {
+        // Fallback to server-provided MAs
+        if (d.ma_50 !== null && d.ma_50 !== undefined) {
+          ma50Data.push({ time: sharedTime, value: parseFloat(d.ma_50) });
+        }
+        if (d.ma_100 !== null && d.ma_100 !== undefined) {
+          ma100Data.push({ time: sharedTime, value: parseFloat(d.ma_100) });
+        }
+        if (d.ma_200 !== null && d.ma_200 !== undefined) {
+          ma200Data.push({ time: sharedTime, value: parseFloat(d.ma_200) });
+        }
       }
       
       // Calculate cumulative average of L20 spread data
@@ -373,7 +394,7 @@ class TimeframeManager {
     }
 
     // Log timestamp alignment for debugging
-    if (priceData.length > 0 && ma50Data.length > 0) {
+    if (priceData.length > 0 && (ma50Data.length > 0 || ma20Data.length > 0)) {
       console.log(`🕐 ${this.currentTimeframe} Data Processing:`);
       console.log(`   Candlestick Data: ${priceData.length} points (RIGHT y-axis)`);
       console.log(`   Bid Spread L20 MA Data: MA20(${ma20Data.length}), MA50(${ma50Data.length}), MA100(${ma100Data.length}), MA200(${ma200Data.length}) points (LEFT y-axis)`);
