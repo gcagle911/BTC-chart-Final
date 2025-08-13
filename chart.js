@@ -405,24 +405,20 @@ class TimeframeManager {
       }
     }
 
-    // Build Panel One as historical colored segments (green if MA200 < cumulative avg at each time)
+    // Build Panel One as a single straight line colored by LATEST comparison (no historical segmentation)
     const panelOneGreenData = [];
     const panelOneRedData = [];
-    const maMap = new Map(ma200Data.map(p => [p.time, p.value]));
-    const cumMap = new Map(cumulativeData.map(p => [p.time, p.value]));
-    const times = [];
-    for (const [t] of maMap) {
-      if (cumMap.has(t)) times.push(t);
-    }
-    times.sort((a, b) => a - b);
-    for (let i = 0; i < times.length; i++) {
-      const t = times[i];
-      const ma = maMap.get(t);
-      const cum = cumMap.get(t);
-      if (ma == null || cum == null) continue;
-      const isGreen = ma < cum;
-      panelOneGreenData.push({ time: t, value: isGreen ? 1 : null });
-      panelOneRedData.push({ time: t, value: isGreen ? null : 1 });
+    const timesForPanel = (this.__aggTimeHistory && this.__aggTimeHistory.length)
+      ? this.__aggTimeHistory
+      : priceData.map(p => p.time);
+    const ma200Latest = ma200Data.length ? ma200Data[ma200Data.length - 1].value : null;
+    const cumLatest = cumulativeData.length ? cumulativeData[cumulativeData.length - 1].value : null;
+    if (ma200Latest != null && cumLatest != null) {
+      const isGreen = (ma200Latest < cumLatest);
+      const target = isGreen ? panelOneGreenData : panelOneRedData;
+      for (let i = 0; i < timesForPanel.length; i++) {
+        target.push({ time: timesForPanel[i], value: 1 });
+      }
     }
 
     // Log timestamp alignment for debugging
