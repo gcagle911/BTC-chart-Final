@@ -319,6 +319,75 @@ class TimeframeManager {
       if (t > this.lastTimestamp) this.lastTimestamp = t;
     }
 
+    // Process RAW MINUTE DATA for MAs - ALWAYS from 1-minute L20 spread data
+    let cumulativeSum = 0;
+    let cumulativeCount = 0;
+    
+    for (let i = 0; i < rawMinuteData.length; i++) {
+      const d = rawMinuteData[i];
+      const t = this.toUnixTimestamp(d.time);
+      
+      // For updates, only add new data
+      if (isUpdate && t <= this.lastTimestamp) continue;
+      
+      const sharedTime = t;
+      
+      if (useClientMAs) {
+        // Client-side MA20/50/100/200 based on spread_avg_L20_pct
+        if (i >= 19) {
+          const recent20 = rawMinuteData.slice(i - 19, i + 1);
+          const valid = recent20.filter(item => item.spread_avg_L20_pct !== null && item.spread_avg_L20_pct !== undefined);
+          if (valid.length === 20) {
+            const sum = valid.reduce((acc, item) => acc + parseFloat(item.spread_avg_L20_pct), 0);
+            ma20Data.push({ time: sharedTime, value: sum / 20 });
+          }
+        }
+        if (i >= 49) {
+          const recent50 = rawMinuteData.slice(i - 49, i + 1);
+          const valid = recent50.filter(item => item.spread_avg_L20_pct !== null && item.spread_avg_L20_pct !== undefined);
+          if (valid.length === 50) {
+            const sum = valid.reduce((acc, item) => acc + parseFloat(item.spread_avg_L20_pct), 0);
+            ma50Data.push({ time: sharedTime, value: sum / 50 });
+          }
+        }
+        if (i >= 99) {
+          const recent100 = rawMinuteData.slice(i - 99, i + 1);
+          const valid = recent100.filter(item => item.spread_avg_L20_pct !== null && item.spread_avg_L20_pct !== undefined);
+          if (valid.length === 100) {
+            const sum = valid.reduce((acc, item) => acc + parseFloat(item.spread_avg_L20_pct), 0);
+            ma100Data.push({ time: sharedTime, value: sum / 100 });
+          }
+        }
+        if (i >= 199) {
+          const recent200 = rawMinuteData.slice(i - 199, i + 1);
+          const valid = recent200.filter(item => item.spread_avg_L20_pct !== null && item.spread_avg_L20_pct !== undefined);
+          if (valid.length === 200) {
+            const sum = valid.reduce((acc, item) => acc + parseFloat(item.spread_avg_L20_pct), 0);
+            ma200Data.push({ time: sharedTime, value: sum / 200 });
+          }
+        }
+      } else {
+        // Fallback to server-provided MAs
+        if (d.ma_50 !== null && d.ma_50 !== undefined) {
+          ma50Data.push({ time: sharedTime, value: parseFloat(d.ma_50) });
+        }
+        if (d.ma_100 !== null && d.ma_100 !== undefined) {
+          ma100Data.push({ time: sharedTime, value: parseFloat(d.ma_100) });
+        }
+        if (d.ma_200 !== null && d.ma_200 !== undefined) {
+          ma200Data.push({ time: sharedTime, value: parseFloat(d.ma_200) });
+        }
+      }
+      
+      // Cumulative average of L20 spread data
+      if (d.spread_avg_L20_pct !== null && d.spread_avg_L20_pct !== undefined) {
+        cumulativeSum += parseFloat(d.spread_avg_L20_pct);
+        cumulativeCount++;
+        const cumulativeAverage = cumulativeSum / cumulativeCount;
+        cumulativeData.push({ time: sharedTime, value: cumulativeAverage });
+      }
+    }
+
     // Keep aggregated close/time arrays in sync for RSI
     if (!isUpdate) {
       this.__aggCloseHistory = aggregatedPriceData.map(d => parseFloat(d.close));
