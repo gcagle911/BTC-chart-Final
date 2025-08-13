@@ -1,11 +1,26 @@
 // Simplified Bitcoin Chart - Clean Interface
 // Main price chart with Bid Spread MAs on LEFT y-axis and enhanced zoom capability
 
+// Compact formatters to shrink y-axis label width
+function formatCompactNumber(value) {
+  const sign = value < 0 ? '-' : '';
+  const abs = Math.abs(value);
+  if (abs >= 1e9) return sign + (abs / 1e9).toFixed(abs >= 1e10 ? 0 : 1) + 'B';
+  if (abs >= 1e6) return sign + (abs / 1e6).toFixed(abs >= 1e7 ? 0 : 1) + 'M';
+  if (abs >= 1e3) return sign + (abs / 1e3).toFixed(abs >= 1e4 ? 0 : 1) + 'k';
+  return sign + abs.toFixed(0);
+}
+
+function formatPercent(value) {
+  return (value * 100).toFixed(2) + '%';
+}
+
 // Chart configuration with LEFT/RIGHT dual y-axis and massive zoom range
 window.chart = LightweightCharts.createChart(document.getElementById('main-chart'), {
   layout: {
     background: { color: '#131722' },
     textColor: '#D1D4DC',
+    fontSize: 7,
   },
   grid: {
     vertLines: { color: '#2B2B43' },
@@ -40,7 +55,7 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
     timeVisible: true, 
     secondsVisible: false,
     borderVisible: false,
-    rightOffset: 50,
+    rightOffset: 15,
     barSpacing: 12, // Increased spacing for thicker candlestick bodies
     minBarSpacing: 0.1, // MUCH tighter for extreme zoom out
     fixLeftEdge: false,
@@ -132,6 +147,16 @@ const cumulativeMA = chart.addLineSeries({
   lastValueVisible: false,
   priceLineVisible: false,
 });
+
+// Apply compact price formats to minimize y-axis width
+priceSeries.applyOptions({
+  priceFormat: { type: 'custom', formatter: formatCompactNumber }
+});
+ma20.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
+ma50.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
+ma100.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
+ma200.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
+cumulativeMA.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
 
 // Real-time L20 spread line (MA1 - raw data) - REMOVED
 
