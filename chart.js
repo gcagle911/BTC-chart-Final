@@ -563,6 +563,17 @@ function setTimeframe(timeframe) {
   manager.switchTimeframe(timeframe);
 }
 
+// Toggle bottom indicator panel visibility
+window.toggleIndicatorPanel = function toggleIndicatorPanel() {
+  const indicator = document.getElementById('indicator-chart');
+  const main = document.getElementById('main-chart');
+  if (!indicator || !main) return;
+  const willShow = indicator.style.display === 'none' || indicator.style.display === '';
+  indicator.style.display = willShow ? 'block' : 'none';
+  // After layout change, refit main chart content to ensure axes spaces recalc nicely
+  try { window.chart.timeScale().fitContent(); } catch (_) {}
+};
+
 // FIXED: Enhanced zoom functions with MASSIVE zoom range like TradingView
 function zoomIn() {
   if (window.chart) {
