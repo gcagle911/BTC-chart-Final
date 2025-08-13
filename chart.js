@@ -148,6 +148,14 @@ const cumulativeMA = chart.addLineSeries({
   priceLineVisible: false,
 });
 
+// Integrated RSI pane on dedicated price scale within the SAME chart
+let rsiSeries;
+try {
+  chart.priceScale('ind').applyOptions({ scaleMargins: { top: 1.00, bottom: 0.00 }, borderVisible: false });
+  rsiSeries = chart.addLineSeries({ priceScaleId: 'ind', color: '#4a90e2', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
+  rsiSeries.applyOptions({ visible: false });
+} catch (_) {}
+
 // Apply compact price formats to minimize y-axis width
 priceSeries.applyOptions({
   priceFormat: { type: 'custom', formatter: formatCompactNumber }
@@ -178,6 +186,8 @@ class TimeframeManager {
       '4h': { seconds: 14400, label: '4 Hours' },
       '1d': { seconds: 86400, label: '1 Day' }
     };
+    this.__aggCloseHistory = [];
+    this.__aggTimeHistory = [];
   }
 
   toUnixTimestamp(dateStr) {
@@ -309,88 +319,41 @@ class TimeframeManager {
       if (t > this.lastTimestamp) this.lastTimestamp = t;
     }
 
-    // Process RAW MINUTE DATA for MAs - NEVER CHANGES regardless of timeframe
-    let cumulativeSum = 0;
-    let cumulativeCount = 0;
-    
-    for (let i = 0; i < rawMinuteData.length; i++) {
-      const d = rawMinuteData[i];
-      const t = this.toUnixTimestamp(d.time);
-      
-      // For updates, only add new data
-      if (isUpdate && t <= this.lastTimestamp) continue;
-      
-      const sharedTime = t;
-      
-      // MA data ALWAYS from 1-minute data - IDENTICAL across all timeframes
-      
-      // Calculate MA20 from L20 spread data (20-period moving average)
-      if (d.spread_avg_L20_pct !== null && d.spread_avg_L20_pct !== undefined && i >= 19) {
-        const recent20 = rawMinuteData.slice(i - 19, i + 1);
-        const validSpreadData = recent20.filter(item => item.spread_avg_L20_pct !== null && item.spread_avg_L20_pct !== undefined);
-        
-        if (validSpreadData.length === 20) {
-          const sum = validSpreadData.reduce((acc, item) => acc + parseFloat(item.spread_avg_L20_pct), 0);
-          const ma20Value = sum / 20;
-          
-          ma20Data.push({
-            time: sharedTime,
-            value: ma20Value
-          });
+    // Keep aggregated close/time arrays in sync for RSI
+    if (!isUpdate) {
+      this.__aggCloseHistory = aggregatedPriceData.map(d => parseFloat(d.close));
+      this.__aggTimeHistory = aggregatedPriceData.map(d => this.toUnixTimestamp(d.time));
+    } else {
+      const lastAggT = this.__aggTimeHistory[this.__aggTimeHistory.length - 1] || 0;
+      for (const d of aggregatedPriceData) {
+        const t = this.toUnixTimestamp(d.time);
+        if (t > lastAggT) {
+          this.__aggCloseHistory.push(parseFloat(d.close));
+          this.__aggTimeHistory.push(t);
         }
       }
-      
-      if (useClientMAs) {
-        // Client-side MA50/100/200 based on spread_avg_L20_pct
-        // Ignore points where spread is missing
-        if (i >= 49) {
-          const recent50 = rawMinuteData.slice(i - 49, i + 1);
-          const valid = recent50.filter(item => item.spread_avg_L20_pct !== null && item.spread_avg_L20_pct !== undefined);
-          if (valid.length === 50) {
-            const sum = valid.reduce((acc, item) => acc + parseFloat(item.spread_avg_L20_pct), 0);
-            ma50Data.push({ time: sharedTime, value: sum / 50 });
-          }
-        }
-        if (i >= 99) {
-          const recent100 = rawMinuteData.slice(i - 99, i + 1);
-          const valid = recent100.filter(item => item.spread_avg_L20_pct !== null && item.spread_avg_L20_pct !== undefined);
-          if (valid.length === 100) {
-            const sum = valid.reduce((acc, item) => acc + parseFloat(item.spread_avg_L20_pct), 0);
-            ma100Data.push({ time: sharedTime, value: sum / 100 });
-          }
-        }
-        if (i >= 199) {
-          const recent200 = rawMinuteData.slice(i - 199, i + 1);
-          const valid = recent200.filter(item => item.spread_avg_L20_pct !== null && item.spread_avg_L20_pct !== undefined);
-          if (valid.length === 200) {
-            const sum = valid.reduce((acc, item) => acc + parseFloat(item.spread_avg_L20_pct), 0);
-            ma200Data.push({ time: sharedTime, value: sum / 200 });
-          }
-        }
-      } else {
-        // Fallback to server-provided MAs
-        if (d.ma_50 !== null && d.ma_50 !== undefined) {
-          ma50Data.push({ time: sharedTime, value: parseFloat(d.ma_50) });
-        }
-        if (d.ma_100 !== null && d.ma_100 !== undefined) {
-          ma100Data.push({ time: sharedTime, value: parseFloat(d.ma_100) });
-        }
-        if (d.ma_200 !== null && d.ma_200 !== undefined) {
-          ma200Data.push({ time: sharedTime, value: parseFloat(d.ma_200) });
-        }
+    }
+
+    // Compute RSI(14) from aggregated closes
+    const rsiData = [];
+    const period = 14;
+    for (let i = period; i < this.__aggCloseHistory.length; i++) {
+      const windowCloses = this.__aggCloseHistory.slice(i - period, i + 1);
+      let gains = 0, losses = 0;
+      for (let k = 1; k < windowCloses.length; k++) {
+        const diff = windowCloses[k] - windowCloses[k - 1];
+        if (diff > 0) gains += diff; else losses -= diff;
       }
-      
-      // Calculate cumulative average of L20 spread data
-      if (d.spread_avg_L20_pct !== null && d.spread_avg_L20_pct !== undefined) {
-        cumulativeSum += parseFloat(d.spread_avg_L20_pct);
-        cumulativeCount++;
-        const cumulativeAverage = cumulativeSum / cumulativeCount;
-        
-        cumulativeData.push({
-          time: sharedTime,
-          value: cumulativeAverage
-        });
+      const avgGain = gains / period;
+      const avgLoss = losses / period;
+      let rsi = 50;
+      if (avgLoss === 0 && avgGain > 0) rsi = 100;
+      else if (avgGain === 0 && avgLoss > 0) rsi = 0;
+      else if (avgLoss > 0) {
+        const rs = avgGain / avgLoss;
+        rsi = 100 - (100 / (1 + rs));
       }
+      rsiData.push({ time: this.__aggTimeHistory[i], value: rsi });
     }
 
     // Log timestamp alignment for debugging
@@ -411,6 +374,10 @@ class TimeframeManager {
       ma100Data.forEach(p => ma100.update(p));
       ma200Data.forEach(p => ma200.update(p));
       cumulativeData.forEach(p => cumulativeMA.update(p));
+      if (rsiSeries && rsiData.length > 0) {
+        const last = rsiData[rsiData.length - 1];
+        try { rsiSeries.update(last); } catch (_) {}
+      }
     } else {
       // Set complete dataset
       priceSeries.setData(priceData);
@@ -419,6 +386,9 @@ class TimeframeManager {
       ma100.setData(ma100Data);
       ma200.setData(ma200Data);
       cumulativeMA.setData(cumulativeData);
+      if (rsiSeries) {
+        try { rsiSeries.setData(rsiData); } catch (_) {}
+      }
       
       // Fit content to show all data
       chart.timeScale().fitContent();
@@ -1270,4 +1240,25 @@ manager.initializeChart().then(() => {
   // Add mobile optimizations after chart is ready
   setTimeout(addMobileOptimizations, 1000);
 });
+
+// Toggle RSI pane inside the main chart
+window.toggleRSI = function toggleRSI() {
+  try {
+    // Determine current visible state from margins
+    const showing = (chart.priceScale('ind').options && chart.priceScale('ind').options().scaleMargins.top < 1);
+    if (!showing) {
+      chart.priceScale('right').applyOptions({ scaleMargins: { top: 0.05, bottom: 0.20 } });
+      chart.priceScale('left').applyOptions({ scaleMargins: { top: 0.05, bottom: 0.20 } });
+      chart.priceScale('ind').applyOptions({ scaleMargins: { top: 0.80, bottom: 0.00 } });
+      if (rsiSeries) rsiSeries.applyOptions({ visible: true });
+    } else {
+      chart.priceScale('right').applyOptions({ scaleMargins: { top: 0.05, bottom: 0.05 } });
+      chart.priceScale('left').applyOptions({ scaleMargins: { top: 0.05, bottom: 0.05 } });
+      chart.priceScale('ind').applyOptions({ scaleMargins: { top: 1.00, bottom: 0.00 } });
+      if (rsiSeries) rsiSeries.applyOptions({ visible: false });
+    }
+  } catch (e) {
+    console.error('toggleRSI error:', e);
+  }
+};
 
