@@ -405,20 +405,31 @@ class TimeframeManager {
       }
     }
 
-    // Build Panel One constant line based on latest MA200 vs cumulative average
+    // Build Panel One as historical colored segments (green if MA200 < cumulative avg at each time)
     const panelOneGreenData = [];
     const panelOneRedData = [];
-    const timesForPanel = (this.__aggTimeHistory && this.__aggTimeHistory.length)
-      ? this.__aggTimeHistory
-      : priceData.map(p => p.time);
-    const ma200Latest = ma200Data.length ? ma200Data[ma200Data.length - 1].value : null;
-    const cumLatest = cumulativeData.length ? cumulativeData[cumulativeData.length - 1].value : null;
-    if (ma200Latest != null && cumLatest != null) {
-      const isGreen = (ma200Latest < cumLatest); // green when MA200 < cumulative avg
-      const target = isGreen ? panelOneGreenData : panelOneRedData;
-      for (let i = 0; i < timesForPanel.length; i++) {
-        target.push({ time: timesForPanel[i], value: 1 });
+    const maMap = new Map(ma200Data.map(p => [p.time, p.value]));
+    const cumMap = new Map(cumulativeData.map(p => [p.time, p.value]));
+    const times = [];
+    for (const [t] of maMap) {
+      if (cumMap.has(t)) times.push(t);
+    }
+    times.sort((a, b) => a - b);
+    let prevIsGreen = null;
+    for (let i = 0; i < times.length; i++) {
+      const t = times[i];
+      const ma = maMap.get(t);
+      const cum = cumMap.get(t);
+      if (ma == null || cum == null) continue;
+      const isGreen = ma < cum;
+      if (prevIsGreen !== null && isGreen !== prevIsGreen) {
+        const gapTime = t - 1;
+        if (prevIsGreen) panelOneGreenData.push({ time: gapTime, value: null });
+        else panelOneRedData.push({ time: gapTime, value: null });
       }
+      if (isGreen) panelOneGreenData.push({ time: t, value: 1 });
+      else panelOneRedData.push({ time: t, value: 1 });
+      prevIsGreen = isGreen;
     }
 
     // Log timestamp alignment for debugging
