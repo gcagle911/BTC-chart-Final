@@ -415,21 +415,14 @@ class TimeframeManager {
       if (cumMap.has(t)) times.push(t);
     }
     times.sort((a, b) => a - b);
-    let prevIsGreen = null;
     for (let i = 0; i < times.length; i++) {
       const t = times[i];
       const ma = maMap.get(t);
       const cum = cumMap.get(t);
       if (ma == null || cum == null) continue;
       const isGreen = ma < cum;
-      if (prevIsGreen !== null && isGreen !== prevIsGreen) {
-        const gapTime = t - 1;
-        if (prevIsGreen) panelOneGreenData.push({ time: gapTime, value: null });
-        else panelOneRedData.push({ time: gapTime, value: null });
-      }
-      if (isGreen) panelOneGreenData.push({ time: t, value: 1 });
-      else panelOneRedData.push({ time: t, value: 1 });
-      prevIsGreen = isGreen;
+      panelOneGreenData.push({ time: t, value: isGreen ? 1 : null });
+      panelOneRedData.push({ time: t, value: isGreen ? null : 1 });
     }
 
     // Log timestamp alignment for debugging
