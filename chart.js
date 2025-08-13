@@ -749,9 +749,11 @@ function setupTools() {
   const btnMeasure = document.getElementById('btn-measure');
   const btnAddHLine = document.getElementById('btn-add-hline');
   const btnClearHLines = document.getElementById('btn-clear-hlines');
+  const btnAddVLine = document.getElementById('btn-add-vline');
+  const btnClearVLines = document.getElementById('btn-clear-vlines');
   const container = document.getElementById('chart-container');
 
-  if (!btnMeasure || !btnAddHLine || !btnClearHLines || !container) return;
+  if (!btnMeasure || !btnAddHLine || !btnClearHLines || !btnAddVLine || !btnClearVLines || !container) return;
 
   let measureActive = false;
   let measureStart = null; // { time:number, price:number }
@@ -760,6 +762,14 @@ function setupTools() {
 
   let hLineAddActive = false;
   const hLines = []; // store created priceLines
+
+  // V-lines
+  let vLineAddActive = false;
+  const vLines = []; // store { series, time }
+
+  // Drag state
+  let draggingHLine = null; // { line, offsetY }
+  let draggingVLine = null; // { series }
 
   function ensureMeasureLabel() {
     if (measureLabel) return measureLabel;
@@ -856,6 +866,18 @@ function setupTools() {
     }
   });
 
+  // V-line buttons
+  btnAddVLine.addEventListener('click', () => {
+    vLineAddActive = !vLineAddActive;
+    btnAddVLine.classList.toggle('btn-active', vLineAddActive);
+  });
+  btnClearVLines.addEventListener('click', () => {
+    while (vLines.length > 0) {
+      const v = vLines.pop();
+      try { chart.removeSeries(v.series); } catch (_) {}
+    }
+  });
+
   chart.subscribeClick(param => {
     if (!param || !param.point) return;
 
@@ -889,7 +911,197 @@ function setupTools() {
       hLines.push(line);
       hLineAddActive = false;
       btnAddHLine.classList.remove('btn-active');
+      return;
     }
+
+    if (vLineAddActive && param.time != null) {
+      const t = param.time;
+      const series = chart.addLineSeries({
+        priceScaleId: 'right',
+        color: '#AAAAAA',
+        lineWidth: 1,
+        lastValueVisible: false,
+        priceLineVisible: false,
+      });
+      series.setData([{ time: t, value: 0 }, { time: t, value: 1e9 }]);
+      vLines.push({ series, time: t });
+      vLineAddActive = false;
+      btnAddVLine.classList.remove('btn-active');
+      return;
+    }
+  });
+
+  // Dragging H/V lines (desktop)
+  container.addEventListener('mousedown', (e) => {
+    if (e.target && e.target.closest && e.target.closest('#tools-button, #tools-panel')) {
+      return;
+    }
+    const rect = container.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    // H-line proximity
+    if (hLines.length > 0) {
+      let best = null;
+      for (const line of hLines) {
+        const p = line.options ? line.options().price : null;
+        if (p == null) continue;
+        const py = chart.priceScale('right').priceToCoordinate ? chart.priceScale('right').priceToCoordinate(p) : null;
+        if (py == null) continue;
+        const diff = Math.abs(py - y);
+        if (!best || diff < best.diff) best = { line, py, diff };
+      }
+      if (best && best.diff <= 6) {
+        draggingHLine = { line: best.line, offsetY: y - best.py };
+        e.preventDefault();
+        return;
+      }
+    }
+
+    // V-line proximity by time-to-x
+    if (vLines.length > 0) {
+      let best = null;
+      for (const v of vLines) {
+        const tx = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(v.time) : null;
+        if (tx == null) continue;
+        const diff = Math.abs(tx - x);
+        if (!best || diff < best.diff) best = { v, diff };
+      }
+      if (best && best.diff <= 6) {
+        draggingVLine = { series: best.v.series };
+        e.preventDefault();
+        return;
+      }
+    }
+  });
+
+  container.addEventListener('mousemove', (e) => {
+    if (draggingHLine) {
+      const rect = container.getBoundingClientRect();
+      const y = e.clientY - rect.top;
+      const price = priceSeries.coordinateToPrice(y - draggingHLine.offsetY);
+      if (price != null) {
+        try { priceSeries.removePriceLine(draggingHLine.line); } catch (_) {}
+        const newLine = priceSeries.createPriceLine({
+          price,
+          color: '#888888',
+          lineStyle: LightweightCharts.LineStyle.Dotted,
+          axisLabelVisible: true,
+          title: formatCompactNumber(price),
+        });
+        const idx = hLines.indexOf(draggingHLine.line);
+        if (idx >= 0) hLines[idx] = newLine;
+        draggingHLine.line = newLine;
+      }
+      e.preventDefault();
+    } else if (draggingVLine) {
+      const rect = container.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const time = chart.timeScale().coordinateToTime(x);
+      if (time != null) {
+        const series = draggingVLine.series;
+        series.setData([{ time, value: 0 }, { time, value: 1e9 }]);
+        const meta = vLines.find(v => v.series === series);
+        if (meta) meta.time = time;
+      }
+      e.preventDefault();
+    }
+  });
+
+  container.addEventListener('mouseup', () => {
+    draggingHLine = null;
+    draggingVLine = null;
+  });
+
+  // Mobile touch drag support
+  function getTouchPoint(e) {
+    const touches = e.touches && e.touches.length ? e.touches : (e.changedTouches || []);
+    if (!touches.length) return null;
+    const t = touches[0];
+    const rect = container.getBoundingClientRect();
+    return { x: t.clientX - rect.left, y: t.clientY - rect.top, target: t.target };
+  }
+
+  container.addEventListener('touchstart', (e) => {
+    const pt = getTouchPoint(e);
+    if (!pt) return;
+    if (pt.target && pt.target.closest && pt.target.closest('#tools-button, #tools-panel')) return;
+
+    // H-line proximity
+    if (hLines.length > 0) {
+      let best = null;
+      for (const line of hLines) {
+        const p = line.options ? line.options().price : null;
+        if (p == null) continue;
+        const py = chart.priceScale('right').priceToCoordinate ? chart.priceScale('right').priceToCoordinate(p) : null;
+        if (py == null) continue;
+        const diff = Math.abs(py - pt.y);
+        if (!best || diff < best.diff) best = { line, py, diff };
+      }
+    
+      if (best && best.diff <= 12) {
+        draggingHLine = { line: best.line, offsetY: 0 };
+        e.preventDefault();
+        return;
+      }
+    }
+
+    // V-line proximity
+    if (vLines.length > 0) {
+      let bestV = null;
+      for (const v of vLines) {
+        const tx = chart.timeScale().timeToCoordinate ? chart.timeScale().timeToCoordinate(v.time) : null;
+        if (tx == null) continue;
+        const diff = Math.abs(tx - pt.x);
+        if (!bestV || diff < bestV.diff) bestV = { v, diff };
+      }
+      if (bestV && bestV.diff <= 14) {
+        draggingVLine = { series: bestV.v.series };
+        e.preventDefault();
+        return;
+      }
+    }
+  }, { passive: false });
+
+  container.addEventListener('touchmove', (e) => {
+    const pt = getTouchPoint(e);
+    if (!pt) return;
+
+    if (draggingHLine) {
+      const price = priceSeries.coordinateToPrice(pt.y);
+      if (price != null) {
+        try { priceSeries.removePriceLine(draggingHLine.line); } catch (_) {}
+        const newLine = priceSeries.createPriceLine({
+          price,
+          color: '#888888',
+          lineStyle: LightweightCharts.LineStyle.Dotted,
+          axisLabelVisible: true,
+          title: formatCompactNumber(price),
+        });
+        const idx = hLines.indexOf(draggingHLine.line);
+        if (idx >= 0) hLines[idx] = newLine;
+        draggingHLine.line = newLine;
+      }
+      e.preventDefault();
+      return;
+    }
+
+    if (draggingVLine) {
+      const time = chart.timeScale().coordinateToTime(pt.x);
+      if (time != null) {
+        const series = draggingVLine.series;
+        series.setData([{ time, value: 0 }, { time, value: 1e9 }]);
+        const meta = vLines.find(v => v.series === series);
+        if (meta) meta.time = time;
+      }
+      e.preventDefault();
+      return;
+    }
+  }, { passive: false });
+
+  container.addEventListener('touchend', () => {
+    draggingHLine = null;
+    draggingVLine = null;
   });
 
   chart.subscribeCrosshairMove(param => {
