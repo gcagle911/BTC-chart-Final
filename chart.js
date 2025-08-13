@@ -148,12 +148,14 @@ const cumulativeMA = chart.addLineSeries({
   priceLineVisible: false,
 });
 
-// Integrated RSI pane on dedicated price scale within the SAME chart
-let rsiSeries;
+// Panel One indicator on dedicated price scale within the SAME chart
+let panelOneGreen, panelOneRed;
 try {
   chart.priceScale('ind').applyOptions({ scaleMargins: { top: 1.00, bottom: 0.00 }, borderVisible: false });
-  rsiSeries = chart.addLineSeries({ priceScaleId: 'ind', color: '#4a90e2', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
-  rsiSeries.applyOptions({ visible: false });
+  panelOneGreen = chart.addLineSeries({ priceScaleId: 'ind', color: '#16c784', lineWidth: 3, title: 'Panel One', lastValueVisible: false, priceLineVisible: false });
+  panelOneRed = chart.addLineSeries({ priceScaleId: 'ind', color: '#ea3943', lineWidth: 3, title: 'Panel One', lastValueVisible: false, priceLineVisible: false });
+  panelOneGreen.applyOptions({ visible: false });
+  panelOneRed.applyOptions({ visible: false });
 } catch (_) {}
 
 // Apply compact price formats to minimize y-axis width
@@ -403,26 +405,20 @@ class TimeframeManager {
       }
     }
 
-    // Compute RSI(14) from aggregated closes
-    const rsiData = [];
-    const period = 14;
-    for (let i = period; i < this.__aggCloseHistory.length; i++) {
-      const windowCloses = this.__aggCloseHistory.slice(i - period, i + 1);
-      let gains = 0, losses = 0;
-      for (let k = 1; k < windowCloses.length; k++) {
-        const diff = windowCloses[k] - windowCloses[k - 1];
-        if (diff > 0) gains += diff; else losses -= diff;
+    // Build Panel One constant line based on latest MA200 vs cumulative average
+    const panelOneGreenData = [];
+    const panelOneRedData = [];
+    const timesForPanel = (this.__aggTimeHistory && this.__aggTimeHistory.length)
+      ? this.__aggTimeHistory
+      : priceData.map(p => p.time);
+    const ma200Latest = ma200Data.length ? ma200Data[ma200Data.length - 1].value : null;
+    const cumLatest = cumulativeData.length ? cumulativeData[cumulativeData.length - 1].value : null;
+    if (ma200Latest != null && cumLatest != null) {
+      const isGreen = (ma200Latest < cumLatest); // green when MA200 < cumulative avg
+      const target = isGreen ? panelOneGreenData : panelOneRedData;
+      for (let i = 0; i < timesForPanel.length; i++) {
+        target.push({ time: timesForPanel[i], value: 1 });
       }
-      const avgGain = gains / period;
-      const avgLoss = losses / period;
-      let rsi = 50;
-      if (avgLoss === 0 && avgGain > 0) rsi = 100;
-      else if (avgGain === 0 && avgLoss > 0) rsi = 0;
-      else if (avgLoss > 0) {
-        const rs = avgGain / avgLoss;
-        rsi = 100 - (100 / (1 + rs));
-      }
-      rsiData.push({ time: this.__aggTimeHistory[i], value: rsi });
     }
 
     // Log timestamp alignment for debugging
@@ -443,9 +439,12 @@ class TimeframeManager {
       ma100Data.forEach(p => ma100.update(p));
       ma200Data.forEach(p => ma200.update(p));
       cumulativeData.forEach(p => cumulativeMA.update(p));
-      if (rsiSeries && rsiData.length > 0) {
-        const last = rsiData[rsiData.length - 1];
-        try { rsiSeries.update(last); } catch (_) {}
+      if (panelOneGreen && panelOneRed) {
+        if (panelOneGreenData.length > 0) {
+          try { panelOneGreen.setData(panelOneGreenData); panelOneRed.setData([]); } catch (_) {}
+        } else if (panelOneRedData.length > 0) {
+          try { panelOneRed.setData(panelOneRedData); panelOneGreen.setData([]); } catch (_) {}
+        }
       }
     } else {
       // Set complete dataset
@@ -455,8 +454,14 @@ class TimeframeManager {
       ma100.setData(ma100Data);
       ma200.setData(ma200Data);
       cumulativeMA.setData(cumulativeData);
-      if (rsiSeries) {
-        try { rsiSeries.setData(rsiData); } catch (_) {}
+      if (panelOneGreen && panelOneRed) {
+        if (panelOneGreenData.length > 0) {
+          try { panelOneGreen.setData(panelOneGreenData); panelOneRed.setData([]); } catch (_) {}
+        } else if (panelOneRedData.length > 0) {
+          try { panelOneRed.setData(panelOneRedData); panelOneGreen.setData([]); } catch (_) {}
+        } else {
+          try { panelOneGreen.setData([]); panelOneRed.setData([]); } catch (_) {}
+        }
       }
       
       // Fit content to show all data
@@ -1310,24 +1315,27 @@ manager.initializeChart().then(() => {
   setTimeout(addMobileOptimizations, 1000);
 });
 
-// Toggle RSI pane inside the main chart
-window.toggleRSI = function toggleRSI() {
+// Toggle Panel One inside the main chart
+window.togglePanelOne = function togglePanelOne() {
   try {
-    // Determine current visible state from margins
-    const showing = (chart.priceScale('ind').options && chart.priceScale('ind').options().scaleMargins.top < 1);
+    const ps = chart.priceScale('ind');
+    const options = ps.options ? ps.options() : null;
+    const showing = options ? (options.scaleMargins.top < 1) : false;
     if (!showing) {
       chart.priceScale('right').applyOptions({ scaleMargins: { top: 0.05, bottom: 0.20 } });
       chart.priceScale('left').applyOptions({ scaleMargins: { top: 0.05, bottom: 0.20 } });
       chart.priceScale('ind').applyOptions({ scaleMargins: { top: 0.80, bottom: 0.00 } });
-      if (rsiSeries) rsiSeries.applyOptions({ visible: true });
+      if (panelOneGreen) panelOneGreen.applyOptions({ visible: true });
+      if (panelOneRed) panelOneRed.applyOptions({ visible: true });
     } else {
       chart.priceScale('right').applyOptions({ scaleMargins: { top: 0.05, bottom: 0.05 } });
       chart.priceScale('left').applyOptions({ scaleMargins: { top: 0.05, bottom: 0.05 } });
       chart.priceScale('ind').applyOptions({ scaleMargins: { top: 1.00, bottom: 0.00 } });
-      if (rsiSeries) rsiSeries.applyOptions({ visible: false });
+      if (panelOneGreen) panelOneGreen.applyOptions({ visible: false });
+      if (panelOneRed) panelOneRed.applyOptions({ visible: false });
     }
   } catch (e) {
-    console.error('toggleRSI error:', e);
+    console.error('togglePanelOne error:', e);
   }
 };
 

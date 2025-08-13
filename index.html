@@ -237,7 +237,7 @@
           <button id="btn-add-vline" class="btn">Add V-Line</button>
           <button id="btn-clear-hlines" class="btn btn-danger">Clear H-Lines</button>
           <button id="btn-clear-vlines" class="btn btn-danger">Clear V-Lines</button>
-          <button id="btn-toggle-rsi" class="btn">Toggle RSI</button>
+          <button id="btn-toggle-panel1" class="btn">Panel One</button>
         </div>
       </div>
 
@@ -290,8 +290,8 @@
         if (t.id === 'btn-toggle-indicator' && window.toggleIndicatorPanel) {
           window.toggleIndicatorPanel();
         }
-        if (t.id === 'btn-toggle-rsi' && window.toggleRSI) {
-          window.toggleRSI();
+        if (t.id === 'btn-toggle-panel1' && window.togglePanelOne) {
+          window.togglePanelOne();
         }
       });
 
@@ -304,12 +304,12 @@
           if (window.toggleIndicatorPanel) window.toggleIndicatorPanel();
         });
       }
-      const rsiBtn = document.getElementById('btn-toggle-rsi');
-      if (rsiBtn) {
-        rsiBtn.addEventListener('click', (e) => {
+      const panel1Btn = document.getElementById('btn-toggle-panel1');
+      if (panel1Btn) {
+        panel1Btn.addEventListener('click', (e) => {
           e.preventDefault();
           e.stopPropagation();
-          if (window.toggleRSI) window.toggleRSI();
+          if (window.togglePanelOne) window.togglePanelOne();
         });
       }
     })();
