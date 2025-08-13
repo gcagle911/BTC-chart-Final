@@ -152,8 +152,8 @@ const cumulativeMA = chart.addLineSeries({
 let panelOneGreen, panelOneRed;
 try {
   chart.priceScale('ind').applyOptions({ scaleMargins: { top: 1.00, bottom: 0.00 }, borderVisible: false });
-  panelOneGreen = chart.addLineSeries({ priceScaleId: 'ind', color: '#16c784', lineWidth: 3, title: 'Panel One', lastValueVisible: false, priceLineVisible: false });
-  panelOneRed = chart.addLineSeries({ priceScaleId: 'ind', color: '#ea3943', lineWidth: 3, title: 'Panel One', lastValueVisible: false, priceLineVisible: false });
+  panelOneGreen = chart.addLineSeries({ priceScaleId: 'ind', color: '#16c784', lineWidth: 3, title: 'Panel One', lastValueVisible: false, priceLineVisible: false, lineType: LightweightCharts.LineType.WithSteps });
+  panelOneRed = chart.addLineSeries({ priceScaleId: 'ind', color: '#ea3943', lineWidth: 3, title: 'Panel One', lastValueVisible: false, priceLineVisible: false, lineType: LightweightCharts.LineType.WithSteps });
   panelOneGreen.applyOptions({ visible: false });
   panelOneRed.applyOptions({ visible: false });
 } catch (_) {}
@@ -436,18 +436,12 @@ class TimeframeManager {
       const tEnd = aggTimes[e];
       if (isGreen) {
         panelOneGreenData.push({ time: tStart, value: 1 });
-        panelOneGreenData.push({ time: tEnd, value: 1 });
-        if (e + 1 < aggTimes.length) {
-          const nextTime = aggTimes[e + 1];
-          panelOneGreenData.push({ time: nextTime, value: null });
-        }
+        panelOneGreenData.push({ time: tEnd + 0.000001, value: 1 });
+        panelOneGreenData.push({ time: tEnd + 0.000002, value: null });
       } else {
         panelOneRedData.push({ time: tStart, value: 1 });
-        panelOneRedData.push({ time: tEnd, value: 1 });
-        if (e + 1 < aggTimes.length) {
-          const nextTime = aggTimes[e + 1];
-          panelOneRedData.push({ time: nextTime, value: null });
-        }
+        panelOneRedData.push({ time: tEnd + 0.000001, value: 1 });
+        panelOneRedData.push({ time: tEnd + 0.000002, value: null });
       }
       s = e + 1;
     }
