@@ -405,29 +405,45 @@ class TimeframeManager {
       }
     }
 
-    // Build Panel One as a straight horizontal line with historical colors using aggregated times
+    // Build Panel One as straight horizontal colored segments across aggregated times
     const panelOneGreenData = [];
     const panelOneRedData = [];
     const aggTimes = (this.__aggTimeHistory && this.__aggTimeHistory.length)
       ? this.__aggTimeHistory
       : priceData.map(p => p.time);
-    // Use pointers to map raw-minute MA200/cumulative values to each aggregated time
-    let iMa = 0, iCum = 0;
-    let lastMA = null, lastCum = null;
+    // Determine color at each aggregated time using last-known raw-minute MA200 and cumulative avg
     const maArr = ma200Data;
     const cumArr = cumulativeData;
+    let iMa = 0, iCum = 0, lastMA = null, lastCum = null;
+    const colorFlags = [];
     for (let k = 0; k < aggTimes.length; k++) {
       const t = aggTimes[k];
       while (iMa < maArr.length && maArr[iMa].time <= t) { lastMA = maArr[iMa].value; iMa++; }
       while (iCum < cumArr.length && cumArr[iCum].time <= t) { lastCum = cumArr[iCum].value; iCum++; }
-      if (lastMA != null && lastCum != null) {
-        const isGreen = lastMA < lastCum;
-        panelOneGreenData.push({ time: t, value: isGreen ? 1 : null });
-        panelOneRedData.push({ time: t, value: isGreen ? null : 1 });
+      if (lastMA != null && lastCum != null) colorFlags[k] = (lastMA < lastCum);
+      else colorFlags[k] = null;
+    }
+    // Convert flags into contiguous segments; push only endpoints and a null cutoff to avoid diagonal bridges
+    let s = 0;
+    while (s < aggTimes.length) {
+      // skip unknowns
+      while (s < aggTimes.length && colorFlags[s] === null) s++;
+      if (s >= aggTimes.length) break;
+      const isGreen = colorFlags[s];
+      let e = s;
+      while (e + 1 < aggTimes.length && colorFlags[e + 1] === isGreen) e++;
+      const tStart = aggTimes[s];
+      const tEnd = aggTimes[e];
+      if (isGreen) {
+        panelOneGreenData.push({ time: tStart, value: 1 });
+        panelOneGreenData.push({ time: tEnd, value: 1 });
+        panelOneGreenData.push({ time: tEnd + 1, value: null });
       } else {
-        panelOneGreenData.push({ time: t, value: null });
-        panelOneRedData.push({ time: t, value: null });
+        panelOneRedData.push({ time: tStart, value: 1 });
+        panelOneRedData.push({ time: tEnd, value: 1 });
+        panelOneRedData.push({ time: tEnd + 1, value: null });
       }
+      s = e + 1;
     }
 
     // Log timestamp alignment for debugging
