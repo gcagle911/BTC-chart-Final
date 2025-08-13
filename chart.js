@@ -696,9 +696,35 @@ function handlePinchZoom(scaleChange) {
   }
 }
 
+// Bind MA checkbox toggles to series visibility
+function setupMAToggles() {
+  const bindings = [
+    { id: 'toggle-ma20', series: ma20 },
+    { id: 'toggle-ma50', series: ma50 },
+    { id: 'toggle-ma100', series: ma100 },
+    { id: 'toggle-ma200', series: ma200 },
+  ];
+
+  bindings.forEach(({ id, series }) => {
+    const checkbox = document.getElementById(id);
+    if (!checkbox || !series) return;
+
+    // Initialize visibility based on current checkbox state
+    series.applyOptions({ visible: checkbox.checked });
+
+    checkbox.addEventListener('change', (e) => {
+      const target = e.target;
+      series.applyOptions({ visible: !!target.checked });
+    });
+  });
+}
+
 // Initialize everything
 manager.initializeChart().then(() => {
   console.log('🎯 Chart ready with bid spread data and dual y-axis!');
+  
+  // Wire MA toggles
+  setupMAToggles();
   
   // Start update cycle
   manager.startUpdateCycle();

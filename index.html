@@ -78,6 +78,40 @@
       font-weight: 500;
     }
     
+    /* MA toggle controls */
+    #ma-controls {
+      position: absolute;
+      top: 56px;
+      left: 10px;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(25, 28, 35, 0.9);
+      padding: 8px 12px;
+      border-radius: 8px;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      flex-wrap: wrap;
+    }
+
+    .ma-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #d1d4dc;
+      font-size: 12px;
+      user-select: none;
+      cursor: pointer;
+    }
+
+    .ma-swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      display: inline-block;
+    }
+    
     /* Mobile optimizations */
     @media (max-width: 768px) {
       #timeframe-controls {
@@ -95,6 +129,15 @@
       .timeframe-label {
         font-size: 11px;
       }
+
+      #ma-controls {
+        top: 46px;
+        left: 5px;
+        padding: 6px 10px;
+        gap: 8px;
+      }
+
+      .ma-toggle { font-size: 11px; }
     }
     
     @media (max-width: 480px) {
@@ -111,6 +154,13 @@
       .timeframe-label {
         font-size: 10px;
       }
+
+      #ma-controls {
+        top: 42px;
+        padding: 4px 8px;
+      }
+
+      .ma-toggle { font-size: 10px; }
     }
   </style>
 </head>
@@ -126,6 +176,29 @@
         <option value="4h">4h</option>
         <option value="1d">1d</option>
       </select>
+    </div>
+
+    <div id="ma-controls">
+      <label class="ma-toggle" title="Toggle MA20 visibility">
+        <input type="checkbox" id="toggle-ma20" checked />
+        <span class="ma-swatch" style="background:#00BFFF"></span>
+        MA20
+      </label>
+      <label class="ma-toggle" title="Toggle MA50 visibility">
+        <input type="checkbox" id="toggle-ma50" checked />
+        <span class="ma-swatch" style="background:#FF6B6B"></span>
+        MA50
+      </label>
+      <label class="ma-toggle" title="Toggle MA100 visibility">
+        <input type="checkbox" id="toggle-ma100" checked />
+        <span class="ma-swatch" style="background:#4ADF86"></span>
+        MA100
+      </label>
+      <label class="ma-toggle" title="Toggle MA200 visibility">
+        <input type="checkbox" id="toggle-ma200" checked />
+        <span class="ma-swatch" style="background:#FFD700"></span>
+        MA200
+      </label>
     </div>
     
     <div id="main-chart"></div>
