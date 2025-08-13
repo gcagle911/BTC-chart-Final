@@ -26,12 +26,43 @@
       width: 100vw;
       height: 100vh;
       position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Stack main and indicator charts vertically */
+    #charts-stack {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      width: 100%;
     }
     
     #main-chart {
       width: 100%;
-      height: 100%;
+      flex: 1 1 auto;
       touch-action: pan-x pan-y pinch-zoom;
+      overflow: hidden;
+    }
+
+    #indicator-chart {
+      width: 100%;
+      height: 20%;
+      display: none; /* toggled on via JS */
+      border-top: 1px solid rgba(255,255,255,0.08);
+      position: relative;
+      background: #0f131a;
+    }
+
+    #indicator-placeholder {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #9aa0a6;
+      font-size: 12px;
+      pointer-events: none;
+      opacity: 0.8;
     }
     
     #timeframe-controls {
@@ -77,40 +108,87 @@
       font-size: 12px;
       font-weight: 500;
     }
-    
+
+    /* Hide legacy timeframe control */
+    #timeframe-controls { display: none !important; }
+
+    /* Floating Tools Button */
+    #tools-button {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 110;
+      background: #2a2e39;
+      color: #d1d4dc;
+      border: 1px solid #4a4e59;
+      padding: 8px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    #tools-button:hover { background: #363a45; }
+
+    /* Popup Panel */
+    #tools-panel {
+      position: absolute;
+      top: 50px;
+      right: 10px;
+      z-index: 120;
+      width: 260px;
+      background: rgba(25,28,35,0.98);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      padding: 10px;
+      display: none;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      backdrop-filter: blur(8px);
+    }
+
+    .panel-section { margin-bottom: 10px; }
+    .panel-title {
+      color: #9aa0a6;
+      font-size: 11px;
+      font-weight: 700;
+      margin: 6px 0 8px 0;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .ma-toggle { display: flex; align-items: center; gap: 6px; color: #d1d4dc; font-size: 12px; cursor: pointer; }
+    .ma-swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+    .btn-row { display: flex; flex-wrap: wrap; gap: 6px; }
+    .btn {
+      background: #2a2e39;
+      border: 1px solid #4a4e59;
+      color: #d1d4dc;
+      padding: 5px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .btn:hover { background: #363a45; }
+    .btn-danger { border-color: #7a3b3b; color: #ff9a9a; }
+    .btn-danger:hover { background: #3a2a2a; }
+    .btn-active { outline: 2px solid #2962ff55; }
+
     /* Mobile optimizations */
     @media (max-width: 768px) {
-      #timeframe-controls {
-        top: 5px;
-        left: 5px;
-        padding: 6px 10px;
-      }
-      
-      #timeframe-dropdown {
-        font-size: 11px;
-        padding: 4px 8px;
-        min-width: 70px;
-      }
-      
-      .timeframe-label {
-        font-size: 11px;
-      }
+      #timeframe-controls { top: 5px; left: 5px; padding: 6px 10px; }
+      #timeframe-dropdown { font-size: 11px; padding: 4px 8px; min-width: 70px; }
+      .timeframe-label { font-size: 11px; }
+      #tools-button { top: 5px; right: 5px; padding: 6px 8px; font-size: 11px; }
+      #tools-panel { top: 44px; right: 5px; width: 250px; }
     }
-    
     @media (max-width: 480px) {
-      #timeframe-controls {
-        padding: 4px 8px;
-      }
-      
-      #timeframe-dropdown {
-        font-size: 10px;
-        padding: 3px 6px;
-        min-width: 60px;
-      }
-      
-      .timeframe-label {
-        font-size: 10px;
-      }
+      #timeframe-controls { padding: 4px 8px; }
+      #timeframe-dropdown { font-size: 10px; padding: 3px 6px; min-width: 60px; }
+      .timeframe-label { font-size: 10px; }
+      #tools-button { padding: 5px 7px; font-size: 10px; }
+      #tools-panel { top: 40px; width: 240px; }
     }
   </style>
 </head>
@@ -127,11 +205,102 @@
         <option value="1d">1d</option>
       </select>
     </div>
-    
-    <div id="main-chart"></div>
+
+    <button id="tools-button" type="button">Tools ▾</button>
+
+    <div id="tools-panel">
+      <div class="panel-section">
+        <div class="panel-title">Moving Averages</div>
+        <label class="ma-toggle"><input type="checkbox" id="toggle-ma20" checked /><span class="ma-swatch" style="background:#00BFFF"></span>MA20</label>
+        <label class="ma-toggle"><input type="checkbox" id="toggle-ma50" checked /><span class="ma-swatch" style="background:#FF6B6B"></span>MA50</label>
+        <label class="ma-toggle"><input type="checkbox" id="toggle-ma100" checked /><span class="ma-swatch" style="background:#4ADF86"></span>MA100</label>
+        <label class="ma-toggle"><input type="checkbox" id="toggle-ma200" checked /><span class="ma-swatch" style="background:#FFD700"></span>MA200</label>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-title">Timeframes</div>
+        <div class="btn-row">
+          <button class="btn" data-timeframe="1m">1m</button>
+          <button class="btn" data-timeframe="5m">5m</button>
+          <button class="btn" data-timeframe="15m">15m</button>
+          <button class="btn" data-timeframe="1h">1h</button>
+          <button class="btn" data-timeframe="4h">4h</button>
+          <button class="btn" data-timeframe="1d">1d</button>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-title">Tools</div>
+        <div class="btn-row">
+          <button id="btn-measure" class="btn">Measure</button>
+          <button id="btn-add-hline" class="btn">Add H-Line</button>
+          <button id="btn-add-vline" class="btn">Add V-Line</button>
+          <button id="btn-clear-hlines" class="btn btn-danger">Clear H-Lines</button>
+          <button id="btn-clear-vlines" class="btn btn-danger">Clear V-Lines</button>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-title">Indicator Panel</div>
+        <div class="btn-row">
+          <button id="btn-toggle-indicator" class="btn">Toggle Indicator Panel</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="charts-stack">
+      <div id="main-chart"></div>
+      <div id="indicator-chart">
+        <div id="indicator-placeholder">Indicator Panel (placeholder)</div>
+      </div>
+    </div>
   </div>
   
   <script src="https://unpkg.com/lightweight-charts@4.0.0/dist/lightweight-charts.standalone.production.js"></script>
   <script src="chart.js"></script>
+  <script>
+    // Simple toggling of the tools panel without interfering with chart interactions
+    (function() {
+      const btn = document.getElementById('tools-button');
+      const panel = document.getElementById('tools-panel');
+
+      function closePanelOnOutsideClick(e) {
+        if (!panel.contains(e.target) && e.target !== btn) {
+          panel.style.display = 'none';
+          document.removeEventListener('mousedown', closePanelOnOutsideClick);
+        }
+      }
+
+      btn.addEventListener('click', () => {
+        const visible = panel.style.display === 'block';
+        panel.style.display = visible ? 'none' : 'block';
+        if (!visible) {
+          setTimeout(() => document.addEventListener('mousedown', closePanelOnOutsideClick), 0);
+        }
+      });
+
+      // Timeframe quick buttons delegate to global setTimeframe()
+      panel.addEventListener('click', (e) => {
+        const t = e.target;
+        if (t.matches('button[data-timeframe]')) {
+          const tf = t.getAttribute('data-timeframe');
+          if (window.setTimeframe) window.setTimeframe(tf);
+        }
+        if (t.id === 'btn-toggle-indicator' && window.toggleIndicatorPanel) {
+          window.toggleIndicatorPanel();
+        }
+      });
+
+      // Add a direct listener to maximize compatibility
+      const indBtn = document.getElementById('btn-toggle-indicator');
+      if (indBtn) {
+        indBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (window.toggleIndicatorPanel) window.toggleIndicatorPanel();
+        });
+      }
+    })();
+  </script>
 </body>
 </html>
