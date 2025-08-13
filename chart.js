@@ -570,10 +570,20 @@ window.toggleIndicatorPanel = function toggleIndicatorPanel() {
   if (!indicator || !main) return;
   const isHidden = indicator.style.display === 'none' || indicator.style.display === '';
   if (isHidden) {
+    // Fix main chart height to remaining space to avoid canvas overlap
+    const container = document.getElementById('chart-container');
+    if (container) {
+      const totalH = container.clientHeight;
+      const indicatorH = Math.round(totalH * 0.20);
+      main.style.height = (totalH - indicatorH) + 'px';
+      main.style.flex = '0 0 auto';
+    }
     indicator.style.display = 'block';
-    // main stays flex:1; indicator has fixed height via CSS
   } else {
     indicator.style.display = 'none';
+    // Restore flex so main fills
+    main.style.height = '';
+    main.style.flex = '1 1 auto';
   }
   try { window.chart.timeScale().fitContent(); } catch (_) {}
   console.log('Indicator panel visible:', indicator.style.display === 'block');
