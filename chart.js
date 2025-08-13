@@ -771,6 +771,32 @@ function setupTools() {
   let draggingHLine = null; // { line, offsetY }
   let draggingVLine = null; // { series }
 
+  function setDragInteractions(active) {
+    // Disable chart panning/zooming and crosshair while dragging a line to improve mobile UX
+    if (!window.chart) return;
+    window.chart.applyOptions({
+      handleScroll: {
+        mouseWheel: active,
+        pressedMouseMove: active,
+        horzTouchDrag: active,
+        vertTouchDrag: active,
+      },
+      handleScale: {
+        mouseWheel: active,
+        pinch: active,
+        axisPressedMouseMove: {
+          time: active,
+          price: active,
+        },
+      },
+      crosshair: {
+        mode: LightweightCharts.CrosshairMode.Normal,
+        vertLine: { visible: active },
+        horzLine: { visible: active },
+      },
+    });
+  }
+
   function ensureMeasureLabel() {
     if (measureLabel) return measureLabel;
     const div = document.createElement('div');
@@ -967,6 +993,7 @@ function setupTools() {
         draggingVLine = { series };
         vLineAddActive = false;
         btnAddVLine.classList.remove('btn-active');
+        setDragInteractions(false);
         e.preventDefault();
         return;
       }
@@ -985,6 +1012,7 @@ function setupTools() {
       }
       if (best && best.diff <= 6) {
         draggingHLine = { line: best.line, offsetY: y - best.py };
+        setDragInteractions(false);
         e.preventDefault();
         return;
       }
@@ -1001,6 +1029,7 @@ function setupTools() {
       }
       if (best && best.diff <= 6) {
         draggingVLine = { series: best.v.series };
+        setDragInteractions(false);
         e.preventDefault();
         return;
       }
@@ -1042,6 +1071,7 @@ function setupTools() {
   });
 
   container.addEventListener('mouseup', () => {
+    if (draggingHLine || draggingVLine) setDragInteractions(true);
     draggingHLine = null;
     draggingVLine = null;
   });
@@ -1077,6 +1107,7 @@ function setupTools() {
         draggingVLine = { series };
         vLineAddActive = false;
         btnAddVLine.classList.remove('btn-active');
+        setDragInteractions(false);
         e.preventDefault();
         return;
       }
@@ -1096,6 +1127,7 @@ function setupTools() {
     
       if (best && best.diff <= 20) {
         draggingHLine = { line: best.line, offsetY: 0 };
+        setDragInteractions(false);
         e.preventDefault();
         return;
       }
@@ -1112,6 +1144,7 @@ function setupTools() {
       }
       if (bestV && bestV.diff <= 20) {
         draggingVLine = { series: bestV.v.series };
+        setDragInteractions(false);
         e.preventDefault();
         return;
       }
@@ -1156,6 +1189,7 @@ function setupTools() {
   }, { passive: false });
 
   container.addEventListener('touchend', () => {
+    if (draggingHLine || draggingVLine) setDragInteractions(true);
     draggingHLine = null;
     draggingVLine = null;
   });
