@@ -861,8 +861,8 @@ function setupTools() {
 
   btnClearHLines.addEventListener('click', () => {
     while (hLines.length > 0) {
-      const line = hLines.pop();
-      try { priceSeries.removePriceLine(line); } catch (_) {}
+      const entry = hLines.pop();
+      try { priceSeries.removePriceLine(entry.line); } catch (_) {}
     }
   });
 
@@ -908,7 +908,7 @@ function setupTools() {
         axisLabelVisible: true,
         title: formatCompactNumber(price),
       });
-      hLines.push(line);
+      hLines.push({ line, price });
       hLineAddActive = false;
       btnAddHLine.classList.remove('btn-active');
       return;
@@ -943,13 +943,13 @@ function setupTools() {
     // H-line proximity
     if (hLines.length > 0) {
       let best = null;
-      for (const line of hLines) {
-        const p = line.options ? line.options().price : null;
+      for (const entry of hLines) {
+        const p = entry.price ?? (entry.line.options ? entry.line.options().price : null);
         if (p == null) continue;
         const py = chart.priceScale('right').priceToCoordinate ? chart.priceScale('right').priceToCoordinate(p) : null;
         if (py == null) continue;
         const diff = Math.abs(py - y);
-        if (!best || diff < best.diff) best = { line, py, diff };
+        if (!best || diff < best.diff) best = { line: entry.line, py, diff };
       }
       if (best && best.diff <= 6) {
         draggingHLine = { line: best.line, offsetY: y - best.py };
@@ -989,8 +989,8 @@ function setupTools() {
           axisLabelVisible: true,
           title: formatCompactNumber(price),
         });
-        const idx = hLines.indexOf(draggingHLine.line);
-        if (idx >= 0) hLines[idx] = newLine;
+        const idx = hLines.findIndex(entry => entry.line === draggingHLine.line);
+        if (idx >= 0) hLines[idx] = { line: newLine, price };
         draggingHLine.line = newLine;
       }
       e.preventDefault();
@@ -1030,8 +1030,8 @@ function setupTools() {
     // H-line proximity
     if (hLines.length > 0) {
       let best = null;
-      for (const line of hLines) {
-        const p = line.options ? line.options().price : null;
+      for (const entry of hLines) {
+        const p = entry.price ?? (entry.line.options ? entry.line.options().price : null);
         if (p == null) continue;
         const py = chart.priceScale('right').priceToCoordinate ? chart.priceScale('right').priceToCoordinate(p) : null;
         if (py == null) continue;
@@ -1078,8 +1078,8 @@ function setupTools() {
           axisLabelVisible: true,
           title: formatCompactNumber(price),
         });
-        const idx = hLines.indexOf(draggingHLine.line);
-        if (idx >= 0) hLines[idx] = newLine;
+        const idx = hLines.findIndex(entry => entry.line === draggingHLine.line);
+        if (idx >= 0) hLines[idx] = { line: newLine, price };
         draggingHLine.line = newLine;
       }
       e.preventDefault();
