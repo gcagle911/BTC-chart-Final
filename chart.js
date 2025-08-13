@@ -744,12 +744,172 @@ function setupMAToggles() {
   });
 }
 
+// Tools: Measurement and Horizontal Lines
+function setupTools() {
+  const btnMeasure = document.getElementById('btn-measure');
+  const btnAddHLine = document.getElementById('btn-add-hline');
+  const btnClearHLines = document.getElementById('btn-clear-hlines');
+  const container = document.getElementById('chart-container');
+
+  if (!btnMeasure || !btnAddHLine || !btnClearHLines || !container) return;
+
+  let measureActive = false;
+  let measureStart = null; // { time:number, price:number }
+  let measureSeries = null; // temporary line series
+  let measureLabel = null; // HTML overlay
+
+  let hLineAddActive = false;
+  const hLines = []; // store created priceLines
+
+  function ensureMeasureLabel() {
+    if (measureLabel) return measureLabel;
+    const div = document.createElement('div');
+    div.style.position = 'absolute';
+    div.style.right = '10px';
+    div.style.bottom = '10px';
+    div.style.padding = '6px 8px';
+    div.style.borderRadius = '6px';
+    div.style.background = 'rgba(0,0,0,0.6)';
+    div.style.color = '#fff';
+    div.style.fontSize = '11px';
+    div.style.pointerEvents = 'none';
+    div.style.zIndex = '130';
+    container.appendChild(div);
+    measureLabel = div;
+    return measureLabel;
+  }
+
+  function cleanupMeasure() {
+    measureActive = false;
+    measureStart = null;
+    btnMeasure.classList.remove('btn-active');
+    if (measureSeries) {
+      try { chart.removeSeries(measureSeries); } catch (_) {}
+      measureSeries = null;
+    }
+    if (measureLabel) {
+      measureLabel.remove();
+      measureLabel = null;
+    }
+  }
+
+  function formatDuration(seconds) {
+    const s = Math.abs(Math.floor(seconds));
+    const d = Math.floor(s / 86400);
+    const h = Math.floor((s % 86400) / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const ss = s % 60;
+    const parts = [];
+    if (d) parts.push(d + 'd');
+    if (h) parts.push(h + 'h');
+    if (m) parts.push(m + 'm');
+    if (ss || parts.length === 0) parts.push(ss + 's');
+    return parts.join(' ');
+  }
+
+  function updateMeasureLine(start, end) {
+    if (!measureSeries) {
+      measureSeries = chart.addLineSeries({
+        priceScaleId: 'right',
+        color: '#8aa3ff',
+        lineWidth: 1,
+        lastValueVisible: false,
+        priceLineVisible: false,
+      });
+    }
+    const tStart = typeof start.time === 'number' ? start.time : start.time;
+    const tEnd = typeof end.time === 'number' ? end.time : end.time;
+    measureSeries.setData([
+      { time: tStart, value: start.price },
+      { time: tEnd, value: end.price },
+    ]);
+
+    const dt = Math.abs(tEnd - tStart);
+    const dp = end.price - start.price;
+    const pct = start.price !== 0 ? (dp / start.price) * 100 : 0;
+
+    const label = ensureMeasureLabel();
+    label.textContent = `ΔP ${dp.toFixed(2)} (${pct.toFixed(2)}%)  ·  ΔT ${formatDuration(dt)}`;
+  }
+
+  btnMeasure.addEventListener('click', () => {
+    if (!measureActive) {
+      measureActive = true;
+      measureStart = null;
+      btnMeasure.classList.add('btn-active');
+      const label = ensureMeasureLabel();
+      label.textContent = 'Click start point…';
+    } else {
+      cleanupMeasure();
+    }
+  });
+
+  btnAddHLine.addEventListener('click', () => {
+    hLineAddActive = !hLineAddActive;
+    btnAddHLine.classList.toggle('btn-active', hLineAddActive);
+  });
+
+  btnClearHLines.addEventListener('click', () => {
+    while (hLines.length > 0) {
+      const line = hLines.pop();
+      try { priceSeries.removePriceLine(line); } catch (_) {}
+    }
+  });
+
+  chart.subscribeClick(param => {
+    if (!param || !param.point) return;
+
+    if (measureActive) {
+      const price = priceSeries.coordinateToPrice(param.point.y);
+      const time = param.time;
+      if (price == null || time == null) return;
+
+      if (!measureStart) {
+        measureStart = { time, price };
+        const label = ensureMeasureLabel();
+        label.textContent = 'Click end point…';
+      } else {
+        updateMeasureLine(measureStart, { time, price });
+        // Finish after brief display
+        setTimeout(() => cleanupMeasure(), 2000);
+      }
+      return;
+    }
+
+    if (hLineAddActive) {
+      const price = priceSeries.coordinateToPrice(param.point.y);
+      if (price == null) return;
+      const line = priceSeries.createPriceLine({
+        price,
+        color: '#888888',
+        lineStyle: LightweightCharts.LineStyle.Dotted,
+        axisLabelVisible: true,
+        title: formatCompactNumber(price),
+      });
+      hLines.push(line);
+      hLineAddActive = false;
+      btnAddHLine.classList.remove('btn-active');
+    }
+  });
+
+  chart.subscribeCrosshairMove(param => {
+    if (!measureActive || !measureStart) return;
+    if (!param || !param.time || !param.seriesPrices) return;
+    const p = param.seriesPrices.get(priceSeries);
+    if (p == null) return;
+    updateMeasureLine(measureStart, { time: param.time, price: p });
+  });
+}
+
 // Initialize everything
 manager.initializeChart().then(() => {
   console.log('🎯 Chart ready with bid spread data and dual y-axis!');
   
   // Wire MA toggles
   setupMAToggles();
+
+  // Wire Tools (measure, horizontal lines)
+  setupTools();
   
   // Start update cycle
   manager.startUpdateCycle();
