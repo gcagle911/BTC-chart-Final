@@ -405,19 +405,28 @@ class TimeframeManager {
       }
     }
 
-    // Build Panel One as a single straight line colored by LATEST comparison (no historical segmentation)
+    // Build Panel One as a straight horizontal line with historical colors using aggregated times
     const panelOneGreenData = [];
     const panelOneRedData = [];
-    const timesForPanel = (this.__aggTimeHistory && this.__aggTimeHistory.length)
+    const aggTimes = (this.__aggTimeHistory && this.__aggTimeHistory.length)
       ? this.__aggTimeHistory
       : priceData.map(p => p.time);
-    const ma200Latest = ma200Data.length ? ma200Data[ma200Data.length - 1].value : null;
-    const cumLatest = cumulativeData.length ? cumulativeData[cumulativeData.length - 1].value : null;
-    if (ma200Latest != null && cumLatest != null) {
-      const isGreen = (ma200Latest < cumLatest);
-      const target = isGreen ? panelOneGreenData : panelOneRedData;
-      for (let i = 0; i < timesForPanel.length; i++) {
-        target.push({ time: timesForPanel[i], value: 1 });
+    // Use pointers to map raw-minute MA200/cumulative values to each aggregated time
+    let iMa = 0, iCum = 0;
+    let lastMA = null, lastCum = null;
+    const maArr = ma200Data;
+    const cumArr = cumulativeData;
+    for (let k = 0; k < aggTimes.length; k++) {
+      const t = aggTimes[k];
+      while (iMa < maArr.length && maArr[iMa].time <= t) { lastMA = maArr[iMa].value; iMa++; }
+      while (iCum < cumArr.length && cumArr[iCum].time <= t) { lastCum = cumArr[iCum].value; iCum++; }
+      if (lastMA != null && lastCum != null) {
+        const isGreen = lastMA < lastCum;
+        panelOneGreenData.push({ time: t, value: isGreen ? 1 : null });
+        panelOneRedData.push({ time: t, value: isGreen ? null : 1 });
+      } else {
+        panelOneGreenData.push({ time: t, value: null });
+        panelOneRedData.push({ time: t, value: null });
       }
     }
 
