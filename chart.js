@@ -437,11 +437,17 @@ class TimeframeManager {
       if (isGreen) {
         panelOneGreenData.push({ time: tStart, value: 1 });
         panelOneGreenData.push({ time: tEnd, value: 1 });
-        panelOneGreenData.push({ time: tEnd + 1, value: null });
+        if (e + 1 < aggTimes.length) {
+          const nextTime = aggTimes[e + 1];
+          panelOneGreenData.push({ time: nextTime, value: null });
+        }
       } else {
         panelOneRedData.push({ time: tStart, value: 1 });
         panelOneRedData.push({ time: tEnd, value: 1 });
-        panelOneRedData.push({ time: tEnd + 1, value: null });
+        if (e + 1 < aggTimes.length) {
+          const nextTime = aggTimes[e + 1];
+          panelOneRedData.push({ time: nextTime, value: null });
+        }
       }
       s = e + 1;
     }
