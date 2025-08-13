@@ -576,6 +576,7 @@ window.toggleIndicatorPanel = function toggleIndicatorPanel() {
     indicator.style.display = 'none';
   }
   try { window.chart.timeScale().fitContent(); } catch (_) {}
+  console.log('Indicator panel visible:', indicator.style.display === 'block');
 };
 
 // FIXED: Enhanced zoom functions with MASSIVE zoom range like TradingView
@@ -1227,6 +1228,10 @@ manager.initializeChart().then(() => {
 
   // Wire Tools (measure, horizontal lines)
   setupTools();
+
+  // Ensure indicator is hidden at start
+  const ind = document.getElementById('indicator-chart');
+  if (ind) ind.style.display = 'none';
   
   // Start update cycle
   manager.startUpdateCycle();
