@@ -789,6 +789,15 @@ function setupTools() {
     return measureLabel;
   }
 
+  function getViewportPrices() {
+    const h = container.clientHeight || 0;
+    const top = priceSeries.coordinateToPrice(0);
+    const bottom = priceSeries.coordinateToPrice(h);
+    // Fallback to a small range if not available yet
+    if (top == null || bottom == null) return { top: 1, bottom: 0 };
+    return { top, bottom };
+  }
+
   function cleanupMeasure() {
     measureActive = false;
     measureStart = null;
@@ -923,7 +932,8 @@ function setupTools() {
         lastValueVisible: false,
         priceLineVisible: false,
       });
-      series.setData([{ time: t, value: 0 }, { time: t, value: 1e9 }]);
+      const { top, bottom } = getViewportPrices();
+      series.setData([{ time: t, value: top }, { time: t, value: bottom }]);
       vLines.push({ series, time: t });
       vLineAddActive = false;
       btnAddVLine.classList.remove('btn-active');
@@ -939,6 +949,28 @@ function setupTools() {
     const rect = container.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
+
+    // If add-V mode is active, create and immediately start dragging
+    if (vLineAddActive) {
+      const t = chart.timeScale().coordinateToTime(x);
+      if (t != null) {
+        const series = chart.addLineSeries({
+          priceScaleId: 'right',
+          color: '#AAAAAA',
+          lineWidth: 1,
+          lastValueVisible: false,
+          priceLineVisible: false,
+        });
+        const { top, bottom } = getViewportPrices();
+        series.setData([{ time: t, value: top }, { time: t, value: bottom }]);
+        vLines.push({ series, time: t });
+        draggingVLine = { series };
+        vLineAddActive = false;
+        btnAddVLine.classList.remove('btn-active');
+        e.preventDefault();
+        return;
+      }
+    }
 
     // H-line proximity
     if (hLines.length > 0) {
@@ -1000,7 +1032,8 @@ function setupTools() {
       const time = chart.timeScale().coordinateToTime(x);
       if (time != null) {
         const series = draggingVLine.series;
-        series.setData([{ time, value: 0 }, { time, value: 1e9 }]);
+        const { top, bottom } = getViewportPrices();
+        series.setData([{ time, value: top }, { time, value: bottom }]);
         const meta = vLines.find(v => v.series === series);
         if (meta) meta.time = time;
       }
@@ -1027,6 +1060,28 @@ function setupTools() {
     if (!pt) return;
     if (pt.target && pt.target.closest && pt.target.closest('#tools-button, #tools-panel')) return;
 
+    // If add-V mode is active, create and immediately start dragging
+    if (vLineAddActive) {
+      const t = chart.timeScale().coordinateToTime(pt.x);
+      if (t != null) {
+        const series = chart.addLineSeries({
+          priceScaleId: 'right',
+          color: '#AAAAAA',
+          lineWidth: 1,
+          lastValueVisible: false,
+          priceLineVisible: false,
+        });
+        const { top, bottom } = getViewportPrices();
+        series.setData([{ time: t, value: top }, { time: t, value: bottom }]);
+        vLines.push({ series, time: t });
+        draggingVLine = { series };
+        vLineAddActive = false;
+        btnAddVLine.classList.remove('btn-active');
+        e.preventDefault();
+        return;
+      }
+    }
+
     // H-line proximity
     if (hLines.length > 0) {
       let best = null;
@@ -1036,10 +1091,10 @@ function setupTools() {
         const py = chart.priceScale('right').priceToCoordinate ? chart.priceScale('right').priceToCoordinate(p) : null;
         if (py == null) continue;
         const diff = Math.abs(py - pt.y);
-        if (!best || diff < best.diff) best = { line, py, diff };
+        if (!best || diff < best.diff) best = { line: entry.line, py, diff };
       }
     
-      if (best && best.diff <= 12) {
+      if (best && best.diff <= 20) {
         draggingHLine = { line: best.line, offsetY: 0 };
         e.preventDefault();
         return;
@@ -1055,7 +1110,7 @@ function setupTools() {
         const diff = Math.abs(tx - pt.x);
         if (!bestV || diff < bestV.diff) bestV = { v, diff };
       }
-      if (bestV && bestV.diff <= 14) {
+      if (bestV && bestV.diff <= 20) {
         draggingVLine = { series: bestV.v.series };
         e.preventDefault();
         return;
@@ -1090,7 +1145,8 @@ function setupTools() {
       const time = chart.timeScale().coordinateToTime(pt.x);
       if (time != null) {
         const series = draggingVLine.series;
-        series.setData([{ time, value: 0 }, { time, value: 1e9 }]);
+        const { top, bottom } = getViewportPrices();
+        series.setData([{ time, value: top }, { time, value: bottom }]);
         const meta = vLines.find(v => v.series === series);
         if (meta) meta.time = time;
       }
