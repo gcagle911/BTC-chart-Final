@@ -131,7 +131,7 @@ const ma100 = chart.addLineSeries({
 
 const ma200 = chart.addLineSeries({
   priceScaleId: 'left', // LEFT y-axis for MAs
-  color: '#FFD700',
+  color: '#00FF00',
   lineWidth: 0.5,
   title: 'MA200',
   lastValueVisible: false,
@@ -406,11 +406,8 @@ class TimeframeManager {
       if (priceData.length > 0) {
         priceData.forEach(p => priceSeries.update(p));
       }
-      ma20Data.forEach(p => ma20.update(p));
-      ma50Data.forEach(p => ma50.update(p));
-      ma100Data.forEach(p => ma100.update(p));
+      // Only update MA200
       ma200Data.forEach(p => ma200.update(p));
-      cumulativeData.forEach(p => cumulativeMA.update(p));
     } else {
       // Set complete dataset
       priceSeries.setData(priceData);
@@ -434,7 +431,7 @@ class TimeframeManager {
       const recentData = await recentRes.json();
 
       // 2. Fetch historical data
-      const historicalRes = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/historical.json');
+      const historicalRes = await fetch('https://storage.googleapis.com/multi-crypto-l5/render_app/data/btc/historical.json');
       const historicalData = await historicalRes.json();
 
       // 3. Find earliest timestamp in recent.json
@@ -533,7 +530,7 @@ class TimeframeManager {
     
     try {
       console.log('🔄 Refreshing historical data...');
-      const res = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/historical.json');
+      const res = await fetch('https://storage.googleapis.com/multi-crypto-l5/render_app/data/btc/historical.json');
       const data = await res.json();
       this.rawData = data;
       this.processAndSetData(data);
