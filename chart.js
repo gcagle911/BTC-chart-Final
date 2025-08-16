@@ -603,6 +603,8 @@ class TimeframeManager {
       this.updateExternalMa200Series();
     } catch (e) {
       console.error('❌ Failed to load external GCS MA200:', e);
+      try { if (window.__mobileDebug) window.__mobileDebug('Failed to load external MA200: ' + (e && e.message ? e.message : String(e))); } catch (_) {}
+      probeCorsAndReport('https://storage.googleapis.com/multi-crypto-l5/render_app/data/btc/historical.json');
     }
   }
 
@@ -1390,6 +1392,51 @@ function setupMobileDebugOverlay() {
 
     // Expose helper for explicit updates
     window.__mobileDebug = showMessage;
+  } catch (_) {}
+}
+
+async function probeCorsAndReport(url) {
+  try {
+    const msgParts = [];
+    msgParts.push('Probing CORS for: ' + url);
+    msgParts.push('Navigator online: ' + (typeof navigator !== 'undefined' ? navigator.onLine : 'n/a'));
+
+    // Attempt standard CORS fetch
+    try {
+      const res = await fetch(url, { method: 'GET', mode: 'cors', cache: 'no-store' });
+      msgParts.push('CORS GET status: ' + res.status + ' type: ' + res.type);
+      if (res.ok) {
+        msgParts.push('CORS fetch OK. Not a CORS issue.');
+        if (window.__mobileDebug) window.__mobileDebug(msgParts.join('\n'));
+        console.log(msgParts.join('\n'));
+        return;
+      }
+    } catch (e) {
+      msgParts.push('CORS GET failed: ' + (e && e.message ? e.message : String(e)));
+    }
+
+    // Attempt no-cors fetch to test reachability
+    try {
+      const resOpaque = await fetch(url, { method: 'GET', mode: 'no-cors', cache: 'no-store' });
+      msgParts.push('no-cors GET type: ' + resOpaque.type);
+      if (resOpaque && resOpaque.type === 'opaque') {
+        msgParts.push('Network reachable, but browser blocked response due to missing Access-Control-Allow-Origin.');
+      }
+    } catch (e) {
+      msgParts.push('no-cors GET failed: ' + (e && e.message ? e.message : String(e)));
+    }
+
+    // Attempt HEAD (CORS)
+    try {
+      const headRes = await fetch(url, { method: 'HEAD', mode: 'cors', cache: 'no-store' });
+      msgParts.push('CORS HEAD status: ' + headRes.status + ' type: ' + headRes.type);
+    } catch (e) {
+      msgParts.push('CORS HEAD failed: ' + (e && e.message ? e.message : String(e)));
+    }
+
+    const msg = msgParts.join('\n');
+    if (window.__mobileDebug) window.__mobileDebug(msg);
+    console.log(msg);
   } catch (_) {}
 }
 
