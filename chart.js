@@ -154,8 +154,8 @@ const ma200External = chart.addLineSeries({
   color: '#00FF00',
   lineWidth: 2,
   title: 'MA200 (GCS)',
-  lastValueVisible: false,
-  priceLineVisible: false,
+  lastValueVisible: true,
+  priceLineVisible: true,
 });
 ma200External.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
 
