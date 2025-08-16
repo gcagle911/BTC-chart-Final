@@ -152,7 +152,7 @@ const cumulativeMA = chart.addLineSeries({
 const ma200External = chart.addLineSeries({
   priceScaleId: 'left',
   color: '#00FF00',
-  lineWidth: 1,
+  lineWidth: 2,
   title: 'MA200 (GCS)',
   lastValueVisible: false,
   priceLineVisible: false,
@@ -1304,6 +1304,10 @@ manager.initializeChart().then(() => {
         ma200Points.push({ time: points[i].time, value: sum / 200 });
       }
       ma200External.setData(ma200Points);
+      try {
+        chart.priceScale('left').applyOptions({ autoScale: true });
+        chart.timeScale().fitContent();
+      } catch (e) {}
       console.log(`✅ Loaded external GCS MA200: ${ma200Points.length} points`);
     } catch (e) {
       console.error('❌ Failed to load external GCS MA200:', e);
