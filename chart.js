@@ -1318,6 +1318,81 @@ function setupTools() {
   });
 }
 
+function setupMobileDebugOverlay() {
+  try {
+    if (typeof window === 'undefined') return;
+    const isMobile = window.innerWidth <= 768;
+    if (!isMobile) return;
+
+    let overlay = document.getElementById('mobile-debug-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'mobile-debug-overlay';
+      overlay.style.position = 'fixed';
+      overlay.style.top = '50%';
+      overlay.style.left = '50%';
+      overlay.style.transform = 'translate(-50%, -50%)';
+      overlay.style.zIndex = '2000';
+      overlay.style.maxWidth = '85vw';
+      overlay.style.maxHeight = '50vh';
+      overlay.style.overflow = 'auto';
+      overlay.style.background = 'rgba(0,0,0,0.85)';
+      overlay.style.border = '1px solid rgba(255,255,255,0.15)';
+      overlay.style.borderRadius = '10px';
+      overlay.style.padding = '12px';
+      overlay.style.color = '#fff';
+      overlay.style.fontSize = '12px';
+      overlay.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
+      overlay.style.display = 'none';
+
+      const closeBtn = document.createElement('button');
+      closeBtn.textContent = '✕';
+      closeBtn.style.position = 'absolute';
+      closeBtn.style.top = '6px';
+      closeBtn.style.right = '8px';
+      closeBtn.style.background = 'transparent';
+      closeBtn.style.color = '#fff';
+      closeBtn.style.border = 'none';
+      closeBtn.style.fontSize = '14px';
+      closeBtn.style.cursor = 'pointer';
+      closeBtn.addEventListener('click', () => overlay.style.display = 'none');
+
+      const content = document.createElement('div');
+      content.id = 'mobile-debug-content';
+      overlay.appendChild(closeBtn);
+      overlay.appendChild(content);
+      document.body.appendChild(overlay);
+    }
+
+    function showMessage(message) {
+      const el = document.getElementById('mobile-debug-content');
+      if (!el) return;
+      el.textContent = message;
+      overlay.style.display = 'block';
+    }
+
+    // Hook console to mirror important messages
+    const origError = console.error.bind(console);
+    console.error = function(...args) {
+      origError(...args);
+      try { showMessage(args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ')); } catch (_) {}
+    };
+    const origLog = console.log.bind(console);
+    console.log = function(...args) {
+      origLog(...args);
+      try {
+        const s = args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ');
+        if (s.includes('❌') || s.includes('External MA200') || s.includes('Failed to load')) {
+          showMessage(s);
+        }
+      } catch (_) {}
+    };
+
+    // Expose helper for explicit updates
+    window.__mobileDebug = showMessage;
+  } catch (_) {}
+}
+
 // Initialize everything
 manager.initializeChart().then(() => {
   console.log('🎯 Chart ready with bid spread data and dual y-axis!');
@@ -1337,5 +1412,8 @@ manager.initializeChart().then(() => {
   
   // Add mobile optimizations after chart is ready
   setTimeout(addMobileOptimizations, 1000);
+
+  // Initialize mobile debug overlay to mirror console issues on-screen
+  setTimeout(setupMobileDebugOverlay, 0);
 });
 
