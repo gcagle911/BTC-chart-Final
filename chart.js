@@ -616,14 +616,12 @@ class TimeframeManager {
       const t = Math.floor(new Date(row.time).getTime() / 1000);
       points.push({ time: t, value: parseFloat(spreadVal) });
     }
-    if (points.length < 200) return;
+    if (points.length < 200 || this.rawData.length === 0) return;
 
-    // Align to main dataset timestamps to ensure overlapping render
-    const allowedTimes = new Set();
-    for (let i = 0; i < this.rawData.length; i++) {
-      const t = Math.floor(new Date(this.rawData[i].time).getTime() / 1000);
-      allowedTimes.add(t);
-    }
+    // Compute a simple timezone/format offset to align timelines
+    const mainLastSec = this.toUnixTimestamp(this.rawData[this.rawData.length - 1].time);
+    const extLastSec = points[points.length - 1].time;
+    const deltaSecRounded = Math.round((mainLastSec - extLastSec) / 60) * 60; // align to minute
 
     const ma200Points = [];
     let rollingSum = 0;
@@ -631,9 +629,8 @@ class TimeframeManager {
       rollingSum += points[i].value;
       if (i >= 200) rollingSum -= points[i - 200].value;
       if (i >= 199) {
-        if (allowedTimes.has(points[i].time)) {
-          ma200Points.push({ time: points[i].time, value: rollingSum / 200 });
-        }
+        const alignedTime = points[i].time + deltaSecRounded;
+        ma200Points.push({ time: alignedTime, value: rollingSum / 200 });
       }
     }
     if (ma200Points.length === 0) return;
@@ -641,7 +638,7 @@ class TimeframeManager {
       ma200External.setData(ma200Points);
       chart.priceScale('left').applyOptions({ autoScale: true });
       chart.timeScale().fitContent();
-      console.log(`✅ External MA200 aligned points: ${ma200Points.length}`);
+      console.log(`✅ External MA200 points: ${ma200Points.length} (shift ${deltaSecRounded}s)`);
     } catch (_) {}
   }
 }
