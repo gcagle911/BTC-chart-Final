@@ -157,6 +157,7 @@ const ma200External = chart.addLineSeries({
   lastValueVisible: false,
   priceLineVisible: false,
 });
+ma200External.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
 
 // Apply compact price formats to minimize y-axis width
 priceSeries.applyOptions({
@@ -416,8 +417,12 @@ class TimeframeManager {
       if (priceData.length > 0) {
         priceData.forEach(p => priceSeries.update(p));
       }
-      // Only update MA200
+      ma20Data.forEach(p => ma20.update(p));
+      ma50Data.forEach(p => ma50.update(p));
+      ma100Data.forEach(p => ma100.update(p));
       ma200Data.forEach(p => ma200.update(p));
+      cumulativeData.forEach(p => cumulativeMA.update(p));
+      // External MA200 updates are handled by its own loader
     } else {
       // Set complete dataset
       priceSeries.setData(priceData);
@@ -426,6 +431,7 @@ class TimeframeManager {
       ma100.setData(ma100Data);
       ma200.setData(ma200Data);
       cumulativeMA.setData(cumulativeData);
+      // External MA200 data is set by its own loader
       
       // Fit content to show all data
       chart.timeScale().fitContent();
