@@ -831,6 +831,7 @@ function setupMAToggles() {
     { id: 'toggle-ma50', series: ma50 },
     { id: 'toggle-ma100', series: ma100 },
     { id: 'toggle-ma200', series: ma200 },
+    { id: 'toggle-ma200-external', series: ma200External },
   ];
 
   bindings.forEach(({ id, series }) => {
