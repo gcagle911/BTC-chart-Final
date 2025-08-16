@@ -131,7 +131,7 @@ const ma100 = chart.addLineSeries({
 
 const ma200 = chart.addLineSeries({
   priceScaleId: 'left', // LEFT y-axis for MAs
-  color: '#00FF00',
+  color: '#FFD700',
   lineWidth: 0.5,
   title: 'MA200',
   lastValueVisible: false,
@@ -144,6 +144,16 @@ const cumulativeMA = chart.addLineSeries({
   color: '#FFFFFF',
   lineWidth: 0.5,
   title: 'Cumulative Avg',
+  lastValueVisible: false,
+  priceLineVisible: false,
+});
+
+// Add: External MA200 from new GCS historical URL (bright green)
+const ma200External = chart.addLineSeries({
+  priceScaleId: 'left',
+  color: '#00FF00',
+  lineWidth: 1,
+  title: 'MA200 (GCS)',
   lastValueVisible: false,
   priceLineVisible: false,
 });
@@ -431,7 +441,7 @@ class TimeframeManager {
       const recentData = await recentRes.json();
 
       // 2. Fetch historical data
-      const historicalRes = await fetch('https://storage.googleapis.com/multi-crypto-l5/render_app/data/btc/historical.json');
+      const historicalRes = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/historical.json');
       const historicalData = await historicalRes.json();
 
       // 3. Find earliest timestamp in recent.json
@@ -530,7 +540,7 @@ class TimeframeManager {
     
     try {
       console.log('🔄 Refreshing historical data...');
-      const res = await fetch('https://storage.googleapis.com/multi-crypto-l5/render_app/data/btc/historical.json');
+      const res = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/historical.json');
       const data = await res.json();
       this.rawData = data;
       this.processAndSetData(data);
@@ -1266,5 +1276,32 @@ manager.initializeChart().then(() => {
   
   // Add mobile optimizations after chart is ready
   setTimeout(addMobileOptimizations, 1000);
+
+  // Add: Load external GCS historical dataset and plot 200SMA from spread data
+  (async () => {
+    try {
+      const res = await fetch('https://storage.googleapis.com/multi-crypto-l5/render_app/data/btc/historical.json');
+      const data = await res.json();
+      // Compute SMA-200 over spread_avg_L20_pct (fallback to spread_pct)
+      const points = [];
+      for (let i = 0; i < data.length; i++) {
+        const row = data[i];
+        const spreadVal = row.spread_avg_L20_pct ?? row.spread_pct;
+        if (spreadVal == null) continue;
+        const t = Math.floor(new Date(row.time).getTime() / 1000);
+        points.push({ time: t, value: parseFloat(spreadVal) });
+      }
+      const ma200Points = [];
+      for (let i = 199; i < points.length; i++) {
+        let sum = 0;
+        for (let j = i - 199; j <= i; j++) sum += points[j].value;
+        ma200Points.push({ time: points[i].time, value: sum / 200 });
+      }
+      ma200External.setData(ma200Points);
+      console.log(`✅ Loaded external GCS MA200: ${ma200Points.length} points`);
+    } catch (e) {
+      console.error('❌ Failed to load external GCS MA200:', e);
+    }
+  })();
 });
 
