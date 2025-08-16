@@ -180,6 +180,7 @@ class TimeframeManager {
     this.isFullDataLoaded = false;
     this.updateInterval = null;
     this.refreshInterval = null;
+    this.externalRawData = [];
     
     this.timeframes = {
       '1m': { seconds: 60, label: '1 Minute' },
@@ -476,6 +477,9 @@ class TimeframeManager {
       this.processAndSetData(deduped);
       this.isFullDataLoaded = true;
       console.log(`✅ Chart loaded with ${deduped.length} points`);
+
+      // Kick off external MA200 load (non-blocking)
+      this.loadExternalMa200FromGcs();
     } catch (err) {
       console.error('❌ Loading error:', err);
     }
@@ -551,6 +555,8 @@ class TimeframeManager {
       this.rawData = data;
       this.processAndSetData(data);
       console.log(`✅ Historical data refreshed: ${data.length} total points`);
+      // Also refresh external series opportunistically
+      this.loadExternalMa200FromGcs();
     } catch (err) {
       console.error('❌ Historical refresh failed:', err);
     }
@@ -586,6 +592,43 @@ class TimeframeManager {
 
     // Refresh complete historical data every hour
     this.refreshInterval = setInterval(() => this.refreshHistoricalData(), 3600000);
+
+  }
+
+  async loadExternalMa200FromGcs() {
+    try {
+      const res = await fetch('https://storage.googleapis.com/multi-crypto-l5/render_app/data/btc/historical.json');
+      const data = await res.json();
+      this.externalRawData = Array.isArray(data) ? data : [];
+      this.updateExternalMa200Series();
+    } catch (e) {
+      console.error('❌ Failed to load external GCS MA200:', e);
+    }
+  }
+
+  updateExternalMa200Series() {
+    if (!Array.isArray(this.externalRawData) || this.externalRawData.length === 0) return;
+    const points = [];
+    for (let i = 0; i < this.externalRawData.length; i++) {
+      const row = this.externalRawData[i];
+      const spreadVal = row.spread_avg_L20_pct ?? row.spread_pct;
+      if (spreadVal == null) continue;
+      const t = Math.floor(new Date(row.time).getTime() / 1000);
+      points.push({ time: t, value: parseFloat(spreadVal) });
+    }
+    if (points.length < 200) return;
+    const ma200Points = [];
+    let rollingSum = 0;
+    for (let i = 0; i < points.length; i++) {
+      rollingSum += points[i].value;
+      if (i >= 200) rollingSum -= points[i - 200].value;
+      if (i >= 199) {
+        ma200Points.push({ time: points[i].time, value: rollingSum / 200 });
+      }
+    }
+    try {
+      ma200External.setData(ma200Points);
+    } catch (_) {}
   }
 }
 
@@ -1282,36 +1325,5 @@ manager.initializeChart().then(() => {
   
   // Add mobile optimizations after chart is ready
   setTimeout(addMobileOptimizations, 1000);
-
-  // Add: Load external GCS historical dataset and plot 200SMA from spread data
-  (async () => {
-    try {
-      const res = await fetch('https://storage.googleapis.com/multi-crypto-l5/render_app/data/btc/historical.json');
-      const data = await res.json();
-      // Compute SMA-200 over spread_avg_L20_pct (fallback to spread_pct)
-      const points = [];
-      for (let i = 0; i < data.length; i++) {
-        const row = data[i];
-        const spreadVal = row.spread_avg_L20_pct ?? row.spread_pct;
-        if (spreadVal == null) continue;
-        const t = Math.floor(new Date(row.time).getTime() / 1000);
-        points.push({ time: t, value: parseFloat(spreadVal) });
-      }
-      const ma200Points = [];
-      for (let i = 199; i < points.length; i++) {
-        let sum = 0;
-        for (let j = i - 199; j <= i; j++) sum += points[j].value;
-        ma200Points.push({ time: points[i].time, value: sum / 200 });
-      }
-      ma200External.setData(ma200Points);
-      try {
-        chart.priceScale('left').applyOptions({ autoScale: true });
-        chart.timeScale().fitContent();
-      } catch (e) {}
-      console.log(`✅ Loaded external GCS MA200: ${ma200Points.length} points`);
-    } catch (e) {
-      console.error('❌ Failed to load external GCS MA200:', e);
-    }
-  })();
 });
 
