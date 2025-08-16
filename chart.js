@@ -617,19 +617,31 @@ class TimeframeManager {
       points.push({ time: t, value: parseFloat(spreadVal) });
     }
     if (points.length < 200) return;
+
+    // Align to main dataset timestamps to ensure overlapping render
+    const allowedTimes = new Set();
+    for (let i = 0; i < this.rawData.length; i++) {
+      const t = Math.floor(new Date(this.rawData[i].time).getTime() / 1000);
+      allowedTimes.add(t);
+    }
+
     const ma200Points = [];
     let rollingSum = 0;
     for (let i = 0; i < points.length; i++) {
       rollingSum += points[i].value;
       if (i >= 200) rollingSum -= points[i - 200].value;
       if (i >= 199) {
-        ma200Points.push({ time: points[i].time, value: rollingSum / 200 });
+        if (allowedTimes.has(points[i].time)) {
+          ma200Points.push({ time: points[i].time, value: rollingSum / 200 });
+        }
       }
     }
+    if (ma200Points.length === 0) return;
     try {
       ma200External.setData(ma200Points);
       chart.priceScale('left').applyOptions({ autoScale: true });
       chart.timeScale().fitContent();
+      console.log(`✅ External MA200 aligned points: ${ma200Points.length}`);
     } catch (_) {}
   }
 }
