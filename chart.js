@@ -628,6 +628,8 @@ class TimeframeManager {
     }
     try {
       ma200External.setData(ma200Points);
+      chart.priceScale('left').applyOptions({ autoScale: true });
+      chart.timeScale().fitContent();
     } catch (_) {}
   }
 }
