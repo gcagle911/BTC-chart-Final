@@ -441,7 +441,8 @@ class TimeframeManager {
     // Compute EMAs from the full minute-resolution dataset for continuity
     const rawForEMA = (this.rawData && this.rawData.length) ? this.rawData : rawMinuteData;
     function computeEMA(period) {
-      const alpha = 2 / (period + 1);
+      const smoothingMultiplier = 2.0; // >1.0 increases weight on recent data
+      const alpha = Math.min(0.99, (2 / (period + 1)) * smoothingMultiplier);
       let ema = null;
       let seedBuffer = [];
       const result = [];
