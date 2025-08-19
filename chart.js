@@ -236,6 +236,12 @@ function ensureVolumeChart() {
     });
     volumeSeries.applyOptions({ priceFormat: { type: 'custom', formatter: formatCompactNumber } });
 
+    // Hide placeholder once chart is ready
+    const placeholder = document.getElementById('indicator-placeholder');
+    if (placeholder && placeholder.parentElement) {
+      placeholder.style.display = 'none';
+    }
+
     // Sync timescale once chart exists
     if (!isVolumeSynced) {
       try {
@@ -789,6 +795,8 @@ window.toggleIndicatorPanel = function toggleIndicatorPanel() {
       main.style.flex = '0 0 auto';
     }
     indicator.style.display = 'block';
+    // Ensure volume chart exists when panel is shown
+    try { ensureVolumeChart(); } catch (_) {}
   } else {
     indicator.style.display = 'none';
     // Restore flex so main fills
