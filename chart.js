@@ -292,7 +292,8 @@ class TimeframeManager {
         open: item.price,
         high: item.price,
         low: item.price,
-        close: item.price
+        close: item.price,
+        volume: item.volume != null ? Number(item.volume) : null
       }));
     }
 
@@ -319,7 +320,8 @@ class TimeframeManager {
         ma_50: item.ma_50,
         ma_100: item.ma_100,
         ma_200: item.ma_200,
-        spread_avg_L20_pct: item.spread_avg_L20_pct
+        spread_avg_L20_pct: item.spread_avg_L20_pct,
+        volume: item.volume != null ? Number(item.volume) : null
       });
     });
 
@@ -341,6 +343,9 @@ class TimeframeManager {
         // CRITICAL: Use consistent bucket timestamp for all timeframes
         const bucketTimestamp = new Date(bucketTime * 1000).toISOString();
         
+        // Sum volume within the bucket (ignore nulls)
+        const summedVolume = bucket.dataPoints.reduce((acc, p) => acc + (p.volume != null ? Number(p.volume) : 0), 0);
+
         aggregated.push({
           time: bucketTimestamp,
           // Proper OHLC data for candlestick display
@@ -349,6 +354,7 @@ class TimeframeManager {
           low: lowPrice,
           close: closePoint.price,
           price: closePoint.price,
+          volume: summedVolume,
           
           // Bid Spread L20 MAs STAY THE SAME - using exact values from close time
           ma_50: closeMAs.ma_50,
@@ -410,10 +416,12 @@ class TimeframeManager {
         low: parseFloat(d.low),
         close: parseFloat(d.close)
       });
-      // Volume: no explicit field in data; use absolute price change as proxy
+      // Volume: use provided volume when available, fallback to proxy
       const prev = i > 0 ? aggregatedPriceData[i - 1] : null;
-      const rawVol = prev ? Math.abs(parseFloat(d.close) - parseFloat(prev.close)) : 0;
-      volumeData.push({ time: sharedTime, value: rawVol, color: d.close >= (prev ? prev.close : d.close) ? 'rgba(38,166,154,0.6)' : 'rgba(239,83,80,0.6)' });
+      const providedVol = d.volume != null ? Number(d.volume) : null;
+      const proxyVol = prev ? Math.abs(parseFloat(d.close) - parseFloat(prev.close)) : 0;
+      const volValue = providedVol != null ? providedVol : proxyVol;
+      volumeData.push({ time: sharedTime, value: volValue, color: d.close >= (prev ? prev.close : d.close) ? 'rgba(38,166,154,0.6)' : 'rgba(239,83,80,0.6)' });
       
       if (t > this.lastTimestamp) this.lastTimestamp = t;
     }
