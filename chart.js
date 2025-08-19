@@ -209,24 +209,53 @@ ema50.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } }
 ema100.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
 ema200.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
 
-// Bottom volume chart (indicator panel)
-const volumeChart = LightweightCharts.createChart(document.getElementById('indicator-chart'), {
-  layout: { background: { color: '#0f131a' }, textColor: '#D1D4DC', fontSize: 7 },
-  grid: { vertLines: { color: '#2B2B43' }, horzLines: { color: '#2B2B43' } },
-  rightPriceScale: { visible: true, borderVisible: false },
-  leftPriceScale: { visible: false },
-  timeScale: { timeVisible: true, secondsVisible: false, borderVisible: false },
-  crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-  handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: true },
-  handleScale: { mouseWheel: true, pinch: true },
-});
+// Bottom volume chart (indicator panel) - lazy init so failures won't break main
+let volumeChart = null;
+let volumeSeries = null;
+let isVolumeSynced = false;
 
-const volumeSeries = volumeChart.addHistogramSeries({
-  priceLineVisible: false,
-  lastValueVisible: false,
-  color: 'rgba(150, 150, 150, 0.4)'
-});
-volumeSeries.applyOptions({ priceFormat: { type: 'custom', formatter: formatCompactNumber } });
+function ensureVolumeChart() {
+  if (volumeChart && volumeSeries) return true;
+  const indicatorEl = document.getElementById('indicator-chart');
+  if (!indicatorEl) return false;
+  try {
+    volumeChart = LightweightCharts.createChart(indicatorEl, {
+      layout: { background: { color: '#0f131a' }, textColor: '#D1D4DC', fontSize: 7 },
+      grid: { vertLines: { color: '#2B2B43' }, horzLines: { color: '#2B2B43' } },
+      rightPriceScale: { visible: true, borderVisible: false },
+      leftPriceScale: { visible: false },
+      timeScale: { timeVisible: true, secondsVisible: false, borderVisible: false },
+      crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+      handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: true },
+      handleScale: { mouseWheel: true, pinch: true },
+    });
+    volumeSeries = volumeChart.addHistogramSeries({
+      priceLineVisible: false,
+      lastValueVisible: false,
+      color: 'rgba(150, 150, 150, 0.4)'
+    });
+    volumeSeries.applyOptions({ priceFormat: { type: 'custom', formatter: formatCompactNumber } });
+
+    // Sync timescale once chart exists
+    if (!isVolumeSynced) {
+      try {
+        const mainTs = window.chart.timeScale();
+        const volTs = volumeChart.timeScale();
+        mainTs.subscribeVisibleTimeRangeChange((range) => {
+          if (!range) return;
+          try { volTs.setVisibleRange(range); } catch (_) {}
+        });
+        isVolumeSynced = true;
+      } catch (_) {}
+    }
+    return true;
+  } catch (e) {
+    console.error('Volume chart init failed:', e);
+    volumeChart = null;
+    volumeSeries = null;
+    return false;
+  }
+}
 
 // Real-time L20 spread line (MA1 - raw data) - REMOVED
 
@@ -551,7 +580,7 @@ class TimeframeManager {
       ema50Data.forEach(p => ema50.update(p));
       ema100Data.forEach(p => ema100.update(p));
       ema200Data.forEach(p => ema200.update(p));
-      if (volumeData.length > 0) {
+      if (volumeData.length > 0 && ensureVolumeChart()) {
         volumeData.forEach(p => volumeSeries.update(p));
       }
     } else {
@@ -568,7 +597,9 @@ class TimeframeManager {
       ema100.setData(ema100Data);
       ema200.setData(ema200Data);
       // Volume histogram
-      volumeSeries.setData(volumeData);
+      if (ensureVolumeChart()) {
+        volumeSeries.setData(volumeData);
+      }
       
       // Fit content to show all data
       chart.timeScale().fitContent();
