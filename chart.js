@@ -209,6 +209,25 @@ ema50.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } }
 ema100.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
 ema200.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
 
+// Bottom volume chart (indicator panel)
+const volumeChart = LightweightCharts.createChart(document.getElementById('indicator-chart'), {
+  layout: { background: { color: '#0f131a' }, textColor: '#D1D4DC', fontSize: 7 },
+  grid: { vertLines: { color: '#2B2B43' }, horzLines: { color: '#2B2B43' } },
+  rightPriceScale: { visible: true, borderVisible: false },
+  leftPriceScale: { visible: false },
+  timeScale: { timeVisible: true, secondsVisible: false, borderVisible: false },
+  crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+  handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: true },
+  handleScale: { mouseWheel: true, pinch: true },
+});
+
+const volumeSeries = volumeChart.addHistogramSeries({
+  priceLineVisible: false,
+  lastValueVisible: false,
+  color: 'rgba(150, 150, 150, 0.4)'
+});
+volumeSeries.applyOptions({ priceFormat: { type: 'custom', formatter: formatCompactNumber } });
+
 // Real-time L20 spread line (MA1 - raw data) - REMOVED
 
 // Restored proper timeframe manager
@@ -337,6 +356,7 @@ class TimeframeManager {
     const ma200Data = [];
     const ma400Data = [];
     const cumulativeData = [];
+    const volumeData = [];
     const ema20Data = [];
     const ema50Data = [];
     const ema100Data = [];
@@ -361,6 +381,10 @@ class TimeframeManager {
         low: parseFloat(d.low),
         close: parseFloat(d.close)
       });
+      // Volume: no explicit field in data; use absolute price change as proxy
+      const prev = i > 0 ? aggregatedPriceData[i - 1] : null;
+      const rawVol = prev ? Math.abs(parseFloat(d.close) - parseFloat(prev.close)) : 0;
+      volumeData.push({ time: sharedTime, value: rawVol, color: d.close >= (prev ? prev.close : d.close) ? 'rgba(38,166,154,0.6)' : 'rgba(239,83,80,0.6)' });
       
       if (t > this.lastTimestamp) this.lastTimestamp = t;
     }
@@ -527,6 +551,9 @@ class TimeframeManager {
       ema50Data.forEach(p => ema50.update(p));
       ema100Data.forEach(p => ema100.update(p));
       ema200Data.forEach(p => ema200.update(p));
+      if (volumeData.length > 0) {
+        volumeData.forEach(p => volumeSeries.update(p));
+      }
     } else {
       // Set complete dataset
       priceSeries.setData(priceData);
@@ -540,12 +567,14 @@ class TimeframeManager {
       ema50.setData(ema50Data);
       ema100.setData(ema100Data);
       ema200.setData(ema200Data);
+      // Volume histogram
+      volumeSeries.setData(volumeData);
       
       // Fit content to show all data
       chart.timeScale().fitContent();
     }
 
-    console.log(`✅ Chart updated with ${priceData.length} candles, SMAs and EMAs`);
+    console.log(`✅ Chart updated with ${priceData.length} candles, SMAs, EMAs, and volume`);
   }
 
   async initializeChart() {
@@ -730,6 +759,16 @@ window.toggleIndicatorPanel = function toggleIndicatorPanel() {
   try { window.chart.timeScale().fitContent(); } catch (_) {}
   console.log('Indicator panel visible:', indicator.style.display === 'block');
 };
+
+// Keep bottom panel time synchronized with main chart
+try {
+  const mainTs = window.chart.timeScale();
+  const volTs = volumeChart.timeScale();
+  mainTs.subscribeVisibleTimeRangeChange((range) => {
+    if (!range) return;
+    try { volTs.setVisibleRange(range); } catch (_) {}
+  });
+} catch (_) {}
 
 // FIXED: Enhanced zoom functions with MASSIVE zoom range like TradingView
 function zoomIn() {
