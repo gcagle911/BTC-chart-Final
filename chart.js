@@ -1578,11 +1578,9 @@ manager.initializeChart().then(() => {
   // Wire Tools (measure, horizontal lines)
   setupTools();
 
-  // Ensure indicator is visible at start so volume panel shows
+  // Start with indicator hidden; user can toggle it on
   const ind = document.getElementById('indicator-chart');
-  if (ind) ind.style.display = 'block';
-  // initialize volume chart immediately
-  try { ensureVolumeChart(); } catch (_) {}
+  if (ind) ind.style.display = 'none';
   
   // Start update cycle
   manager.startUpdateCycle();
