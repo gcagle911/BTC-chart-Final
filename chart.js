@@ -147,6 +147,25 @@ const ma400 = chart.addLineSeries({
   priceLineVisible: false,
 });
 
+// Timeframe-adjusted Spread MAs (computed from aggregated timeframe data)
+const tfMa50 = chart.addLineSeries({
+  priceScaleId: 'left',
+  color: '#00FF7F',
+  lineWidth: 1,
+  title: 'TF MA50',
+  lastValueVisible: false,
+  priceLineVisible: false,
+});
+
+const tfMa200 = chart.addLineSeries({
+  priceScaleId: 'left',
+  color: '#FF8C00',
+  lineWidth: 1,
+  title: 'TF MA200',
+  lastValueVisible: false,
+  priceLineVisible: false,
+});
+
 // Exponential Moving Averages (EMA) on LEFT y-axis
 const ema20 = chart.addLineSeries({
   priceScaleId: 'left',
@@ -204,6 +223,8 @@ ma100.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } }
 ma200.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
 cumulativeMA.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
 ma400.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
+tfMa50.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
+tfMa200.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
 ema20.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
 ema50.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
 ema100.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
@@ -402,6 +423,8 @@ class TimeframeManager {
     const ema50Data = [];
     const ema100Data = [];
     const ema200Data = [];
+    const tfMa50Data = [];
+    const tfMa200Data = [];
 
     // Process aggregated price data for price series
     for (let i = 0; i < aggregatedPriceData.length; i++) {
@@ -422,6 +445,33 @@ class TimeframeManager {
         low: parseFloat(d.low),
         close: parseFloat(d.close)
       });
+    // Timeframe-based spread MAs (use aggregated spread_avg_L20_pct on current timeframe)
+    for (let i = 0; i < aggregatedPriceData.length; i++) {
+      const d = aggregatedPriceData[i];
+      const t = this.toUnixTimestamp(d.time);
+      if (isUpdate && t <= this.lastTimestamp) continue;
+      const sharedTime = t;
+      const spread = d.spread_avg_L20_pct;
+      if (spread == null) continue;
+      // 50
+      if (i >= 49) {
+        const window50 = aggregatedPriceData.slice(i - 49, i + 1);
+        const valid = window50.filter(x => x.spread_avg_L20_pct != null);
+        if (valid.length === 50) {
+          const sum = valid.reduce((a, x) => a + Number(x.spread_avg_L20_pct), 0);
+          tfMa50Data.push({ time: sharedTime, value: sum / 50 });
+        }
+      }
+      // 200
+      if (i >= 199) {
+        const window200 = aggregatedPriceData.slice(i - 199, i + 1);
+        const valid = window200.filter(x => x.spread_avg_L20_pct != null);
+        if (valid.length === 200) {
+          const sum = valid.reduce((a, x) => a + Number(x.spread_avg_L20_pct), 0);
+          tfMa200Data.push({ time: sharedTime, value: sum / 200 });
+        }
+      }
+    }
       // Volume: use provided volume when available, fallback to proxy
       const prev = i > 0 ? aggregatedPriceData[i - 1] : null;
       const providedVol = d.volume != null ? Number(d.volume) : null;
@@ -590,6 +640,8 @@ class TimeframeManager {
       ma200Data.forEach(p => ma200.update(p));
       ma400Data.forEach(p => ma400.update(p));
       cumulativeData.forEach(p => cumulativeMA.update(p));
+      tfMa50Data.forEach(p => tfMa50.update(p));
+      tfMa200Data.forEach(p => tfMa200.update(p));
       ema20Data.forEach(p => ema20.update(p));
       ema50Data.forEach(p => ema50.update(p));
       ema100Data.forEach(p => ema100.update(p));
@@ -606,6 +658,8 @@ class TimeframeManager {
       ma200.setData(ma200Data);
       ma400.setData(ma400Data);
       cumulativeMA.setData(cumulativeData);
+      tfMa50.setData(tfMa50Data);
+      tfMa200.setData(tfMa200Data);
       ema20.setData(ema20Data);
       ema50.setData(ema50Data);
       ema100.setData(ema100Data);
@@ -983,6 +1037,8 @@ function setupMAToggles() {
     { id: 'toggle-ma100', series: ma100 },
     { id: 'toggle-ma200', series: ma200 },
     { id: 'toggle-ma400', series: ma400 },
+    { id: 'toggle-tfma50', series: tfMa50 },
+    { id: 'toggle-tfma200', series: tfMa200 },
     { id: 'toggle-ema20', series: ema20 },
     { id: 'toggle-ema50', series: ema50 },
     { id: 'toggle-ema100', series: ema100 },
