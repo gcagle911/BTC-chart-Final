@@ -296,7 +296,7 @@ class TimeframeManager {
     this.updateInterval = null;
     this.refreshInterval = null;
     // Daily data configuration (adjust DAILY_BASE_URL to your bucket path)
-    this.DAILY_BASE_URL = 'https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/daily';
+    this.DAILY_BASE_URL = 'https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/archive/1min';
     this.DAILY_LOOKBACK_DAYS = 14; // number of days of 1m data to backfill before recent
     
     this.timeframes = {
