@@ -445,33 +445,6 @@ class TimeframeManager {
         low: parseFloat(d.low),
         close: parseFloat(d.close)
       });
-    // Timeframe-based spread MAs (use aggregated spread_avg_L20_pct on current timeframe)
-    for (let i = 0; i < aggregatedPriceData.length; i++) {
-      const d = aggregatedPriceData[i];
-      const t = this.toUnixTimestamp(d.time);
-      if (isUpdate && t <= this.lastTimestamp) continue;
-      const sharedTime = t;
-      const spread = d.spread_avg_L20_pct;
-      if (spread == null) continue;
-      // 50
-      if (i >= 49) {
-        const window50 = aggregatedPriceData.slice(i - 49, i + 1);
-        const valid = window50.filter(x => x.spread_avg_L20_pct != null);
-        if (valid.length === 50) {
-          const sum = valid.reduce((a, x) => a + Number(x.spread_avg_L20_pct), 0);
-          tfMa50Data.push({ time: sharedTime, value: sum / 50 });
-        }
-      }
-      // 200
-      if (i >= 199) {
-        const window200 = aggregatedPriceData.slice(i - 199, i + 1);
-        const valid = window200.filter(x => x.spread_avg_L20_pct != null);
-        if (valid.length === 200) {
-          const sum = valid.reduce((a, x) => a + Number(x.spread_avg_L20_pct), 0);
-          tfMa200Data.push({ time: sharedTime, value: sum / 200 });
-        }
-      }
-    }
       // Volume: use provided volume when available, fallback to proxy
       const prev = i > 0 ? aggregatedPriceData[i - 1] : null;
       const providedVol = d.volume != null ? Number(d.volume) : null;
@@ -480,6 +453,31 @@ class TimeframeManager {
       volumeData.push({ time: sharedTime, value: volValue, color: d.close >= (prev ? prev.close : d.close) ? 'rgba(38,166,154,0.6)' : 'rgba(239,83,80,0.6)' });
       
       if (t > this.lastTimestamp) this.lastTimestamp = t;
+    }
+
+    // Timeframe-based spread MAs (use aggregated spread_avg_L20_pct on current timeframe)
+    for (let j = 0; j < aggregatedPriceData.length; j++) {
+      const dAgg = aggregatedPriceData[j];
+      const tAgg = this.toUnixTimestamp(dAgg.time);
+      if (isUpdate && tAgg <= this.lastTimestamp) continue;
+      const sharedTimeAgg = tAgg;
+      if (dAgg.spread_avg_L20_pct == null) continue;
+      if (j >= 49) {
+        const window50 = aggregatedPriceData.slice(j - 49, j + 1);
+        const valid = window50.filter(x => x.spread_avg_L20_pct != null);
+        if (valid.length === 50) {
+          const sum = valid.reduce((a, x) => a + Number(x.spread_avg_L20_pct), 0);
+          tfMa50Data.push({ time: sharedTimeAgg, value: sum / 50 });
+        }
+      }
+      if (j >= 199) {
+        const window200 = aggregatedPriceData.slice(j - 199, j + 1);
+        const valid = window200.filter(x => x.spread_avg_L20_pct != null);
+        if (valid.length === 200) {
+          const sum = valid.reduce((a, x) => a + Number(x.spread_avg_L20_pct), 0);
+          tfMa200Data.push({ time: sharedTimeAgg, value: sum / 200 });
+        }
+      }
     }
 
     // Process RAW MINUTE DATA for MAs - NEVER CHANGES regardless of timeframe
