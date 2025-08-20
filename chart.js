@@ -12,7 +12,7 @@ function formatCompactNumber(value) {
 }
 
 function formatPercent(value) {
-  return (value * 100).toFixed(1) + '%';
+  return (value * 100).toFixed(2) + '%';
 }
 
 // Chart configuration with LEFT/RIGHT dual y-axis and massive zoom range
@@ -29,8 +29,8 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
   rightPriceScale: { 
     visible: true,
     scaleMargins: {
-      top: 0.02,
-      bottom: 0.02,
+      top: 0.03,
+      bottom: 0.03,
     },
     borderVisible: false,
     autoScale: true,
@@ -41,15 +41,15 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
   leftPriceScale: { 
     visible: true, // LEFT y-axis for Bid Spread MAs
     scaleMargins: {
-      top: 0.02,
-      bottom: 0.02,
+      top: 0.04,
+      bottom: 0.04,
     },
     borderVisible: false,
     autoScale: true,
-    entireTextOnly: true,
+    entireTextOnly: false,
     ticksVisible: true,
     mode: LightweightCharts.PriceScaleMode.Normal,
-    alignLabels: true,
+    alignLabels: false,
   },
   timeScale: { 
     timeVisible: true, 
@@ -230,10 +230,7 @@ ema50.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } }
 ema100.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
 ema200.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
 
-// Shrink left/right scale width via tight formatting
-chart.applyOptions({
-  localization: { priceFormatter: formatCompactNumber },
-});
+// Keep default localization to avoid forcing compact on left percent scale
 
 // Bottom volume chart (indicator panel) - lazy init so failures won't break main
 let volumeChart = null;
