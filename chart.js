@@ -12,7 +12,7 @@ function formatCompactNumber(value) {
 }
 
 function formatPercent(value) {
-  return (value * 100).toFixed(2) + '%';
+  return (value * 100).toFixed(1) + '%';
 }
 
 // Chart configuration with LEFT/RIGHT dual y-axis and massive zoom range
@@ -20,7 +20,7 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
   layout: {
     background: { color: '#131722' },
     textColor: '#D1D4DC',
-    fontSize: 7,
+    fontSize: 6,
   },
   grid: {
     vertLines: { color: '#2B2B43' },
@@ -29,8 +29,8 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
   rightPriceScale: { 
     visible: true,
     scaleMargins: {
-      top: 0.05,
-      bottom: 0.05,
+      top: 0.02,
+      bottom: 0.02,
     },
     borderVisible: false,
     autoScale: true,
@@ -41,15 +41,15 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
   leftPriceScale: { 
     visible: true, // LEFT y-axis for Bid Spread MAs
     scaleMargins: {
-      top: 0.05,
-      bottom: 0.05,
+      top: 0.02,
+      bottom: 0.02,
     },
     borderVisible: false,
     autoScale: true,
-    entireTextOnly: false,
+    entireTextOnly: true,
     ticksVisible: true,
     mode: LightweightCharts.PriceScaleMode.Normal,
-    alignLabels: false,
+    alignLabels: true,
   },
   timeScale: { 
     timeVisible: true, 
@@ -57,7 +57,7 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
     borderVisible: false,
     rightOffset: 15,
     barSpacing: 12, // Increased spacing for thicker candlestick bodies
-    minBarSpacing: 0.1, // MUCH tighter for extreme zoom out
+    minBarSpacing: 0.01, // allow much further zoom-out
     fixLeftEdge: false,
     fixRightEdge: false,
   },
@@ -229,6 +229,11 @@ ema20.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } }
 ema50.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
 ema100.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
 ema200.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
+
+// Shrink left/right scale width via tight formatting
+chart.applyOptions({
+  localization: { priceFormatter: formatCompactNumber },
+});
 
 // Bottom volume chart (indicator panel) - lazy init so failures won't break main
 let volumeChart = null;
