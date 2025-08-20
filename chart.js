@@ -295,6 +295,9 @@ class TimeframeManager {
     this.isFullDataLoaded = false;
     this.updateInterval = null;
     this.refreshInterval = null;
+    // Daily data configuration (adjust DAILY_BASE_URL to your bucket path)
+    this.DAILY_BASE_URL = 'https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/daily';
+    this.DAILY_LOOKBACK_DAYS = 14; // number of days of 1m data to backfill before recent
     
     this.timeframes = {
       '1m': { seconds: 60, label: '1 Minute' },
@@ -304,6 +307,18 @@ class TimeframeManager {
       '4h': { seconds: 14400, label: '4 Hours' },
       '1d': { seconds: 86400, label: '1 Day' }
     };
+  }
+
+  toDateStringUTC(date) {
+    const y = date.getUTCFullYear();
+    const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(date.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  getDailyUrlFor(dateStr) {
+    // Expects dateStr like 'YYYY-MM-DD'
+    return `${this.DAILY_BASE_URL}/${dateStr}.json`;
   }
 
   toUnixTimestamp(dateStr) {
@@ -680,18 +695,27 @@ class TimeframeManager {
       const recentRes = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/recent.json');
       const recentData = await recentRes.json();
 
-      // 2. Fetch historical data
-      const historicalRes = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/historical.json');
-      const historicalData = await historicalRes.json();
-
-      // 3. Find earliest timestamp in recent.json
+      // 2. Compute daily backfill range (strictly earlier than first recent)
       const recentStart = new Date(recentData[0].time).getTime();
+      const startDate = new Date(recentStart);
+      // Build list of prior UTC dates for lookback
+      const dates = [];
+      for (let i = 1; i <= this.DAILY_LOOKBACK_DAYS; i++) {
+        const d = new Date(startDate.getTime() - i * 86400000);
+        dates.push(this.toDateStringUTC(d));
+      }
 
-      // 4. Filter historical data to only include data older than recentStart
-      const filteredHistorical = historicalData.filter(d => new Date(d.time).getTime() < recentStart);
+      // 3. Fetch daily files in parallel; skip missing days gracefully
+      const dailyPromises = dates.map(ds => (
+        fetch(this.getDailyUrlFor(ds))
+          .then(r => r.ok ? r.json() : [])
+          .catch(() => [])
+      ));
+      const dailyBatches = await Promise.all(dailyPromises);
+      const dailyData = dailyBatches.flat().filter(d => new Date(d.time).getTime() < recentStart);
 
-      // 5. Combine and sort
-      const combined = [...filteredHistorical, ...recentData]
+      // 4. Combine and sort
+      const combined = [...dailyData, ...recentData]
         .sort((a, b) => new Date(a.time) - new Date(b.time));
 
       // 6. Deduplicate by timestamp
@@ -705,7 +729,7 @@ class TimeframeManager {
         }
       }
 
-      // 7. Set and process
+      // 5. Set and process
       this.rawData = deduped;
       this.processAndSetData(deduped);
       this.isFullDataLoaded = true;
@@ -779,12 +803,38 @@ class TimeframeManager {
     if (!this.isFullDataLoaded) return;
     
     try {
-      console.log('🔄 Refreshing historical data...');
-      const res = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/historical.json');
-      const data = await res.json();
-      this.rawData = data;
-      this.processAndSetData(data);
-      console.log(`✅ Historical data refreshed: ${data.length} total points`);
+      console.log('🔄 Refreshing daily backfill...');
+      // Rebuild from daily + new recent
+      const recentRes = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/recent.json');
+      const recentData = await recentRes.json();
+      const recentStart = new Date(recentData[0].time).getTime();
+      const startDate = new Date(recentStart);
+      const dates = [];
+      for (let i = 1; i <= this.DAILY_LOOKBACK_DAYS; i++) {
+        const d = new Date(startDate.getTime() - i * 86400000);
+        dates.push(this.toDateStringUTC(d));
+      }
+      const dailyPromises = dates.map(ds => (
+        fetch(this.getDailyUrlFor(ds))
+          .then(r => r.ok ? r.json() : [])
+          .catch(() => [])
+      ));
+      const dailyBatches = await Promise.all(dailyPromises);
+      const dailyData = dailyBatches.flat().filter(d => new Date(d.time).getTime() < recentStart);
+      const combined = [...dailyData, ...recentData]
+        .sort((a, b) => new Date(a.time) - new Date(b.time));
+      const deduped = [];
+      const seen = new Set();
+      for (const d of combined) {
+        const t = d.time;
+        if (!seen.has(t)) {
+          deduped.push(d);
+          seen.add(t);
+        }
+      }
+      this.rawData = deduped;
+      this.processAndSetData(deduped);
+      console.log(`✅ Daily backfill refreshed: ${deduped.length} total points`);
     } catch (err) {
       console.error('❌ Historical refresh failed:', err);
     }
