@@ -116,3 +116,7 @@ Or checkout the exact snapshot by tag:
 git fetch --all --tags
 git checkout -b feature/your-new-work baseline-multicrypto-v1
 ```
+
+## Deployment note
+
+- Triggered a no-op update on branch `feature/multi-crypto-toggle` to kick off a fresh Vercel deploy.
