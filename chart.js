@@ -15,6 +15,12 @@ function formatPercent(value) {
   return (value * 100).toFixed(2) + '%';
 }
 
+// Rounding helper for stable math
+function roundTo(value, decimals = 8) {
+  const factor = Math.pow(10, decimals);
+  return Math.round((Number(value) + Number.EPSILON) * factor) / factor;
+}
+
 // Chart configuration with LEFT/RIGHT dual y-axis and massive zoom range
 window.chart = LightweightCharts.createChart(document.getElementById('main-chart'), {
   layout: {
@@ -309,6 +315,11 @@ class TimeframeManager {
       '4h': { seconds: 14400, label: '4 Hours' },
       '1d': { seconds: 86400, label: '1 Day' }
     };
+
+    // Stabilization state
+    this.lastArchivedTimestamp = 0; // seconds
+    this.emaState = { 20: null, 50: null, 100: null, 200: null };
+    this.emaSeedBuffer = { 20: [], 50: [], 100: [], 200: [] };
   }
 
   toDateStringUTC(date) {
@@ -443,13 +454,17 @@ class TimeframeManager {
     const tfMa50Data = [];
     const tfMa200Data = [];
 
+    // Use previous timestamp snapshot for update filtering
+    const prevLastTimestamp = this.lastTimestamp;
+    let maxProcessedTimestamp = prevLastTimestamp;
+
     // Process aggregated price data for price series
     for (let i = 0; i < aggregatedPriceData.length; i++) {
       const d = aggregatedPriceData[i];
       const t = this.toUnixTimestamp(d.time);
       
-      // For updates, only add new data
-      if (isUpdate && t <= this.lastTimestamp) continue;
+      // For updates, only add new data (based on previous timestamp)
+      if (isUpdate && t <= prevLastTimestamp) continue;
       
       // CRITICAL: Create all data points with IDENTICAL timestamps
       const sharedTime = t;
@@ -469,14 +484,14 @@ class TimeframeManager {
       const volValue = providedVol != null ? providedVol : proxyVol;
       volumeData.push({ time: sharedTime, value: volValue, color: d.close >= (prev ? prev.close : d.close) ? 'rgba(38,166,154,0.6)' : 'rgba(239,83,80,0.6)' });
       
-      if (t > this.lastTimestamp) this.lastTimestamp = t;
+      if (t > maxProcessedTimestamp) maxProcessedTimestamp = t;
     }
 
     // Timeframe-based spread MAs (use aggregated spread_avg_L20_pct on current timeframe)
     for (let j = 0; j < aggregatedPriceData.length; j++) {
       const dAgg = aggregatedPriceData[j];
       const tAgg = this.toUnixTimestamp(dAgg.time);
-      if (isUpdate && tAgg <= this.lastTimestamp) continue;
+      if (isUpdate && tAgg <= prevLastTimestamp) continue;
       const sharedTimeAgg = tAgg;
       if (dAgg.spread_avg_L20_pct == null) continue;
       if (j >= 49) {
@@ -484,7 +499,7 @@ class TimeframeManager {
         const valid = window50.filter(x => x.spread_avg_L20_pct != null);
         if (valid.length === 50) {
           const sum = valid.reduce((a, x) => a + Number(x.spread_avg_L20_pct), 0);
-          tfMa50Data.push({ time: sharedTimeAgg, value: sum / 50 });
+          tfMa50Data.push({ time: sharedTimeAgg, value: roundTo(sum / 50) });
         }
       }
       if (j >= 199) {
@@ -492,7 +507,7 @@ class TimeframeManager {
         const valid = window200.filter(x => x.spread_avg_L20_pct != null);
         if (valid.length === 200) {
           const sum = valid.reduce((a, x) => a + Number(x.spread_avg_L20_pct), 0);
-          tfMa200Data.push({ time: sharedTimeAgg, value: sum / 200 });
+          tfMa200Data.push({ time: sharedTimeAgg, value: roundTo(sum / 200) });
         }
       }
     }
@@ -505,8 +520,8 @@ class TimeframeManager {
       const d = rawMinuteData[i];
       const t = this.toUnixTimestamp(d.time);
       
-      // For updates, only add new data
-      if (isUpdate && t <= this.lastTimestamp) continue;
+      // For updates, only add new data based on previous timestamp snapshot
+      if (isUpdate && t <= prevLastTimestamp) continue;
       
       const sharedTime = t;
       
@@ -518,8 +533,8 @@ class TimeframeManager {
         const validSpreadData = recent20.filter(item => item.spread_avg_L20_pct !== null && item.spread_avg_L20_pct !== undefined);
         
         if (validSpreadData.length === 20) {
-          const sum = validSpreadData.reduce((acc, item) => acc + parseFloat(item.spread_avg_L20_pct), 0);
-          const ma20Value = sum / 20;
+          const sum = validSpreadData.reduce((acc, item) => acc + Number(item.spread_avg_L20_pct), 0);
+          const ma20Value = roundTo(sum / 20);
           
           ma20Data.push({
             time: sharedTime,
@@ -529,111 +544,115 @@ class TimeframeManager {
       }
       
       if (useClientMAs) {
-        // Client-side MA50/100/200 based on spread_avg_L20_pct
+        // Client-side MA50/100/200/400 based on spread_avg_L20_pct
         // Ignore points where spread is missing
         if (i >= 49) {
           const recent50 = rawMinuteData.slice(i - 49, i + 1);
           const valid = recent50.filter(item => item.spread_avg_L20_pct !== null && item.spread_avg_L20_pct !== undefined);
           if (valid.length === 50) {
-            const sum = valid.reduce((acc, item) => acc + parseFloat(item.spread_avg_L20_pct), 0);
-            ma50Data.push({ time: sharedTime, value: sum / 50 });
+            const sum = valid.reduce((acc, item) => acc + Number(item.spread_avg_L20_pct), 0);
+            ma50Data.push({ time: sharedTime, value: roundTo(sum / 50) });
           }
         }
         if (i >= 99) {
           const recent100 = rawMinuteData.slice(i - 99, i + 1);
           const valid = recent100.filter(item => item.spread_avg_L20_pct !== null && item.spread_avg_L20_pct !== undefined);
           if (valid.length === 100) {
-            const sum = valid.reduce((acc, item) => acc + parseFloat(item.spread_avg_L20_pct), 0);
-            ma100Data.push({ time: sharedTime, value: sum / 100 });
+            const sum = valid.reduce((acc, item) => acc + Number(item.spread_avg_L20_pct), 0);
+            ma100Data.push({ time: sharedTime, value: roundTo(sum / 100) });
           }
         }
         if (i >= 199) {
           const recent200 = rawMinuteData.slice(i - 199, i + 1);
           const valid = recent200.filter(item => item.spread_avg_L20_pct !== null && item.spread_avg_L20_pct !== undefined);
           if (valid.length === 200) {
-            const sum = valid.reduce((acc, item) => acc + parseFloat(item.spread_avg_L20_pct), 0);
-            ma200Data.push({ time: sharedTime, value: sum / 200 });
+            const sum = valid.reduce((acc, item) => acc + Number(item.spread_avg_L20_pct), 0);
+            ma200Data.push({ time: sharedTime, value: roundTo(sum / 200) });
           }
         }
         if (i >= 399) {
           const recent400 = rawMinuteData.slice(i - 399, i + 1);
           const valid = recent400.filter(item => item.spread_avg_L20_pct !== null && item.spread_avg_L20_pct !== undefined);
           if (valid.length === 400) {
-            const sum = valid.reduce((acc, item) => acc + parseFloat(item.spread_avg_L20_pct), 0);
-            ma400Data.push({ time: sharedTime, value: sum / 400 });
+            const sum = valid.reduce((acc, item) => acc + Number(item.spread_avg_L20_pct), 0);
+            ma400Data.push({ time: sharedTime, value: roundTo(sum / 400) });
           }
         }
       } else {
         // Fallback to server-provided MAs
         if (d.ma_50 !== null && d.ma_50 !== undefined) {
-          ma50Data.push({ time: sharedTime, value: parseFloat(d.ma_50) });
+          ma50Data.push({ time: sharedTime, value: roundTo(parseFloat(d.ma_50)) });
         }
         if (d.ma_100 !== null && d.ma_100 !== undefined) {
-          ma100Data.push({ time: sharedTime, value: parseFloat(d.ma_100) });
+          ma100Data.push({ time: sharedTime, value: roundTo(parseFloat(d.ma_100)) });
         }
         if (d.ma_200 !== null && d.ma_200 !== undefined) {
-          ma200Data.push({ time: sharedTime, value: parseFloat(d.ma_200) });
+          ma200Data.push({ time: sharedTime, value: roundTo(parseFloat(d.ma_200)) });
         }
       }
       
       // Calculate cumulative average of L20 spread data
       if (d.spread_avg_L20_pct !== null && d.spread_avg_L20_pct !== undefined) {
-        cumulativeSum += parseFloat(d.spread_avg_L20_pct);
+        cumulativeSum += Number(d.spread_avg_L20_pct);
         cumulativeCount++;
-        const cumulativeAverage = cumulativeSum / cumulativeCount;
+        const cumulativeAverage = roundTo(cumulativeSum / cumulativeCount);
         
         cumulativeData.push({
           time: sharedTime,
           value: cumulativeAverage
         });
       }
+
+      if (t > maxProcessedTimestamp) maxProcessedTimestamp = t;
     }
 
-    // Compute EMAs from the full minute-resolution dataset for continuity
+    // Compute EMAs from the minute-resolution dataset with incremental stability
     const rawForEMA = (this.rawData && this.rawData.length) ? this.rawData : rawMinuteData;
-    function computeEMA(period) {
+    const pointsForEMA = isUpdate ? rawMinuteData : rawForEMA;
+
+    const computeEMAForPoints = (period, points, incremental) => {
       const alpha = 2 / (period + 1);
-      let ema = null;
-      let seedBuffer = [];
+      let ema = incremental ? this.emaState[period] : null;
+      let seedBuffer = incremental ? (this.emaSeedBuffer[period] || []) : [];
       const result = [];
-      for (let i = 0; i < rawForEMA.length; i++) {
-        const d = rawForEMA[i];
+      for (let i = 0; i < points.length; i++) {
+        const d = points[i];
         const v = d.spread_avg_L20_pct;
         if (v === null || v === undefined) continue;
-        const val = parseFloat(v);
+        const val = roundTo(parseFloat(v));
         const t = Math.floor(new Date(d.time).getTime() / 1000);
+        if (isUpdate && t <= prevLastTimestamp) continue;
         if (ema == null) {
           seedBuffer.push(val);
           if (seedBuffer.length === period) {
-            const seed = seedBuffer.reduce((a, b) => a + b, 0) / period;
+            const seed = roundTo(seedBuffer.reduce((a, b) => a + b, 0) / period);
             ema = seed;
             result.push({ time: t, value: ema });
           }
         } else {
-          ema = alpha * val + (1 - alpha) * ema;
+          ema = roundTo(alpha * val + (1 - alpha) * ema);
           result.push({ time: t, value: ema });
         }
+        if (t > maxProcessedTimestamp) maxProcessedTimestamp = t;
       }
+      this.emaSeedBuffer[period] = seedBuffer;
+      this.emaState[period] = ema;
       return result;
-    }
+    };
 
-    const ema20All = computeEMA(20);
-    const ema50All = computeEMA(50);
-    const ema100All = computeEMA(100);
-    const ema200All = computeEMA(200);
-
-    // Filter to only new points during incremental updates
     if (isUpdate) {
-      const cutoff = this.lastTimestamp;
-      ema20All.forEach(p => { if (p.time > cutoff) ema20Data.push(p); });
-      ema50All.forEach(p => { if (p.time > cutoff) ema50Data.push(p); });
-      ema100All.forEach(p => { if (p.time > cutoff) ema100Data.push(p); });
-      ema200All.forEach(p => { if (p.time > cutoff) ema200Data.push(p); });
+      ema20Data.push(...computeEMAForPoints(20, pointsForEMA, true));
+      ema50Data.push(...computeEMAForPoints(50, pointsForEMA, true));
+      ema100Data.push(...computeEMAForPoints(100, pointsForEMA, true));
+      ema200Data.push(...computeEMAForPoints(200, pointsForEMA, true));
     } else {
-      ema20Data.push(...ema20All);
-      ema50Data.push(...ema50All);
-      ema100Data.push(...ema100All);
-      ema200Data.push(...ema200All);
+      // Full recompute: reset state for deterministic results
+      this.emaState = { 20: null, 50: null, 100: null, 200: null };
+      this.emaSeedBuffer = { 20: [], 50: [], 100: [], 200: [] };
+      ema20Data.push(...computeEMAForPoints(20, pointsForEMA, false));
+      ema50Data.push(...computeEMAForPoints(50, pointsForEMA, false));
+      ema100Data.push(...computeEMAForPoints(100, pointsForEMA, false));
+      ema200Data.push(...computeEMAForPoints(200, pointsForEMA, false));
     }
 
     // Log timestamp alignment for debugging
@@ -688,6 +707,9 @@ class TimeframeManager {
       chart.timeScale().fitContent();
     }
 
+    // Update last processed timestamp once after all computations
+    this.lastTimestamp = Math.max(this.lastTimestamp, maxProcessedTimestamp);
+
     console.log(`✅ Chart updated with ${priceData.length} candles, SMAs, EMAs, and volume`);
   }
 
@@ -714,13 +736,17 @@ class TimeframeManager {
           .catch(() => [])
       ));
       const dailyBatches = await Promise.all(dailyPromises);
-      const dailyData = dailyBatches.flat().filter(d => new Date(d.time).getTime() < recentStart);
+      const dailyDataAll = dailyBatches.flat();
+      // Only include strictly earlier than first recent (no overlap)
+      const dailyData = dailyDataAll.filter(d => new Date(d.time).getTime() < recentStart);
 
-      // 4. Combine and sort
-      const combined = [...dailyData, ...recentData]
+      // 4. Determine deterministic boundary: archives win up to their latest minute
+      const lastArchivedMs = dailyData.length ? Math.max(...dailyData.map(d => new Date(d.time).getTime())) : 0;
+      const recentFiltered = recentData.filter(d => new Date(d.time).getTime() > lastArchivedMs);
+      const combined = [...dailyData, ...recentFiltered]
         .sort((a, b) => new Date(a.time) - new Date(b.time));
 
-      // 6. Deduplicate by timestamp
+      // 5. Deduplicate by timestamp (safety); archives come first so they win
       const deduped = [];
       const seen = new Set();
       for (const d of combined) {
@@ -731,11 +757,13 @@ class TimeframeManager {
         }
       }
 
-      // 5. Set and process
+      // 6. Set and process
       this.rawData = deduped;
+      this.lastArchivedTimestamp = Math.floor(lastArchivedMs / 1000);
+      this.lastTimestamp = 0; // reset for fresh processing
       this.processAndSetData(deduped);
       this.isFullDataLoaded = true;
-      console.log(`✅ Chart loaded with ${deduped.length} points`);
+      console.log(`✅ Chart loaded with ${deduped.length} points (archive boundary @ ${this.lastArchivedTimestamp})`);
     } catch (err) {
       console.error('❌ Loading error:', err);
     }
@@ -779,7 +807,7 @@ class TimeframeManager {
       const res = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/recent.json');
       const data = await res.json();
 
-      // Find new data points
+      // Find new data points (strictly after last processed timestamp)
       const newData = data.filter(d => {
         const t = this.toUnixTimestamp(d.time);
         return t > this.lastTimestamp;
@@ -822,8 +850,19 @@ class TimeframeManager {
           .catch(() => [])
       ));
       const dailyBatches = await Promise.all(dailyPromises);
-      const dailyData = dailyBatches.flat().filter(d => new Date(d.time).getTime() < recentStart);
-      const combined = [...dailyData, ...recentData]
+      const dailyDataAll = dailyBatches.flat();
+      const dailyData = dailyDataAll.filter(d => new Date(d.time).getTime() < recentStart);
+
+      const newLastArchivedMs = dailyData.length ? Math.max(...dailyData.map(d => new Date(d.time).getTime())) : 0;
+      const newLastArchivedTs = Math.floor(newLastArchivedMs / 1000);
+
+      if (newLastArchivedTs <= this.lastArchivedTimestamp) {
+        console.log('ℹ️ No new archived data; keeping existing history intact.');
+        return;
+      }
+
+      const recentFiltered = recentData.filter(d => new Date(d.time).getTime() > newLastArchivedMs);
+      const combined = [...dailyData, ...recentFiltered]
         .sort((a, b) => new Date(a.time) - new Date(b.time));
       const deduped = [];
       const seen = new Set();
@@ -835,8 +874,10 @@ class TimeframeManager {
         }
       }
       this.rawData = deduped;
+      this.lastArchivedTimestamp = newLastArchivedTs;
+      this.lastTimestamp = 0; // reset so a full reprocess occurs deterministically
       this.processAndSetData(deduped);
-      console.log(`✅ Daily backfill refreshed: ${deduped.length} total points`);
+      console.log(`✅ Daily backfill refreshed: ${deduped.length} total points (archive boundary advanced to ${this.lastArchivedTimestamp})`);
     } catch (err) {
       console.error('❌ Historical refresh failed:', err);
     }
