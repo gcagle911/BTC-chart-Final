@@ -176,6 +176,14 @@ function createMASeries(color, title) {
   });
 }
 
+function formatLayerShort(layerKey) {
+  if (layerKey === 'spread_L5_pct_avg') return 'L5';
+  if (layerKey === 'spread_L20_pct_avg') return 'L20';
+  if (layerKey === 'spread_L50_pct_avg') return 'L50';
+  if (layerKey === 'spread_L100_pct_avg') return 'L100';
+  return 'L?';
+}
+
 // Restored proper timeframe manager
 class TimeframeManager {
   constructor() {
@@ -382,7 +390,7 @@ class TimeframeManager {
             200: '#FFD700',
           };
           const color = colorMap[duration] || '#AAAAAA';
-          const title = `${layerKey.replace('spread_', 'L').replace('_pct_avg','')} MA${duration}`;
+          const title = `${formatLayerShort(layerKey)}MA${duration}`;
           this.maSeriesByKey.set(key, createMASeries(color, title));
           // start hidden; visibility applied after computation
           this.maSeriesByKey.get(key).applyOptions({ visible: false });
