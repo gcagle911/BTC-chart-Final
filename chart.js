@@ -77,7 +77,7 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
   layout: {
     background: { color: '#131722' },
     textColor: '#D1D4DC',
-    fontSize: 10,
+    fontSize: 9,
   },
   grid: {
     vertLines: { color: '#2B2B43' },
@@ -91,7 +91,7 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
     },
     borderVisible: false,
     autoScale: true,
-    entireTextOnly: false,
+    entireTextOnly: true,
     ticksVisible: true,
     mode: LightweightCharts.PriceScaleMode.Normal,
   },
@@ -157,53 +157,23 @@ const priceSeries = chart.addCandlestickSeries({
   wickDownColor: '#ef5350',
   wickVisible: true,
 });
-
-// Bid Spread Moving Averages on LEFT y-axis (separate scale!)
-const ma20 = chart.addLineSeries({
-  priceScaleId: 'left', // LEFT y-axis for MAs
-  color: '#00BFFF',
-  lineWidth: 0.5,
-  title: 'MA20',
-  lastValueVisible: false,
-  priceLineVisible: false,
+chart.priceScale('right').applyOptions({
+  minTick: 0.001,
+  scaleMargins: { top: 0.02, bottom: 0.02 },
 });
 
-const ma50 = chart.addLineSeries({
-  priceScaleId: 'left', // LEFT y-axis for MAs
-  color: '#FF6B6B',
-  lineWidth: 0.5,
-  title: 'MA50',
-  lastValueVisible: false,
-  priceLineVisible: false,
-});
-
-const ma100 = chart.addLineSeries({
-  priceScaleId: 'left', // LEFT y-axis for MAs
-  color: '#4ADF86',
-  lineWidth: 0.5,
-  title: 'MA100',
-  lastValueVisible: false,
-  priceLineVisible: false,
-});
-
-const ma200 = chart.addLineSeries({
-  priceScaleId: 'left', // LEFT y-axis for MAs
-  color: '#FFD700',
-  lineWidth: 0.5,
-  title: 'MA200',
-  lastValueVisible: false,
-  priceLineVisible: false,
-});
-
-// Cumulative Average of ALL L20 spread data
-const cumulativeMA = chart.addLineSeries({
-  priceScaleId: 'left', // LEFT y-axis for MAs
-  color: '#FFFFFF',
-  lineWidth: 0.5,
-  title: 'Cumulative Avg',
-  lastValueVisible: false,
-  priceLineVisible: false,
-});
+// Dynamic MA series registry for multi-layer/duration combinations
+function createMASeries(color, title) {
+  return chart.addLineSeries({
+    priceScaleId: 'left',
+    color,
+    lineWidth: 0.7,
+    title,
+    lastValueVisible: false,
+    priceLineVisible: false,
+    crosshairMarkerVisible: false,
+  });
+}
 
 // Restored proper timeframe manager
 class TimeframeManager {
@@ -215,8 +185,10 @@ class TimeframeManager {
     this.isFullDataLoaded = false;
     this.updateInterval = null;
     this.refreshInterval = null;
-    this.selectedSpreadLayer = 'spread_L20_pct_avg';
-    this.maVisibility = { ma20: true, ma50: true, ma100: true, ma200: true };
+    // Multi-layer MA controls
+    this.selectedLayers = new Set(); // e.g., 'spread_L5_pct_avg', 'spread_L20_pct_avg'
+    this.selectedDurations = new Set(); // e.g., 20, 50, 100, 200
+    this.maSeriesByKey = new Map(); // key: `${layerKey}|${duration}` -> lineSeries
     
     this.timeframes = {
       '1m': { seconds: 60, label: '1 Minute' },
@@ -364,47 +336,68 @@ class TimeframeManager {
     let cumulativeSum = 0;
     let cumulativeCount = 0;
 
-    // We'll compute SMA for 20, 50, 100, 200 using the selected spread layer
-    const spreadSeries = [];
-    const layerKey = this.selectedSpreadLayer;
+    // Compute SMAs for each selected layer/duration combination
+    const activeLayers = Array.from(this.selectedLayers);
+    const activeDurations = Array.from(this.selectedDurations).sort((a,b) => a-b);
+    const layerToSeries = new Map(); // layer -> [{time,value}...]
+    for (const layerKey of activeLayers) {
+      layerToSeries.set(layerKey, []);
+    }
+
     for (let i = 0; i < rawMinuteData.length; i++) {
       const row = rawMinuteData[i];
-      const spreadVal = row[layerKey] ?? null;
       const t = this.toUnixTimestamp(row.time);
       if (isUpdate && t <= this.lastTimestamp) continue;
-      if (spreadVal === null || spreadVal === undefined) continue;
 
-      spreadSeries.push({ time: t, value: parseFloat(spreadVal) });
+      // Populate per-layer series
+      for (const layerKey of activeLayers) {
+        const spreadVal = row[layerKey] ?? null;
+        if (spreadVal === null || spreadVal === undefined) continue;
+        layerToSeries.get(layerKey).push({ time: t, value: parseFloat(spreadVal) });
+      }
+    }
 
-      // Cumulative average of spread
-      cumulativeSum += parseFloat(spreadVal);
-      cumulativeCount++;
-      const cumulativeAverage = cumulativeSum / cumulativeCount;
-      cumulativeData.push({ time: t, value: cumulativeAverage });
+    // Build per-layer cumulative average just for info (not shown by default)
+    for (const layerKey of activeLayers) {
+      let sum = 0; let count = 0;
+      for (const p of layerToSeries.get(layerKey)) {
+        sum += p.value; count++;
+        const avg = sum / count;
+        cumulativeData.push({ time: p.time, value: avg });
+      }
+    }
 
-      // SMA20
-      if (spreadSeries.length >= 20) {
-        const w = spreadSeries.slice(spreadSeries.length - 20);
-        const avg = w.reduce((acc, p) => acc + p.value, 0) / 20;
-        ma20Data.push({ time: t, value: avg });
-      }
-      // SMA50
-      if (spreadSeries.length >= 50) {
-        const w = spreadSeries.slice(spreadSeries.length - 50);
-        const avg = w.reduce((acc, p) => acc + p.value, 0) / 50;
-        ma50Data.push({ time: t, value: avg });
-      }
-      // SMA100
-      if (spreadSeries.length >= 100) {
-        const w = spreadSeries.slice(spreadSeries.length - 100);
-        const avg = w.reduce((acc, p) => acc + p.value, 0) / 100;
-        ma100Data.push({ time: t, value: avg });
-      }
-      // SMA200
-      if (spreadSeries.length >= 200) {
-        const w = spreadSeries.slice(spreadSeries.length - 200);
-        const avg = w.reduce((acc, p) => acc + p.value, 0) / 200;
-        ma200Data.push({ time: t, value: avg });
+    // Calculate and set/update MA series for each combination
+    for (const layerKey of activeLayers) {
+      const series = layerToSeries.get(layerKey);
+      if (!series || series.length === 0) continue;
+      for (const duration of activeDurations) {
+        const key = `${layerKey}|${duration}`;
+        if (!this.maSeriesByKey.has(key)) {
+          const colorMap = {
+            20: '#00BFFF',
+            50: '#FF6B6B',
+            100: '#4ADF86',
+            200: '#FFD700',
+          };
+          const color = colorMap[duration] || '#AAAAAA';
+          const title = `${layerKey.replace('spread_', 'L').replace('_pct_avg','')} MA${duration}`;
+          this.maSeriesByKey.set(key, createMASeries(color, title));
+          // start hidden until explicitly toggled
+          this.maSeriesByKey.get(key).applyOptions({ visible: false });
+        }
+        const lineSeries = this.maSeriesByKey.get(key);
+        const maPoints = [];
+        for (let i = duration - 1; i < series.length; i++) {
+          const windowSlice = series.slice(i - duration + 1, i + 1);
+          const avg = windowSlice.reduce((acc, p) => acc + p.value, 0) / duration;
+          maPoints.push({ time: series[i].time, value: avg });
+        }
+        if (isUpdate) {
+          maPoints.forEach(p => lineSeries.update(p));
+        } else {
+          lineSeries.setData(maPoints);
+        }
       }
     }
 
@@ -421,10 +414,6 @@ class TimeframeManager {
     } else {
       // Set complete dataset
       priceSeries.setData(priceData);
-      ma20.setData(ma20Data);
-      ma50.setData(ma50Data);
-      ma100.setData(ma100Data);
-      ma200.setData(ma200Data);
       cumulativeMA.setData(cumulativeData);
       
       // Fit content to show all data
@@ -433,15 +422,7 @@ class TimeframeManager {
       this.applyAutoScale();
     }
 
-    // Apply visibility of MA lines according to user settings
-    try {
-      ma20.applyOptions({ visible: !!this.maVisibility.ma20 });
-      ma50.applyOptions({ visible: !!this.maVisibility.ma50 });
-      ma100.applyOptions({ visible: !!this.maVisibility.ma100 });
-      ma200.applyOptions({ visible: !!this.maVisibility.ma200 });
-    } catch (e) {
-      console.warn('Failed to apply MA visibility options:', e);
-    }
+    // No default MA visibility; all off initially
   }
 
   async initializeChart() {
@@ -592,25 +573,31 @@ class TimeframeManager {
     console.log(`✅ Switched to ${this.timeframes[timeframe].label}`);
   }
 
-  setMASource(layerKey) {
+  toggleLayer(layerKey, enabled) {
     const allowed = new Set(['spread_L5_pct_avg', 'spread_L20_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg']);
     if (!allowed.has(layerKey)) return;
-    if (this.selectedSpreadLayer === layerKey) return;
-    this.selectedSpreadLayer = layerKey;
-    // Recompute indicators using existing raw data
+    if (enabled) this.selectedLayers.add(layerKey); else this.selectedLayers.delete(layerKey);
     this.lastTimestamp = 0;
     this.processAndSetData(this.rawData);
     this.applyAutoScale();
   }
 
-  setMALineVisibility(key, isVisible) {
-    if (!(key in this.maVisibility)) return;
-    this.maVisibility[key] = !!isVisible;
-    try {
-      const map = { ma20, ma50, ma100, ma200 };
-      map[key].applyOptions({ visible: !!isVisible });
-    } catch (e) {
-      console.warn('Failed to toggle MA visibility:', e);
+  toggleDuration(duration, enabled) {
+    const allowed = new Set([20, 50, 100, 200]);
+    if (!allowed.has(duration)) return;
+    if (enabled) this.selectedDurations.add(duration); else this.selectedDurations.delete(duration);
+    // Toggle visibility of all series that match this duration according to enabled
+    for (const [key, series] of this.maSeriesByKey.entries()) {
+      const parts = key.split('|');
+      const dur = parseInt(parts[1], 10);
+      if (dur === duration) {
+        series.applyOptions({ visible: !!enabled });
+      }
+    }
+    // When turning on a duration, ensure data exists
+    if (enabled) {
+      this.lastTimestamp = 0;
+      this.processAndSetData(this.rawData);
     }
   }
 
@@ -675,11 +662,15 @@ function setSymbol(symbol) {
 }
 
 function setMASource(layerKey) {
-  manager.setMASource(layerKey);
+  // Deprecated in favor of multi-layer toggles
+  manager.toggleLayer(layerKey, true);
 }
 
 function toggleMA(key, isVisible) {
-  manager.setMALineVisibility(key, isVisible);
+  // Deprecated in favor of per-duration toggle
+  const map = { ma20: 20, ma50: 50, ma100: 100, ma200: 200 };
+  const dur = map[key];
+  if (dur) manager.toggleDuration(dur, isVisible);
 }
 
 // Simple dropdown toggling and outside-click close for MA tools
@@ -696,6 +687,14 @@ document.addEventListener('click', function(e) {
     dd.classList.remove('open');
   }
 });
+
+function toggleMALayer(layerKey, enabled) {
+  manager.toggleLayer(layerKey, enabled);
+}
+
+function toggleMADuration(duration, enabled) {
+  manager.toggleDuration(duration, enabled);
+}
 
 // Enhanced zoom functions with MASSIVE zoom range like TradingView
 function zoomIn() {
