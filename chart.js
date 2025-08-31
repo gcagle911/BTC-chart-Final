@@ -627,11 +627,10 @@ class TimeframeManager {
 
     // Clear existing chart data
     priceSeries.setData([]);
-    // Remove dynamic MA series
+    // Remove dynamic MA series completely to avoid extra scales/panes
     try {
       for (const [key, series] of this.maSeriesByKey.entries()) {
-        series.setData([]);
-        // lightweight-charts has no explicit remove; let GC clean up
+        chart.removeSeries(series);
       }
       this.maSeriesByKey.clear();
     } catch (e) { console.warn('Failed clearing MA series', e); }
