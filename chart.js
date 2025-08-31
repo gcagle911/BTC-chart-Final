@@ -2,26 +2,47 @@
 // Main price chart with Bid Spread MAs on LEFT y-axis and enhanced zoom capability
 
 // Data sources mapped by symbol
+const API_BASE = 'https://multiexchangereal-j4ep.onrender.com/files/json';
+const API_EXCHANGE = 'coinbase';
+
+function formatDateYYYYMMDD(date) {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getDateStringWithOffset(offsetDays = 0) {
+  const now = new Date();
+  const utcDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  utcDate.setUTCDate(utcDate.getUTCDate() + offsetDays);
+  return formatDateYYYYMMDD(utcDate);
+}
+
+function buildDailyUrl(asset, day) {
+  return `${API_BASE}?exchange=${API_EXCHANGE}&asset=${asset}&day=${day}`;
+}
+
 const DATA_SOURCES = {
   BTC: {
-    recent: 'https://ada-logger.onrender.com/BTC/recent.json',
-    historical: 'https://ada-logger.onrender.com/BTC/historical.json'
+    recent: () => buildDailyUrl('BTC', getDateStringWithOffset(0)),
+    historical: () => buildDailyUrl('BTC', getDateStringWithOffset(-1))
   },
   ETH: {
-    recent: 'https://ada-logger.onrender.com/ETH/recent.json',
-    historical: 'https://ada-logger.onrender.com/ETH/historical.json'
+    recent: () => buildDailyUrl('ETH', getDateStringWithOffset(0)),
+    historical: () => buildDailyUrl('ETH', getDateStringWithOffset(-1))
   },
   ADA: {
-    recent: 'https://ada-logger.onrender.com/ADA/recent.json',
-    historical: 'https://ada-logger.onrender.com/ADA/historical.json'
+    recent: () => buildDailyUrl('ADA', getDateStringWithOffset(0)),
+    historical: () => buildDailyUrl('ADA', getDateStringWithOffset(-1))
   },
   XRP: {
-    recent: 'https://ada-logger.onrender.com/XRP/recent.json',
-    historical: 'https://ada-logger.onrender.com/XRP/historical.json'
+    recent: () => buildDailyUrl('XRP', getDateStringWithOffset(0)),
+    historical: () => buildDailyUrl('XRP', getDateStringWithOffset(-1))
   },
   SOL: {
-    recent: 'https://ada-logger.onrender.com/SOL/recent.json',
-    historical: 'https://ada-logger.onrender.com/SOL/historical.json'
+    recent: () => buildDailyUrl('SOL', getDateStringWithOffset(0)),
+    historical: () => buildDailyUrl('SOL', getDateStringWithOffset(-1))
   }
 };
 
@@ -388,11 +409,13 @@ class TimeframeManager {
       this.showStatus(`Loading ${this.currentSymbol} data...`);
 
       // 1. Fetch recent data
-      const recentRes = await fetch(this.dataSource.recent);
+      const recentUrl = typeof this.dataSource.recent === 'function' ? this.dataSource.recent() : this.dataSource.recent;
+      const recentRes = await fetch(recentUrl);
       const recentData = await recentRes.json();
 
       // 2. Fetch historical data
-      const historicalRes = await fetch(this.dataSource.historical);
+      const historicalUrl = typeof this.dataSource.historical === 'function' ? this.dataSource.historical() : this.dataSource.historical;
+      const historicalRes = await fetch(historicalUrl);
       const historicalData = await historicalRes.json();
 
       // 3. Find earliest timestamp in recent.json
@@ -464,7 +487,8 @@ class TimeframeManager {
 
   async fetchAndUpdate() {
     try {
-      const res = await fetch(this.dataSource.recent);
+      const recentUrl = typeof this.dataSource.recent === 'function' ? this.dataSource.recent() : this.dataSource.recent;
+      const res = await fetch(recentUrl);
       const data = await res.json();
 
       // Find new data points
@@ -494,7 +518,8 @@ class TimeframeManager {
     
     try {
       console.log(`🔄 Refreshing historical data for ${this.currentSymbol}...`);
-      const res = await fetch(this.dataSource.historical);
+      const historicalUrl = typeof this.dataSource.historical === 'function' ? this.dataSource.historical() : this.dataSource.historical;
+      const res = await fetch(historicalUrl);
       const data = await res.json();
       this.rawData = data;
       this.lastTimestamp = 0;
