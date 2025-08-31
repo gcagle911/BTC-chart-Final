@@ -384,7 +384,7 @@ class TimeframeManager {
           const color = colorMap[duration] || '#AAAAAA';
           const title = `${layerKey.replace('spread_', 'L').replace('_pct_avg','')} MA${duration}`;
           this.maSeriesByKey.set(key, createMASeries(color, title));
-          // start hidden until explicitly toggled
+          // start hidden; visibility applied after computation
           this.maSeriesByKey.get(key).applyOptions({ visible: false });
         }
         const lineSeries = this.maSeriesByKey.get(key);
@@ -418,7 +418,21 @@ class TimeframeManager {
       this.applyAutoScale();
     }
 
-    // No default MA visibility; all off initially
+    // Apply visibility after any computation
+    this.applyMAVisibility();
+  }
+
+  applyMAVisibility() {
+    try {
+      for (const [key, series] of this.maSeriesByKey.entries()) {
+        const [layerKey, durationStr] = key.split('|');
+        const duration = parseInt(durationStr, 10);
+        const visible = this.selectedLayers.has(layerKey) && this.selectedDurations.has(duration);
+        series.applyOptions({ visible });
+      }
+    } catch (e) {
+      console.warn('Failed to apply MA visibility:', e);
+    }
   }
 
   async initializeChart() {
@@ -568,8 +582,13 @@ class TimeframeManager {
     const allowed = new Set(['spread_L5_pct_avg', 'spread_L20_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg']);
     if (!allowed.has(layerKey)) return;
     if (enabled) this.selectedLayers.add(layerKey); else this.selectedLayers.delete(layerKey);
-    this.lastTimestamp = 0;
-    this.processAndSetData(this.rawData);
+    // Recompute only if there are active durations; otherwise just update visibility
+    if (this.selectedDurations.size > 0) {
+      this.lastTimestamp = 0;
+      this.processAndSetData(this.rawData);
+    } else {
+      this.applyMAVisibility();
+    }
     this.applyAutoScale();
   }
 
@@ -577,18 +596,12 @@ class TimeframeManager {
     const allowed = new Set([20, 50, 100, 200]);
     if (!allowed.has(duration)) return;
     if (enabled) this.selectedDurations.add(duration); else this.selectedDurations.delete(duration);
-    // Toggle visibility of all series that match this duration according to enabled
-    for (const [key, series] of this.maSeriesByKey.entries()) {
-      const parts = key.split('|');
-      const dur = parseInt(parts[1], 10);
-      if (dur === duration) {
-        series.applyOptions({ visible: !!enabled });
-      }
-    }
-    // When turning on a duration, ensure data exists
-    if (enabled) {
+    // Ensure corresponding series exist if both layer(s) and this duration are active
+    if (enabled && this.selectedLayers.size > 0) {
       this.lastTimestamp = 0;
       this.processAndSetData(this.rawData);
+    } else {
+      this.applyMAVisibility();
     }
   }
 
