@@ -681,6 +681,21 @@ function toggleMA(key, isVisible) {
   manager.setMALineVisibility(key, isVisible);
 }
 
+// Simple dropdown toggling and outside-click close for MA tools
+function toggleMAToolsDropdown() {
+  const dd = document.getElementById('ma-tools-dropdown');
+  if (!dd) return;
+  dd.classList.toggle('open');
+}
+
+document.addEventListener('click', function(e) {
+  const dd = document.getElementById('ma-tools-dropdown');
+  if (!dd) return;
+  if (!dd.contains(e.target)) {
+    dd.classList.remove('open');
+  }
+});
+
 // Enhanced zoom functions with MASSIVE zoom range like TradingView
 function zoomIn() {
   if (window.chart) {

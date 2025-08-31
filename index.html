@@ -54,14 +54,7 @@
       top: 10px;
       right: 10px;
       z-index: 100;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      background: rgba(25, 28, 35, 0.9);
-      padding: 8px 12px;
-      border-radius: 8px;
-      backdrop-filter: blur(10px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      display: block;
     }
     
     #timeframe-dropdown, #symbol-dropdown {
@@ -88,6 +81,39 @@
       min-width: 120px;
     }
     
+    /* Tools dropdown button */
+    #ma-tools-button {
+      background: rgba(25, 28, 35, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #d1d4dc;
+      padding: 8px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    #ma-tools-button:hover { background: #363a45; }
+    #ma-tools-button:focus { outline: none; border-color: #2962ff; box-shadow: 0 0 0 2px rgba(41, 98, 255, 0.2); }
+    
+    /* Dropdown menu */
+    #ma-tools-dropdown { position: relative; display: inline-block; }
+    #ma-tools-dropdown .dropdown-menu {
+      display: none;
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      background: rgba(25, 28, 35, 0.98);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      padding: 10px;
+      min-width: 230px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      backdrop-filter: blur(10px);
+    }
+    #ma-tools-dropdown.open .dropdown-menu { display: block; }
+    .ma-toggle-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; margin-top: 8px; }
+    .ma-toggle-list label { display: flex; align-items: center; gap: 6px; color: #d1d4dc; font-size: 12px; }
+    
     #timeframe-dropdown:hover, #symbol-dropdown:hover, #ma-source-dropdown:hover {
       background: #363a45;
       border-color: #5a5e69;
@@ -113,7 +139,7 @@
         padding: 6px 10px;
       }
       
-      #timeframe-dropdown, #symbol-dropdown, #ma-source-dropdown {
+      #timeframe-dropdown, #symbol-dropdown, #ma-source-dropdown, #ma-tools-button {
         font-size: 11px;
         padding: 4px 8px;
         min-width: 70px;
@@ -129,7 +155,7 @@
         padding: 4px 8px;
       }
       
-      #timeframe-dropdown, #symbol-dropdown, #ma-source-dropdown {
+      #timeframe-dropdown, #symbol-dropdown, #ma-source-dropdown, #ma-tools-button {
         font-size: 10px;
         padding: 3px 6px;
         min-width: 60px;
@@ -164,18 +190,24 @@
     </div>
     
     <div id="tools-controls">
-      <label class="timeframe-label" for="ma-source-dropdown">Spread:</label>
-      <select id="ma-source-dropdown" onchange="setMASource(this.value)">
-        <option value="spread_L5_pct_avg">L5</option>
-        <option value="spread_L20_pct_avg" selected>L20</option>
-        <option value="spread_L50_pct_avg">L50</option>
-        <option value="spread_L100_pct_avg">L100</option>
-      </select>
-      
-      <label class="timeframe-label"><input type="checkbox" checked onchange="toggleMA('ma20', this.checked)"> MA20</label>
-      <label class="timeframe-label"><input type="checkbox" checked onchange="toggleMA('ma50', this.checked)"> MA50</label>
-      <label class="timeframe-label"><input type="checkbox" checked onchange="toggleMA('ma100', this.checked)"> MA100</label>
-      <label class="timeframe-label"><input type="checkbox" checked onchange="toggleMA('ma200', this.checked)"> MA200</label>
+      <div id="ma-tools-dropdown">
+        <button id="ma-tools-button" onclick="toggleMAToolsDropdown()">MAs ▾</button>
+        <div class="dropdown-menu">
+          <label class="timeframe-label" for="ma-source-dropdown">Spread Layer</label>
+          <select id="ma-source-dropdown" onchange="setMASource(this.value)">
+            <option value="spread_L5_pct_avg">L5</option>
+            <option value="spread_L20_pct_avg" selected>L20</option>
+            <option value="spread_L50_pct_avg">L50</option>
+            <option value="spread_L100_pct_avg">L100</option>
+          </select>
+          <div class="ma-toggle-list">
+            <label><input type="checkbox" checked onchange="toggleMA('ma20', this.checked)"> MA20</label>
+            <label><input type="checkbox" checked onchange="toggleMA('ma50', this.checked)"> MA50</label>
+            <label><input type="checkbox" checked onchange="toggleMA('ma100', this.checked)"> MA100</label>
+            <label><input type="checkbox" checked onchange="toggleMA('ma200', this.checked)"> MA200</label>
+          </div>
+        </div>
+      </div>
     </div>
     
     <div id="main-chart"></div>
