@@ -46,6 +46,26 @@ const DATA_SOURCES = {
   }
 };
 
+// Normalize API rows to internal schema expected by the charting logic
+function normalizeApiData(items) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map((row) => {
+      const time = row.time || row.t || null;
+      const price = row.price ?? row.price_avg ?? row.close ?? row.open ?? row.high ?? row.low ?? null;
+      const spreadL20 = row.spread_avg_L20_pct ?? row.spread_L20_pct_avg ?? row.spread_pct ?? null;
+      if (!time || price === null || price === undefined) return null;
+      return {
+        time,
+        price,
+        // Keep the property name used by downstream MA logic
+        spread_avg_L20_pct: spreadL20
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => new Date(a.time) - new Date(b.time));
+}
+
 // Chart configuration with LEFT/RIGHT dual y-axis and massive zoom range
 window.chart = LightweightCharts.createChart(document.getElementById('main-chart'), {
   layout: {
@@ -411,12 +431,12 @@ class TimeframeManager {
       // 1. Fetch recent data
       const recentUrl = typeof this.dataSource.recent === 'function' ? this.dataSource.recent() : this.dataSource.recent;
       const recentRes = await fetch(recentUrl);
-      const recentData = await recentRes.json();
+      const recentData = normalizeApiData(await recentRes.json());
 
       // 2. Fetch historical data
       const historicalUrl = typeof this.dataSource.historical === 'function' ? this.dataSource.historical() : this.dataSource.historical;
       const historicalRes = await fetch(historicalUrl);
-      const historicalData = await historicalRes.json();
+      const historicalData = normalizeApiData(await historicalRes.json());
 
       // 3. Find earliest timestamp in recent.json
       const recentStart = new Date(recentData[0].time).getTime();
@@ -489,7 +509,7 @@ class TimeframeManager {
     try {
       const recentUrl = typeof this.dataSource.recent === 'function' ? this.dataSource.recent() : this.dataSource.recent;
       const res = await fetch(recentUrl);
-      const data = await res.json();
+      const data = normalizeApiData(await res.json());
 
       // Find new data points
       const newData = data.filter(d => {
@@ -520,7 +540,7 @@ class TimeframeManager {
       console.log(`🔄 Refreshing historical data for ${this.currentSymbol}...`);
       const historicalUrl = typeof this.dataSource.historical === 'function' ? this.dataSource.historical() : this.dataSource.historical;
       const res = await fetch(historicalUrl);
-      const data = await res.json();
+      const data = normalizeApiData(await res.json());
       this.rawData = data;
       this.lastTimestamp = 0;
       this.processAndSetData(data);
