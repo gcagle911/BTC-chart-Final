@@ -161,6 +161,7 @@ chart.priceScale('right').applyOptions({
   minTick: 0.001,
   scaleMargins: { top: 0.02, bottom: 0.02 },
 });
+priceSeries.applyOptions({ priceFormat: { type: 'price', precision: 3, minMove: 0.001 } });
 
 // Dynamic MA series registry for multi-layer/duration combinations
 function createMASeries(color, title) {
@@ -406,15 +407,10 @@ class TimeframeManager {
       if (priceData.length > 0) {
         priceData.forEach(p => priceSeries.update(p));
       }
-      ma20Data.forEach(p => ma20.update(p));
-      ma50Data.forEach(p => ma50.update(p));
-      ma100Data.forEach(p => ma100.update(p));
-      ma200Data.forEach(p => ma200.update(p));
-      cumulativeData.forEach(p => cumulativeMA.update(p));
+      // dynamic MA series are updated separately; cumulative unused
     } else {
       // Set complete dataset
       priceSeries.setData(priceData);
-      cumulativeMA.setData(cumulativeData);
       
       // Fit content to show all data
       chart.timeScale().fitContent();
@@ -519,12 +515,7 @@ class TimeframeManager {
       });
 
       if (newData.length > 0) {
-        // Add new data to our raw data store
-        this.rawData = [...this.rawData, ...newData].sort((a, b) => 
-          new Date(a.time) - new Date(b.time)
-        );
-
-        // Process and update chart with new data
+        this.rawData = [...this.rawData, ...newData].sort((a, b) => new Date(a.time) - new Date(b.time));
         this.processAndSetData(newData, true);
         console.log(`📈 Updated ${this.currentSymbol} with ${newData.length} new data points`);
       }
@@ -623,11 +614,14 @@ class TimeframeManager {
 
     // Clear existing chart data
     priceSeries.setData([]);
-    ma20.setData([]);
-    ma50.setData([]);
-    ma100.setData([]);
-    ma200.setData([]);
-    cumulativeMA.setData([]);
+    // Remove dynamic MA series
+    try {
+      for (const [key, series] of this.maSeriesByKey.entries()) {
+        series.setData([]);
+        // lightweight-charts has no explicit remove; let GC clean up
+      }
+      this.maSeriesByKey.clear();
+    } catch (e) { console.warn('Failed clearing MA series', e); }
 
     // Load data and restart update cycles
     await this.initializeChart();
