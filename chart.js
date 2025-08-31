@@ -176,6 +176,18 @@ function createMASeries(color, title) {
   });
 }
 
+function createAvgSeries(title) {
+  return chart.addLineSeries({
+    priceScaleId: 'left',
+    color: '#FFFFFF',
+    lineWidth: 0.8,
+    title,
+    lastValueVisible: false,
+    priceLineVisible: false,
+    crosshairMarkerVisible: false,
+  });
+}
+
 function formatLayerShort(layerKey) {
   if (layerKey === 'spread_L5_pct_avg') return 'L5';
   if (layerKey === 'spread_L20_pct_avg') return 'L20';
@@ -198,6 +210,7 @@ class TimeframeManager {
     this.selectedLayers = new Set(); // e.g., 'spread_L5_pct_avg', 'spread_L20_pct_avg'
     this.selectedDurations = new Set(); // e.g., 20, 50, 100, 200
     this.maSeriesByKey = new Map(); // key: `${layerKey}|${duration}` -> lineSeries
+    this.avgSeriesByLayer = new Map(); // key: layerKey -> white average line series
     
     this.timeframes = {
       '1m': { seconds: 60, label: '1 Minute' },
@@ -366,13 +379,26 @@ class TimeframeManager {
       }
     }
 
-    // Build per-layer cumulative average just for info (not shown by default)
+    // Build and plot per-layer running average (white line) always
     for (const layerKey of activeLayers) {
+      const series = layerToSeries.get(layerKey);
+      if (!series || series.length === 0) continue;
+      if (!this.avgSeriesByLayer.has(layerKey)) {
+        const title = `${formatLayerShort(layerKey)} Avg`;
+        this.avgSeriesByLayer.set(layerKey, createAvgSeries(title));
+      }
+      const avgSeries = this.avgSeriesByLayer.get(layerKey);
       let sum = 0; let count = 0;
-      for (const p of layerToSeries.get(layerKey)) {
+      const avgPoints = [];
+      for (const p of series) {
         sum += p.value; count++;
         const avg = sum / count;
-        cumulativeData.push({ time: p.time, value: avg });
+        avgPoints.push({ time: p.time, value: avg });
+      }
+      if (isUpdate) {
+        avgPoints.forEach(pt => avgSeries.update(pt));
+      } else {
+        avgSeries.setData(avgPoints);
       }
     }
 
@@ -635,13 +661,17 @@ class TimeframeManager {
 
     // Clear existing chart data
     priceSeries.setData([]);
-    // Remove dynamic MA series completely to avoid extra scales/panes
+    // Remove dynamic MA and avg series completely to avoid extra scales/panes
     try {
       for (const [key, series] of this.maSeriesByKey.entries()) {
         chart.removeSeries(series);
       }
       this.maSeriesByKey.clear();
-    } catch (e) { console.warn('Failed clearing MA series', e); }
+      for (const [key, series] of this.avgSeriesByLayer.entries()) {
+        chart.removeSeries(series);
+      }
+      this.avgSeriesByLayer.clear();
+    } catch (e) { console.warn('Failed clearing series', e); }
 
     // Load data and restart update cycles
     await this.initializeChart();
