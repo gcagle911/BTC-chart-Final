@@ -77,6 +77,7 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
   layout: {
     background: { color: '#131722' },
     textColor: '#D1D4DC',
+    fontSize: 10,
   },
   grid: {
     vertLines: { color: '#2B2B43' },
@@ -85,8 +86,8 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
   rightPriceScale: { 
     visible: true,
     scaleMargins: {
-      top: 0.05,
-      bottom: 0.05,
+      top: 0.02,
+      bottom: 0.02,
     },
     borderVisible: false,
     autoScale: true,
@@ -97,8 +98,8 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
   leftPriceScale: { 
     visible: true, // LEFT y-axis for Bid Spread MAs
     scaleMargins: {
-      top: 0.05,
-      bottom: 0.05,
+      top: 0.02,
+      bottom: 0.02,
     },
     borderVisible: false,
     autoScale: true,
@@ -111,9 +112,9 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
     timeVisible: true, 
     secondsVisible: false,
     borderVisible: false,
-    rightOffset: 50,
-    barSpacing: 12, // Increased spacing for thicker candlestick bodies
-    minBarSpacing: 0.1, // MUCH tighter for extreme zoom out
+    rightOffset: 15,
+    barSpacing: 6, // Tighter by default to show more data
+    minBarSpacing: 0.02, // Allow much more data when zoomed out
     fixLeftEdge: false,
     fixRightEdge: false,
   },
@@ -720,7 +721,7 @@ function zoomOut() {
     if (visibleRange) {
       const middle = (visibleRange.from + visibleRange.to) / 2;
       const range = visibleRange.to - visibleRange.from;
-      const newRange = range * 1.8; // Zoom out MORE
+      const newRange = range * 2.6; // Zoom out even more to fit more data
       timeScale.setVisibleRange({
         from: middle - newRange / 2,
         to: middle + newRange / 2
@@ -840,8 +841,8 @@ function handlePinchZoom(scaleChange) {
       const newSize = currentSize / scaleChange;
       
       // MASSIVE zoom limits for TradingView-like extensive viewing
-      const minSize = 30; // 30 seconds minimum (extreme detail)
-      const maxSize = 86400 * 365 * 10; // 10 YEARS maximum (extreme wide view)
+      const minSize = 15; // Allow even more detail
+      const maxSize = 86400 * 365 * 25; // Up to 25 years
       const clampedSize = Math.max(minSize, Math.min(maxSize, newSize));
       
       timeScale.setVisibleTimeRange({
