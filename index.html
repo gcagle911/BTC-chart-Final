@@ -49,6 +49,21 @@
       border: 1px solid rgba(255, 255, 255, 0.1);
     }
     
+    #tools-controls {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(25, 28, 35, 0.9);
+      padding: 8px 12px;
+      border-radius: 8px;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
     #timeframe-dropdown, #symbol-dropdown {
       background: #2a2e39;
       border: 1px solid #4a4e59;
@@ -61,12 +76,24 @@
       min-width: 80px;
     }
     
-    #timeframe-dropdown:hover, #symbol-dropdown:hover {
+    #ma-source-dropdown {
+      background: #2a2e39;
+      border: 1px solid #4a4e59;
+      color: #d1d4dc;
+      padding: 6px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      min-width: 120px;
+    }
+    
+    #timeframe-dropdown:hover, #symbol-dropdown:hover, #ma-source-dropdown:hover {
       background: #363a45;
       border-color: #5a5e69;
     }
     
-    #timeframe-dropdown:focus, #symbol-dropdown:focus {
+    #timeframe-dropdown:focus, #symbol-dropdown:focus, #ma-source-dropdown:focus {
       outline: none;
       border-color: #2962ff;
       box-shadow: 0 0 0 2px rgba(41, 98, 255, 0.2);
@@ -86,7 +113,7 @@
         padding: 6px 10px;
       }
       
-      #timeframe-dropdown, #symbol-dropdown {
+      #timeframe-dropdown, #symbol-dropdown, #ma-source-dropdown {
         font-size: 11px;
         padding: 4px 8px;
         min-width: 70px;
@@ -102,7 +129,7 @@
         padding: 4px 8px;
       }
       
-      #timeframe-dropdown, #symbol-dropdown {
+      #timeframe-dropdown, #symbol-dropdown, #ma-source-dropdown {
         font-size: 10px;
         padding: 3px 6px;
         min-width: 60px;
@@ -134,6 +161,21 @@
         <option value="4h">4h</option>
         <option value="1d">1d</option>
       </select>
+    </div>
+    
+    <div id="tools-controls">
+      <label class="timeframe-label" for="ma-source-dropdown">Spread:</label>
+      <select id="ma-source-dropdown" onchange="setMASource(this.value)">
+        <option value="spread_L5_pct_avg">L5</option>
+        <option value="spread_L20_pct_avg" selected>L20</option>
+        <option value="spread_L50_pct_avg">L50</option>
+        <option value="spread_L100_pct_avg">L100</option>
+      </select>
+      
+      <label class="timeframe-label"><input type="checkbox" checked onchange="toggleMA('ma20', this.checked)"> MA20</label>
+      <label class="timeframe-label"><input type="checkbox" checked onchange="toggleMA('ma50', this.checked)"> MA50</label>
+      <label class="timeframe-label"><input type="checkbox" checked onchange="toggleMA('ma100', this.checked)"> MA100</label>
+      <label class="timeframe-label"><input type="checkbox" checked onchange="toggleMA('ma200', this.checked)"> MA200</label>
     </div>
     
     <div id="main-chart"></div>

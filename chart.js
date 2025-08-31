@@ -53,13 +53,19 @@ function normalizeApiData(items) {
     .map((row) => {
       const time = row.time || row.t || null;
       const price = row.price ?? row.price_avg ?? row.close ?? row.open ?? row.high ?? row.low ?? null;
-      const spreadL20 = row.spread_avg_L20_pct ?? row.spread_L20_pct_avg ?? row.spread_pct ?? null;
+      const spreadL5 = row.spread_L5_pct_avg ?? row.spread_avg_L5_pct ?? null;
+      const spreadL20 = row.spread_L20_pct_avg ?? row.spread_avg_L20_pct ?? row.spread_pct ?? null;
+      const spreadL50 = row.spread_L50_pct_avg ?? row.spread_avg_L50_pct ?? null;
+      const spreadL100 = row.spread_L100_pct_avg ?? row.spread_avg_L100_pct ?? null;
       if (!time || price === null || price === undefined) return null;
       return {
         time,
         price,
-        // Keep the property name used by downstream MA logic
-        spread_avg_L20_pct: spreadL20
+        // Expose all spread layer fields
+        spread_L5_pct_avg: spreadL5,
+        spread_L20_pct_avg: spreadL20,
+        spread_L50_pct_avg: spreadL50,
+        spread_L100_pct_avg: spreadL100
       };
     })
     .filter(Boolean)
@@ -208,6 +214,8 @@ class TimeframeManager {
     this.isFullDataLoaded = false;
     this.updateInterval = null;
     this.refreshInterval = null;
+    this.selectedSpreadLayer = 'spread_L20_pct_avg';
+    this.maVisibility = { ma20: true, ma50: true, ma100: true, ma200: true };
     
     this.timeframes = {
       '1m': { seconds: 60, label: '1 Minute' },
@@ -355,11 +363,12 @@ class TimeframeManager {
     let cumulativeSum = 0;
     let cumulativeCount = 0;
 
-    // We'll compute SMA for 20, 50, 100, 200 using spread_pct (or spread_avg_L20_pct if present)
+    // We'll compute SMA for 20, 50, 100, 200 using the selected spread layer
     const spreadSeries = [];
+    const layerKey = this.selectedSpreadLayer;
     for (let i = 0; i < rawMinuteData.length; i++) {
       const row = rawMinuteData[i];
-      const spreadVal = row.spread_avg_L20_pct ?? row.spread_pct;
+      const spreadVal = row[layerKey] ?? null;
       const t = this.toUnixTimestamp(row.time);
       if (isUpdate && t <= this.lastTimestamp) continue;
       if (spreadVal === null || spreadVal === undefined) continue;
@@ -421,6 +430,16 @@ class TimeframeManager {
       chart.timeScale().fitContent();
       // Ensure y-axes scale to new data range
       this.applyAutoScale();
+    }
+
+    // Apply visibility of MA lines according to user settings
+    try {
+      ma20.applyOptions({ visible: !!this.maVisibility.ma20 });
+      ma50.applyOptions({ visible: !!this.maVisibility.ma50 });
+      ma100.applyOptions({ visible: !!this.maVisibility.ma100 });
+      ma200.applyOptions({ visible: !!this.maVisibility.ma200 });
+    } catch (e) {
+      console.warn('Failed to apply MA visibility options:', e);
     }
   }
 
@@ -572,6 +591,28 @@ class TimeframeManager {
     console.log(`✅ Switched to ${this.timeframes[timeframe].label}`);
   }
 
+  setMASource(layerKey) {
+    const allowed = new Set(['spread_L5_pct_avg', 'spread_L20_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg']);
+    if (!allowed.has(layerKey)) return;
+    if (this.selectedSpreadLayer === layerKey) return;
+    this.selectedSpreadLayer = layerKey;
+    // Recompute indicators using existing raw data
+    this.lastTimestamp = 0;
+    this.processAndSetData(this.rawData);
+    this.applyAutoScale();
+  }
+
+  setMALineVisibility(key, isVisible) {
+    if (!(key in this.maVisibility)) return;
+    this.maVisibility[key] = !!isVisible;
+    try {
+      const map = { ma20, ma50, ma100, ma200 };
+      map[key].applyOptions({ visible: !!isVisible });
+    } catch (e) {
+      console.warn('Failed to toggle MA visibility:', e);
+    }
+  }
+
   async switchSymbol(symbol) {
     if (!DATA_SOURCES[symbol]) return;
     if (symbol === this.currentSymbol && this.isFullDataLoaded) return;
@@ -630,6 +671,14 @@ function setTimeframe(timeframe) {
 
 function setSymbol(symbol) {
   manager.switchSymbol(symbol);
+}
+
+function setMASource(layerKey) {
+  manager.setMASource(layerKey);
+}
+
+function toggleMA(key, isVisible) {
+  manager.setMALineVisibility(key, isVisible);
 }
 
 // Enhanced zoom functions with MASSIVE zoom range like TradingView
