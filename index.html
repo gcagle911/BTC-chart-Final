@@ -193,6 +193,10 @@
       <div id="ma-tools-dropdown">
         <button id="ma-tools-button" onclick="toggleMAToolsDropdown()">MAs ▾</button>
         <div class="dropdown-menu">
+          <div style="display:flex;align-items:center;gap:8px;justify-content:space-between;margin-bottom:8px;">
+            <label class="timeframe-label"><input type="checkbox" id="normalize-toggle" onchange="toggleNormalize(this.checked)"> Normalize → Scaled (match medians)</label>
+            <span id="scaled-badge" style="display:none;color:#fff;background:#555;padding:2px 6px;border-radius:6px;font-size:10px;">Scaled</span>
+          </div>
           <div class="ma-toggle-list">
             <label><input type="checkbox" onchange="toggleMALayer('spread_L5_pct_avg', this.checked)"> L5 Layer</label>
             <label><input type="checkbox" onchange="toggleMALayer('spread_L20_pct_avg', this.checked)"> L20 Layer</label>

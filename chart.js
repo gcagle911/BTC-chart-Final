@@ -211,6 +211,10 @@ class TimeframeManager {
     this.selectedDurations = new Set(); // e.g., 20, 50, 100, 200
     this.maSeriesByKey = new Map(); // key: `${layerKey}|${duration}` -> lineSeries
     this.avgSeriesByLayer = new Map(); // key: layerKey -> white average line series
+    this.maRawDataByKey = new Map(); // key: `${layerKey}|${duration}` -> raw [{time,value}]
+    this.scaleFactorsByKey = new Map(); // key -> factor number
+    this.normalizeEnabled = false;
+    this.scaleRecomputeTimeout = null;
     
     this.timeframes = {
       '1m': { seconds: 60, label: '1 Minute' },
@@ -428,10 +432,13 @@ class TimeframeManager {
           const avg = windowSlice.reduce((acc, p) => acc + p.value, 0) / duration;
           maPoints.push({ time: series[i].time, value: avg });
         }
+        this.maRawDataByKey.set(key, maPoints);
+        const factor = this.normalizeEnabled ? (this.scaleFactorsByKey.get(key) || 1) : 1;
+        const scaled = factor === 1 ? maPoints : maPoints.map(p => ({ time: p.time, value: p.value * factor }));
         if (isUpdate) {
-          maPoints.forEach(p => lineSeries.update(p));
+          scaled.forEach(p => lineSeries.update(p));
         } else {
-          lineSeries.setData(maPoints);
+          lineSeries.setData(scaled);
         }
       }
     }
@@ -463,6 +470,11 @@ class TimeframeManager {
         const duration = parseInt(durationStr, 10);
         const visible = this.selectedLayers.has(layerKey) && this.selectedDurations.has(duration);
         series.applyOptions({ visible });
+        // Update title suffix for current factor
+        const factor = this.normalizeEnabled ? (this.scaleFactorsByKey.get(key) || 1) : 1;
+        const baseTitle = `${formatLayerShort(layerKey)}MA${duration}`;
+        const suffix = this.normalizeEnabled ? ` ×${factor.toFixed(2)}` : '';
+        series.applyOptions({ title: baseTitle + suffix });
       }
     } catch (e) {
       console.warn('Failed to apply MA visibility:', e);
@@ -690,6 +702,111 @@ class TimeframeManager {
 
     // Refresh complete historical data every hour
     this.refreshInterval = setInterval(() => this.refreshHistoricalData(), 3600000);
+
+    // Subscribe to visible range changes to recompute scaling (debounced)
+    try {
+      chart.timeScale().subscribeVisibleTimeRangeChange(() => this.recomputeScaleFactorsAndRefresh());
+    } catch (_) {}
+  }
+
+  setNormalize(enabled) {
+    this.normalizeEnabled = !!enabled;
+    const badge = document.getElementById('scaled-badge');
+    if (badge) badge.style.display = this.normalizeEnabled ? 'inline-block' : 'none';
+    this.recomputeScaleFactorsAndRefresh();
+  }
+
+  recomputeScaleFactorsAndRefresh() {
+    if (this.scaleRecomputeTimeout) clearTimeout(this.scaleRecomputeTimeout);
+    this.scaleRecomputeTimeout = setTimeout(() => {
+      this.computeScaleFactorsForVisibleRange();
+      this.refreshVisibleMALines();
+    }, 250);
+  }
+
+  getVisibleTimeRange() {
+    try {
+      const range = chart.timeScale().getVisibleRange();
+      return range ? { from: range.from, to: range.to } : null;
+    } catch (_) { return null; }
+  }
+
+  computeScaleFactorsForVisibleRange() {
+    this.scaleFactorsByKey.clear();
+    if (!this.normalizeEnabled) return;
+
+    // Pick reference: L100_MA200 if visible, else first visible MA series
+    let referenceKey = null;
+    const prefKey = 'spread_L100_pct_avg|200';
+    if (this.maSeriesByKey.has(prefKey)) {
+      const refSeriesVisible = this.isSeriesVisible(prefKey);
+      if (refSeriesVisible) referenceKey = prefKey;
+    }
+    if (!referenceKey) {
+      for (const key of this.maSeriesByKey.keys()) {
+        if (this.isSeriesVisible(key)) { referenceKey = key; break; }
+      }
+    }
+    if (!referenceKey) return;
+
+    const visible = this.getVisibleTimeRange();
+    const refData = this.maRawDataByKey.get(referenceKey) || [];
+    const refVals = this.valuesInRange(refData, visible);
+    const refMedian = this.median(refVals) ?? this.mean(refVals) ?? 1;
+
+    for (const key of this.maSeriesByKey.keys()) {
+      if (!this.isSeriesVisible(key)) continue;
+      const data = this.maRawDataByKey.get(key) || [];
+      const vals = this.valuesInRange(data, visible);
+      let m = this.median(vals);
+      if (m == null || !isFinite(m) || m === 0) m = this.mean(vals);
+      if (m == null || !isFinite(m) || m === 0) {
+        this.scaleFactorsByKey.set(key, 1);
+      } else {
+        this.scaleFactorsByKey.set(key, refMedian / m);
+      }
+    }
+  }
+
+  valuesInRange(points, visible) {
+    if (!points || points.length === 0) return [];
+    if (!visible) return points.map(p => p.value);
+    const from = visible.from, to = visible.to;
+    return points.filter(p => p.time >= from && p.time <= to).map(p => p.value);
+  }
+
+  median(arr) {
+    if (!arr || arr.length === 0) return null;
+    const a = arr.slice().sort((x, y) => x - y);
+    const mid = Math.floor(a.length / 2);
+    return a.length % 2 ? a[mid] : (a[mid - 1] + a[mid]) / 2;
+  }
+
+  mean(arr) {
+    if (!arr || arr.length === 0) return null;
+    return arr.reduce((s, v) => s + v, 0) / arr.length;
+  }
+
+  isSeriesVisible(key) {
+    const [layerKey, durationStr] = key.split('|');
+    const duration = parseInt(durationStr, 10);
+    return this.selectedLayers.has(layerKey) && this.selectedDurations.has(duration);
+  }
+
+  refreshVisibleMALines() {
+    for (const [key, series] of this.maSeriesByKey.entries()) {
+      const raw = this.maRawDataByKey.get(key) || [];
+      const factor = this.normalizeEnabled ? (this.scaleFactorsByKey.get(key) || 1) : 1;
+      const points = raw.map(p => ({ time: p.time, value: p.value * factor }));
+      series.setData(points);
+      // Update title with multiplier
+      const [layerKey, durationStr] = key.split('|');
+      const duration = parseInt(durationStr, 10);
+      const baseTitle = `${formatLayerShort(layerKey)}MA${duration}`;
+      const suffix = this.normalizeEnabled ? ` ×${(factor).toFixed(2)}` : '';
+      series.applyOptions({ title: baseTitle + suffix });
+    }
+    this.applyMAVisibility();
   }
 }
 
@@ -738,6 +855,10 @@ function toggleMALayer(layerKey, enabled) {
 
 function toggleMADuration(duration, enabled) {
   manager.toggleDuration(duration, enabled);
+}
+
+function toggleNormalize(enabled) {
+  manager.setNormalize(enabled);
 }
 
 // Enhanced zoom functions with MASSIVE zoom range like TradingView
