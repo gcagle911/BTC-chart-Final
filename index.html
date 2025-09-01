@@ -113,6 +113,20 @@
     #ma-tools-dropdown.open .dropdown-menu { display: block; }
     .ma-toggle-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; margin-top: 8px; }
     .ma-toggle-list label { display: flex; align-items: center; gap: 6px; color: #d1d4dc; font-size: 12px; }
+
+    /* Left axis interaction overlay */
+    #left-axis-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 60px;
+      height: 100%;
+      z-index: 200;
+      display: none;
+      pointer-events: auto;
+      background: transparent;
+      cursor: ns-resize;
+    }
     
     #timeframe-dropdown:hover, #symbol-dropdown:hover, #ma-source-dropdown:hover {
       background: #363a45;
@@ -169,6 +183,7 @@
 </head>
 <body>
   <div id="chart-container">
+    <div id="left-axis-overlay"></div>
     <div id="timeframe-controls">
       <label class="timeframe-label" for="symbol-dropdown">Symbol:</label>
       <select id="symbol-dropdown" onchange="setSymbol(this.value)">
@@ -193,6 +208,17 @@
       <div id="ma-tools-dropdown">
         <button id="ma-tools-button" onclick="toggleMAToolsDropdown()">MAs ▾</button>
         <div class="dropdown-menu">
+          <div class="ma-toggle-list" style="grid-template-columns: 1fr; gap: 6px; margin-top: 0;">
+            <label class="timeframe-label" style="display:flex;align-items:center;gap:8px;">
+              <span>Y‑Axis Control:</span>
+              <label style="display:flex;align-items:center;gap:4px;">
+                <input type="radio" name="yaxis-control" value="right" checked onchange="setYAxisControl('Right')"> Right
+              </label>
+              <label style="display:flex;align-items:center;gap:4px;">
+                <input type="radio" name="yaxis-control" value="left" onchange="setYAxisControl('Left')"> Left
+              </label>
+            </label>
+          </div>
           <div style="display:flex;align-items:center;gap:8px;justify-content:space-between;margin-bottom:8px;">
             <label class="timeframe-label"><input type="checkbox" id="normalize-toggle" onchange="toggleNormalize(this.checked)"> Normalize → Scaled (match medians)</label>
             <span id="scaled-badge" style="display:none;color:#fff;background:#555;padding:2px 6px;border-radius:6px;font-size:10px;">Scaled</span>

@@ -96,15 +96,10 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
     mode: LightweightCharts.PriceScaleMode.Normal,
   },
   leftPriceScale: { 
-    visible: true, // LEFT y-axis for Bid Spread MAs
-    scaleMargins: {
-      top: 0.15,
-      bottom: 0.15,
-    },
-    borderVisible: false,
+    visible: true,
+    scaleMargins: { top: 0.15, bottom: 0.15 },
+    borderVisible: true,
     autoScale: true,
-    entireTextOnly: false,
-    ticksVisible: true,
     mode: LightweightCharts.PriceScaleMode.Normal,
   },
   timeScale: { 
@@ -126,22 +121,8 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
     horzTouchDrag: true,
     vertTouchDrag: true,
   },
-  handleScale: {
-    mouseWheel: true,
-    pinch: true,
-    axisPressedMouseMove: {
-      time: true,
-      price: true,
-    },
-    axisDoubleClickReset: {
-      time: true,
-      price: true,
-    },
-  },
-  kineticScroll: {
-    touch: true,
-    mouse: false,
-  },
+  handleScale: { axisPressedMouseMove: { time: true, price: true }, mouseWheel: true, pinch: true },
+  handleScroll: { pressedMouseMove: true, mouseWheel: true, touch: true },
 });
 
 // Price series on RIGHT y-axis
@@ -725,6 +706,19 @@ class TimeframeManager {
     } catch (_) {}
   }
 
+  setYAxisControl(mode) {
+    this.yAxisControl = mode === 'Left' ? 'Left' : 'Right';
+    const overlay = document.getElementById('left-axis-overlay');
+    if (!overlay) return;
+    if (this.yAxisControl === 'Left') {
+      overlay.style.display = 'block';
+      chart.priceScale('left').setAutoScale(false);
+    } else {
+      overlay.style.display = 'none';
+      try { chart.priceScale('left').setAutoScale(true); } catch (_) {}
+    }
+  }
+
   toggleCumulativeAvg(enabled) {
     this.cumulativeAvgVisible = !!enabled;
     this.recomputeScaleFactorsAndRefresh();
@@ -742,6 +736,9 @@ class TimeframeManager {
     this.scaleRecomputeTimeout = setTimeout(() => {
       this.computeScaleFactorsForVisibleRange();
       this.refreshVisibleMALines();
+      if (this.yAxisControl !== 'Left') {
+        try { chart.priceScale('left').setAutoScale(true); } catch (_) {}
+      }
     }, 250);
   }
 
@@ -782,13 +779,19 @@ class TimeframeManager {
     const refData = referenceKey.startsWith('avg|')
       ? (this.avgRawDataByLayer?.get(referenceKey.split('|')[1]) || [])
       : (this.maRawDataByKey.get(referenceKey) || []);
-    const refVals = this.valuesInRange(refData, visible);
+    let refVals = this.valuesInRange(refData, visible);
+    if (!refVals || refVals.length < 50) {
+      refVals = (refData || []).slice(-200).map(p => p.value);
+    }
     const refMedian = this.median(refVals) ?? this.mean(refVals) ?? 1;
 
     for (const key of this.maSeriesByKey.keys()) {
       if (!this.isSeriesVisible(key)) continue;
       const data = this.maRawDataByKey.get(key) || [];
-      const vals = this.valuesInRange(data, visible);
+      let vals = this.valuesInRange(data, visible);
+      if (!vals || vals.length < 50) {
+        vals = (data || []).slice(-200).map(p => p.value);
+      }
       let m = this.median(vals);
       if (m == null || !isFinite(m) || m === 0) m = this.mean(vals);
       let factor = 1;
@@ -915,6 +918,10 @@ function toggleNormalize(enabled) {
 
 function toggleCumulativeAvg(enabled) {
   manager.toggleCumulativeAvg(enabled);
+}
+
+function setYAxisControl(mode) {
+  manager.setYAxisControl(mode);
 }
 
 // Enhanced zoom functions with MASSIVE zoom range like TradingView
