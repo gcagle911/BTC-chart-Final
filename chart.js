@@ -122,7 +122,6 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
     vertTouchDrag: true,
   },
   handleScale: { axisPressedMouseMove: { time: true, price: true }, mouseWheel: true, pinch: true },
-  handleScroll: { pressedMouseMove: true, mouseWheel: true, touch: true },
 });
 
 // Price series on RIGHT y-axis
@@ -713,10 +712,73 @@ class TimeframeManager {
     if (this.yAxisControl === 'Left') {
       overlay.style.display = 'block';
       chart.priceScale('left').setAutoScale(false);
+      this.attachLeftAxisOverlayHandlers(overlay);
     } else {
       overlay.style.display = 'none';
       try { chart.priceScale('left').setAutoScale(true); } catch (_) {}
     }
+  }
+
+  attachLeftAxisOverlayHandlers(overlay) {
+    if (overlay._handlersAttached) return;
+    overlay._handlersAttached = true;
+    let dragging = false;
+    let startY = 0;
+    let startMin = null, startMax = null;
+    const ps = () => chart.priceScale('left');
+    const anyLeftSeries = () => {
+      for (const s of this.maSeriesByKey.values()) return s;
+      for (const s of this.avgSeriesByLayer.values()) return s;
+      return null;
+    };
+
+    const getRange = () => {
+      try {
+        const range = ps().getPriceRange?.();
+        if (range && isFinite(range.minValue) && isFinite(range.maxValue)) return { min: range.minValue, max: range.maxValue };
+      } catch(_) {}
+      // Fallback from visible data
+      let min = Infinity, max = -Infinity;
+      const collect = (pts) => { for (const p of pts||[]) { if (p.value < min) min = p.value; if (p.value > max) max = p.value; } };
+      for (const raw of this.maRawDataByKey.values()) collect(raw);
+      if (this.avgRawDataByLayer) for (const raw of this.avgRawDataByLayer.values()) collect(raw);
+      if (!isFinite(min) || !isFinite(max) || min === Infinity || max === -Infinity) { min = 0; max = 1; }
+      return { min, max };
+    };
+
+    const onDown = (e) => {
+      dragging = true;
+      startY = e.clientY || (e.touches && e.touches[0]?.clientY) || 0;
+      const r = getRange(); startMin = r.min; startMax = r.max;
+      ps().setAutoScale(false);
+      e.preventDefault();
+    };
+    const onMove = (e) => {
+      if (!dragging) return;
+      const currentY = e.clientY || (e.touches && e.touches[0]?.clientY) || startY;
+      const dy = currentY - startY;
+      const ser = anyLeftSeries();
+      if (!ser) return;
+      const h = overlay.clientHeight || 1;
+      const pxPerUnit = h / Math.max(1e-6, (startMax - startMin));
+      const deltaUnits = -(dy / Math.max(1e-6, pxPerUnit));
+      const newMin = startMin + deltaUnits;
+      const newMax = startMax + deltaUnits;
+      try { ps().applyOptions({ autoScale: false }); } catch(_) {}
+      try { ps().setPriceRange?.({ minValue: newMin, maxValue: newMax }); } catch(_) {}
+      e.preventDefault();
+    };
+    const onUp = () => { dragging = false; };
+    const onDbl = () => { try { ps().setAutoScale(true); } catch(_) {} };
+
+    overlay.addEventListener('mousedown', onDown, { passive: false });
+    overlay.addEventListener('mousemove', onMove, { passive: false });
+    overlay.addEventListener('mouseup', onUp, { passive: false });
+    overlay.addEventListener('mouseleave', onUp, { passive: false });
+    overlay.addEventListener('touchstart', onDown, { passive: false });
+    overlay.addEventListener('touchmove', onMove, { passive: false });
+    overlay.addEventListener('touchend', onUp, { passive: false });
+    overlay.addEventListener('dblclick', onDbl, { passive: false });
   }
 
   toggleCumulativeAvg(enabled) {
@@ -780,30 +842,58 @@ class TimeframeManager {
       ? (this.avgRawDataByLayer?.get(referenceKey.split('|')[1]) || [])
       : (this.maRawDataByKey.get(referenceKey) || []);
     let refVals = this.valuesInRange(refData, visible);
-    if (!refVals || refVals.length < 50) {
-      refVals = (refData || []).slice(-200).map(p => p.value);
-    }
+    if (!refVals || refVals.length < 50) { refVals = (refData || []).slice(-200).map(p => p.value); }
     const refMedian = this.median(refVals) ?? this.mean(refVals) ?? 1;
 
+    const getTrimmed = (vals) => {
+      if (!vals || vals.length < 20) return vals || [];
+      const sorted = vals.slice().sort((a,b)=>a-b);
+      const lo = Math.floor(sorted.length * 0.05);
+      const hi = Math.ceil(sorted.length * 0.95);
+      return sorted.slice(lo, hi);
+    };
+
+    const computeCenter = (vals) => {
+      if (!vals || vals.length === 0) return { center: null, used: 'none' };
+      let center = this.median(vals); let used = 'median';
+      if (center == null || !isFinite(center) || center === 0) { center = this.mean(vals); used = 'mean'; }
+      return { center, used };
+    };
+
+    const logCalc = (name, n, used, center, factorRaw, factorClamped) => {
+      try { console.log(`[Normalize] ${name}: n=${n}, stat=${used}, center=${center}, factorRaw=${factorRaw}, factor=${factorClamped}`); } catch(_) {}
+    };
+
+    // MA series factors (with L5 trimming)
     for (const key of this.maSeriesByKey.keys()) {
       if (!this.isSeriesVisible(key)) continue;
       const data = this.maRawDataByKey.get(key) || [];
       let vals = this.valuesInRange(data, visible);
-      if (!vals || vals.length < 50) {
-        vals = (data || []).slice(-200).map(p => p.value);
-      }
-      let m = this.median(vals);
-      if (m == null || !isFinite(m) || m === 0) m = this.mean(vals);
-      let factor = 1;
-      if (m == null || !isFinite(m) || m === 0) {
-        factor = 1;
-      } else {
-        factor = refMedian / m;
-      }
-      // Clamp factors to [0.1, 10]
-      if (factor < 0.1) factor = 0.1;
-      if (factor > 10) factor = 10;
+      if (!vals || vals.length < 50) { vals = (data || []).slice(-200).map(p => p.value); }
+      const layerKey = key.split('|')[0];
+      const valsForCalc = layerKey === 'spread_L5_pct_avg' ? getTrimmed(vals) : vals;
+      const { center, used } = computeCenter(valsForCalc);
+      let factorRaw = 1, factor = 1;
+      if (center == null || !isFinite(center) || center === 0) { factor = 1; factorRaw = 1; }
+      else { factorRaw = refMedian / center; factor = Math.min(10, Math.max(0.1, factorRaw)); }
       this.scaleFactorsByKey.set(key, factor);
+      logCalc(key, valsForCalc?.length||0, used, center?.toFixed?.call(center,6)||center, factorRaw?.toFixed?.call(factorRaw,6)||factorRaw, factor?.toFixed?.call(factor,6)||factor);
+    }
+
+    // AVG series factors
+    if (this.cumulativeAvgVisible && this.avgRawDataByLayer) {
+      for (const [layerKey, raw] of this.avgRawDataByLayer.entries()) {
+        const key = `avg|${layerKey}`;
+        let vals = this.valuesInRange(raw, visible);
+        if (!vals || vals.length < 50) { vals = raw.slice(-200).map(p => p.value); }
+        const valsForCalc = layerKey === 'spread_L5_pct_avg' ? getTrimmed(vals) : vals;
+        const { center, used } = computeCenter(valsForCalc);
+        let factorRaw = 1, factor = 1;
+        if (center == null || !isFinite(center) || center === 0) { factor = 1; factorRaw = 1; }
+        else { factorRaw = refMedian / center; factor = Math.min(10, Math.max(0.1, factorRaw)); }
+        this.scaleFactorsByKey.set(key, factor);
+        logCalc(key, valsForCalc?.length||0, used, center?.toFixed?.call(center,6)||center, factorRaw?.toFixed?.call(factorRaw,6)||factorRaw, factor?.toFixed?.call(factor,6)||factor);
+      }
     }
   }
 
@@ -861,7 +951,9 @@ class TimeframeManager {
       }
     }
     this.applyMAVisibility();
-    try { chart.priceScale('left').setAutoScale(true); } catch(_) {}
+    if (this.yAxisControl !== 'Left') {
+      try { chart.priceScale('left').setAutoScale(true); } catch(_) {}
+    }
   }
 }
 
