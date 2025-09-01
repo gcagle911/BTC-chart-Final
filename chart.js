@@ -98,15 +98,14 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
   leftPriceScale: { 
     visible: true, // LEFT y-axis for Bid Spread MAs
     scaleMargins: {
-      top: 0.02,
-      bottom: 0.02,
+      top: 0.15,
+      bottom: 0.15,
     },
     borderVisible: false,
     autoScale: true,
     entireTextOnly: false,
     ticksVisible: true,
     mode: LightweightCharts.PriceScaleMode.Normal,
-    alignLabels: false,
   },
   timeScale: { 
     timeVisible: true, 
@@ -383,7 +382,7 @@ class TimeframeManager {
       }
     }
 
-    // Build and plot per-layer running average (white line) always
+    // Build and plot per-layer running average (white line) gated by visibility
     for (const layerKey of activeLayers) {
       const series = layerToSeries.get(layerKey);
       if (!series || series.length === 0) continue;
@@ -399,11 +398,20 @@ class TimeframeManager {
         const avg = sum / count;
         avgPoints.push({ time: p.time, value: avg });
       }
+      // Store raw for scaling
+      if (!this.avgRawDataByLayer) this.avgRawDataByLayer = new Map();
+      this.avgRawDataByLayer.set(layerKey, avgPoints);
+      const factor = this.normalizeEnabled ? (this.scaleFactorsByKey.get(`avg|${layerKey}`) || 1) : 1;
+      const scaled = factor === 1 ? avgPoints : avgPoints.map(pt => ({ time: pt.time, value: pt.value * factor }));
       if (isUpdate) {
-        avgPoints.forEach(pt => avgSeries.update(pt));
+        scaled.forEach(pt => avgSeries.update(pt));
       } else {
-        avgSeries.setData(avgPoints);
+        avgSeries.setData(scaled);
       }
+      // Visibility follows cumulative toggle
+      avgSeries.applyOptions({ visible: !!this.cumulativeAvgVisible });
+      const suffix = this.normalizeEnabled ? ` ×${(factor).toFixed(2)}` : '';
+      avgSeries.applyOptions({ title: `${formatLayerShort(layerKey)} Avg${suffix}` });
     }
 
     // Calculate and set/update MA series for each combination
@@ -476,6 +484,13 @@ class TimeframeManager {
         const suffix = this.normalizeEnabled ? ` ×${factor.toFixed(2)}` : '';
         series.applyOptions({ title: baseTitle + suffix });
       }
+      // Ensure left scale stays autoscaled with margins
+      chart.priceScale('left').applyOptions({
+        mode: LightweightCharts.PriceScaleMode.Normal,
+        autoScale: true,
+        scaleMargins: { top: 0.15, bottom: 0.15 }
+      });
+      chart.priceScale('left').setAutoScale(true);
     } catch (e) {
       console.warn('Failed to apply MA visibility:', e);
     }
@@ -705,8 +720,14 @@ class TimeframeManager {
 
     // Subscribe to visible range changes to recompute scaling (debounced)
     try {
-      chart.timeScale().subscribeVisibleTimeRangeChange(() => this.recomputeScaleFactorsAndRefresh());
+      const debounced = () => this.recomputeScaleFactorsAndRefresh();
+      chart.timeScale().subscribeVisibleTimeRangeChange(debounced);
     } catch (_) {}
+  }
+
+  toggleCumulativeAvg(enabled) {
+    this.cumulativeAvgVisible = !!enabled;
+    this.recomputeScaleFactorsAndRefresh();
   }
 
   setNormalize(enabled) {
@@ -747,10 +768,20 @@ class TimeframeManager {
         if (this.isSeriesVisible(key)) { referenceKey = key; break; }
       }
     }
+    // If still none and cumulative avg is visible, synthesize reference as first layer avg
+    if (!referenceKey && this.cumulativeAvgVisible) {
+      // choose any existing avg series as reference
+      const firstAvg = Array.from(this.avgSeriesByLayer.keys())[0];
+      if (firstAvg) {
+        referenceKey = `avg|${firstAvg}`; // special marker
+      }
+    }
     if (!referenceKey) return;
 
     const visible = this.getVisibleTimeRange();
-    const refData = this.maRawDataByKey.get(referenceKey) || [];
+    const refData = referenceKey.startsWith('avg|')
+      ? (this.avgRawDataByLayer?.get(referenceKey.split('|')[1]) || [])
+      : (this.maRawDataByKey.get(referenceKey) || []);
     const refVals = this.valuesInRange(refData, visible);
     const refMedian = this.median(refVals) ?? this.mean(refVals) ?? 1;
 
@@ -760,11 +791,16 @@ class TimeframeManager {
       const vals = this.valuesInRange(data, visible);
       let m = this.median(vals);
       if (m == null || !isFinite(m) || m === 0) m = this.mean(vals);
+      let factor = 1;
       if (m == null || !isFinite(m) || m === 0) {
-        this.scaleFactorsByKey.set(key, 1);
+        factor = 1;
       } else {
-        this.scaleFactorsByKey.set(key, refMedian / m);
+        factor = refMedian / m;
       }
+      // Clamp factors to [0.1, 10]
+      if (factor < 0.1) factor = 0.1;
+      if (factor > 10) factor = 10;
+      this.scaleFactorsByKey.set(key, factor);
     }
   }
 
@@ -803,10 +839,26 @@ class TimeframeManager {
       const [layerKey, durationStr] = key.split('|');
       const duration = parseInt(durationStr, 10);
       const baseTitle = `${formatLayerShort(layerKey)}MA${duration}`;
-      const suffix = this.normalizeEnabled ? ` ×${(factor).toFixed(2)}` : '';
+      const clampedNote = this.normalizeEnabled && (factor <= 0.1001 || factor >= 9.999) ? ' (clamped)' : '';
+      const suffix = this.normalizeEnabled ? ` ×${(factor).toFixed(2)}${clampedNote}` : '';
       series.applyOptions({ title: baseTitle + suffix });
     }
+    // Update cumulative avg titles when visible
+    if (this.avgRawDataByLayer) {
+      for (const [layerKey, raw] of this.avgRawDataByLayer.entries()) {
+        const series = this.avgSeriesByLayer.get(layerKey);
+        if (!series) continue;
+        const factor = this.normalizeEnabled ? (this.scaleFactorsByKey.get(`avg|${layerKey}`) || 1) : 1;
+        const points = raw.map(p => ({ time: p.time, value: p.value * factor }));
+        series.setData(points);
+        const clampedNote = this.normalizeEnabled && (factor <= 0.1001 || factor >= 9.999) ? ' (clamped)' : '';
+        const suffix = this.normalizeEnabled ? ` ×${(factor).toFixed(2)}${clampedNote}` : '';
+        series.applyOptions({ title: `${formatLayerShort(layerKey)} Avg${suffix}` });
+        series.applyOptions({ visible: !!this.cumulativeAvgVisible });
+      }
+    }
     this.applyMAVisibility();
+    try { chart.priceScale('left').setAutoScale(true); } catch(_) {}
   }
 }
 
@@ -859,6 +911,10 @@ function toggleMADuration(duration, enabled) {
 
 function toggleNormalize(enabled) {
   manager.setNormalize(enabled);
+}
+
+function toggleCumulativeAvg(enabled) {
+  manager.toggleCumulativeAvg(enabled);
 }
 
 // Enhanced zoom functions with MASSIVE zoom range like TradingView
