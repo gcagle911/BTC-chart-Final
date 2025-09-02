@@ -478,50 +478,61 @@ class TimeframeManager {
 
   async initializeChart() {
     try {
-      this.showStatus(`Loading ${this.currentSymbol} data...`);
-
-      // 1. Fetch recent data
-      const recentUrl = typeof this.dataSource.recent === 'function' ? this.dataSource.recent() : this.dataSource.recent;
-      const recentRes = await fetch(recentUrl);
-      const recentData = normalizeApiData(await recentRes.json());
-
-      // 2. Fetch historical data
-      const historicalUrl = typeof this.dataSource.historical === 'function' ? this.dataSource.historical() : this.dataSource.historical;
-      const historicalRes = await fetch(historicalUrl);
-      const historicalData = normalizeApiData(await historicalRes.json());
-
-      // 3. Find earliest timestamp in recent.json
-      const recentStart = new Date(recentData[0].time).getTime();
-
-      // 4. Filter historical data to only include data older than recentStart
-      const filteredHistorical = historicalData.filter(d => new Date(d.time).getTime() < recentStart);
-
-      // 5. Combine and sort
-      const combined = [...filteredHistorical, ...recentData]
-        .sort((a, b) => new Date(a.time) - new Date(b.time));
-
-      // 6. Deduplicate by timestamp
-      const deduped = [];
-      const seen = new Set();
-      for (const d of combined) {
-        const t = d.time;
-        if (!seen.has(t)) {
-          deduped.push(d);
-          seen.add(t);
-        }
-      }
-
-      // 7. Set and process
-      this.rawData = deduped;
+      this.showStatus(`Loading all ${this.currentSymbol} days...`);
+      const allData = await this.loadAllAvailableDays();
+      this.rawData = allData;
       this.lastTimestamp = 0;
-      this.processAndSetData(deduped);
+      this.processAndSetData(allData);
       this.isFullDataLoaded = true;
       this.hideStatus();
-      console.log(`✅ ${this.currentSymbol} chart loaded with ${deduped.length} points`);
+      console.log(`✅ ${this.currentSymbol} chart loaded with ${allData.length} points across all available days`);
     } catch (err) {
       console.error('❌ Loading error:', err);
       this.showStatus('Loading error');
     }
+  }
+
+  async fetchDayData(dateStr) {
+    try {
+      const url = typeof this.dataSource.recent === 'function'
+        ? `${API_BASE}?exchange=${API_EXCHANGE}&asset=${this.currentSymbol}&day=${dateStr}`
+        : this.dataSource.recent; // fallback
+      const res = await fetch(url);
+      if (!res.ok) return [];
+      const json = await res.json();
+      const data = normalizeApiData(json);
+      return Array.isArray(data) ? data : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  async loadAllAvailableDays() {
+    const combined = [];
+    const seen = new Set();
+    const maxLookbackDays = 3650; // up to 10 years
+    const maxConsecutiveMisses = 30; // stop if we miss an entire month
+    let misses = 0;
+
+    for (let offset = 0; offset < maxLookbackDays; offset++) {
+      const day = getDateStringWithOffset(-offset);
+      this.showStatus(`Loading ${this.currentSymbol} ${day}...`);
+      const dayData = await this.fetchDayData(day);
+      if (!dayData || dayData.length === 0) {
+        misses++;
+        if (misses >= maxConsecutiveMisses && combined.length > 0) break;
+        continue;
+      }
+      misses = 0;
+      for (const d of dayData) {
+        const t = d.time;
+        if (!seen.has(t)) { combined.push(d); seen.add(t); }
+      }
+    }
+
+    combined.sort((a, b) => new Date(a.time) - new Date(b.time));
+    console.log(`📅 Loaded ${combined.length} points across ${this.currentSymbol} all days`);
+    return combined;
   }
 
   showStatus(message) {
@@ -559,8 +570,9 @@ class TimeframeManager {
 
   async fetchAndUpdate() {
     try {
-      const recentUrl = typeof this.dataSource.recent === 'function' ? this.dataSource.recent() : this.dataSource.recent;
-      const res = await fetch(recentUrl);
+      const today = getDateStringWithOffset(0);
+      const url = `${API_BASE}?exchange=${API_EXCHANGE}&asset=${this.currentSymbol}&day=${today}`;
+      const res = await fetch(url);
       const data = normalizeApiData(await res.json());
 
       // Find new data points
@@ -584,14 +596,12 @@ class TimeframeManager {
     if (!this.isFullDataLoaded) return;
     
     try {
-      console.log(`🔄 Refreshing historical data for ${this.currentSymbol}...`);
-      const historicalUrl = typeof this.dataSource.historical === 'function' ? this.dataSource.historical() : this.dataSource.historical;
-      const res = await fetch(historicalUrl);
-      const data = normalizeApiData(await res.json());
+      console.log(`🔄 Refreshing all days for ${this.currentSymbol}...`);
+      const data = await this.loadAllAvailableDays();
       this.rawData = data;
       this.lastTimestamp = 0;
       this.processAndSetData(data);
-      console.log(`✅ Historical data refreshed: ${data.length} total points`);
+      console.log(`✅ All days refreshed: ${data.length} total points`);
     } catch (err) {
       console.error('❌ Historical refresh failed:', err);
     }
