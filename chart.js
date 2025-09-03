@@ -3,7 +3,7 @@
 
 // Data sources mapped by symbol
 const API_BASE = 'https://multiexchangereal-j4ep.onrender.com/files/json';
-const API_EXCHANGE = 'coinbase';
+let API_EXCHANGE = 'coinbase';
 
 function formatDateYYYYMMDD(date) {
   const year = date.getUTCFullYear();
@@ -697,6 +697,29 @@ class TimeframeManager {
     this.startUpdateCycle();
   }
 
+  async switchExchange(exchange) {
+    if (!exchange || API_EXCHANGE === exchange) return;
+    console.log(`🔁 Switching exchange to ${exchange}`);
+    API_EXCHANGE = exchange;
+    // Reload everything for current symbol using new exchange
+    if (this.updateInterval) clearInterval(this.updateInterval);
+    if (this.refreshInterval) clearInterval(this.refreshInterval);
+    // Clear series
+    try {
+      priceSeries.setData([]);
+      for (const [key, series] of this.maSeriesByKey.entries()) { chart.removeSeries(series); }
+      this.maSeriesByKey.clear();
+      for (const [key, series] of this.avgSeriesByLayer.entries()) { chart.removeSeries(series); }
+      this.avgSeriesByLayer.clear();
+    } catch(_) {}
+    this.rawData = [];
+    this.lastTimestamp = 0;
+    this.isFullDataLoaded = false;
+    await this.initializeChart();
+    this.applyAutoScale();
+    this.startUpdateCycle();
+  }
+
   startUpdateCycle() {
     // Clear existing intervals
     if (this.updateInterval) clearInterval(this.updateInterval);
@@ -1024,6 +1047,10 @@ function toggleCumulativeAvg(enabled) {
 
 function setYAxisControl(mode) {
   manager.setYAxisControl(mode);
+}
+
+function setExchange(exchange) {
+  manager.switchExchange(exchange);
 }
 
 // Enhanced zoom functions with MASSIVE zoom range like TradingView

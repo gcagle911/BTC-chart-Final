@@ -185,6 +185,11 @@
   <div id="chart-container">
     <div id="left-axis-overlay"></div>
     <div id="timeframe-controls">
+      <label class="timeframe-label" for="exchange-dropdown">Exchange:</label>
+      <select id="exchange-dropdown" onchange="setExchange(this.value)">
+        <option value="coinbase" selected>Coinbase</option>
+        <option value="binanceus">Binance.US</option>
+      </select>
       <label class="timeframe-label" for="symbol-dropdown">Symbol:</label>
       <select id="symbol-dropdown" onchange="setSymbol(this.value)">
         <option value="BTC" selected>BTC</option>
