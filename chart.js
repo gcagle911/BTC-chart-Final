@@ -792,14 +792,15 @@ class TimeframeManager {
 
     const onDown = (e) => {
       dragging = true;
-      startY = e.clientY || (e.touches && e.touches[0]?.clientY) || 0;
+      startY = (e.touches && e.touches[0]?.clientY) || e.clientY || 0;
       const r = getRange(); startMin = r.min; startMax = r.max;
       ps().setAutoScale(false);
+      e.stopPropagation();
       e.preventDefault();
     };
     const onMove = (e) => {
       if (!dragging) return;
-      const currentY = e.clientY || (e.touches && e.touches[0]?.clientY) || startY;
+      const currentY = (e.touches && e.touches[0]?.clientY) || e.clientY || startY;
       const dy = currentY - startY;
       const ser = anyLeftSeries();
       if (!ser) return;
@@ -814,7 +815,7 @@ class TimeframeManager {
       e.stopPropagation();
       e.preventDefault();
     };
-    const onUp = () => { dragging = false; };
+    const onUp = (e) => { dragging = false; e && e.stopPropagation && e.stopPropagation(); };
     const onDbl = () => {
       try { ps().setAutoScale(true); } catch(_) {}
       setTimeout(() => { try { ps().setAutoScale(false); } catch(_) {} }, 50);
