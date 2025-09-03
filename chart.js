@@ -99,7 +99,7 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
     visible: true,
     scaleMargins: { top: 0.15, bottom: 0.15 },
     borderVisible: true,
-    autoScale: true,
+    autoScale: false,
     mode: LightweightCharts.PriceScaleMode.Normal,
   },
   timeScale: { 
@@ -121,7 +121,7 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
     horzTouchDrag: true,
     vertTouchDrag: true,
   },
-  handleScale: { axisPressedMouseMove: { time: true, price: true }, mouseWheel: true, pinch: true },
+  handleScale: { axisPressedMouseMove: { time: true, price: false }, mouseWheel: true, pinch: true },
 });
 
 // Price series on RIGHT y-axis
@@ -813,7 +813,10 @@ class TimeframeManager {
       e.preventDefault();
     };
     const onUp = () => { dragging = false; };
-    const onDbl = () => { try { ps().setAutoScale(true); } catch(_) {} };
+    const onDbl = () => {
+      try { ps().setAutoScale(true); } catch(_) {}
+      setTimeout(() => { try { ps().setAutoScale(false); } catch(_) {} }, 50);
+    };
 
     overlay.addEventListener('mousedown', onDown, { passive: false });
     overlay.addEventListener('mousemove', onMove, { passive: false });
