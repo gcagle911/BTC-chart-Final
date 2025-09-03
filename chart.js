@@ -121,7 +121,7 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
     horzTouchDrag: true,
     vertTouchDrag: true,
   },
-  handleScale: { axisPressedMouseMove: { time: true, price: false }, mouseWheel: true, pinch: true },
+  handleScale: { axisPressedMouseMove: { time: true, price: true }, mouseWheel: true, pinch: true },
 });
 
 // Price series on RIGHT y-axis
@@ -810,6 +810,8 @@ class TimeframeManager {
       const newMax = startMax + deltaUnits;
       try { ps().applyOptions({ autoScale: false }); } catch(_) {}
       try { ps().setPriceRange?.({ minValue: newMin, maxValue: newMax }); } catch(_) {}
+      // Prevent chart from interpreting this as a gesture that resets autoscale
+      e.stopPropagation();
       e.preventDefault();
     };
     const onUp = () => { dragging = false; };
