@@ -210,6 +210,7 @@ class TimeframeManager {
     this.scaleFactorsByKey = new Map(); // key -> factor number
     this.normalizeEnabled = false;
     this.scaleRecomputeTimeout = null;
+    this.autoRefitPending = false;
     
     this.timeframes = {
       '1m': { seconds: 60, label: '1 Minute' },
