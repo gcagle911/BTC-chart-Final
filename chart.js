@@ -175,6 +175,22 @@ function formatLayerShort(layerKey) {
   return 'L?';
 }
 
+// Unique bright colors per (layer,duration)
+const LAYER_ORDER = ['spread_L5_pct_avg','spread_L20_pct_avg','spread_L50_pct_avg','spread_L100_pct_avg'];
+const DURATION_ORDER = [20, 50, 100, 200];
+const BRIGHT_PALETTE = [
+  '#e6194B', '#3cb44b', '#ffe119', '#4363d8',
+  '#f58231', '#911eb4', '#46f0f0', '#f032e6',
+  '#bcf60c', '#fabebe', '#008080', '#e6beff',
+  '#9A6324', '#fffac8', '#800000', '#aaffc3'
+];
+function colorFor(layerKey, duration) {
+  const li = Math.max(0, LAYER_ORDER.indexOf(layerKey));
+  const di = Math.max(0, DURATION_ORDER.indexOf(duration));
+  const idx = li * DURATION_ORDER.length + di;
+  return BRIGHT_PALETTE[idx % BRIGHT_PALETTE.length];
+}
+
 // Restored proper timeframe manager
 class TimeframeManager {
   constructor() {
@@ -401,13 +417,7 @@ class TimeframeManager {
       for (const duration of activeDurations) {
         const key = `${layerKey}|${duration}`;
         if (!this.maSeriesByKey.has(key)) {
-          const colorMap = {
-            20: '#00BFFF',
-            50: '#FF6B6B',
-            100: '#4ADF86',
-            200: '#FFD700',
-          };
-          const color = colorMap[duration] || '#AAAAAA';
+          const color = colorFor(layerKey, duration);
           const title = `${formatLayerShort(layerKey)}MA${duration}`;
           this.maSeriesByKey.set(key, createMASeries(color, title));
           // start hidden; visibility applied after computation
