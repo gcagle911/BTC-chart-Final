@@ -478,10 +478,10 @@ class TimeframeManager {
       // Ensure left scale stays autoscaled with margins
       chart.priceScale('left').applyOptions({
         mode: LightweightCharts.PriceScaleMode.Normal,
-        autoScale: true,
+        autoScale: false,
         scaleMargins: { top: 0.15, bottom: 0.15 }
       });
-      chart.priceScale('left').setAutoScale(true);
+      // Do not auto-fit left; only manual control moves it
     } catch (e) {
       console.warn('Failed to apply MA visibility:', e);
     }
@@ -759,7 +759,7 @@ class TimeframeManager {
       this.attachLeftAxisOverlayHandlers(overlay);
     } else {
       overlay.style.display = 'none';
-      try { chart.priceScale('left').setAutoScale(true); } catch (_) {}
+      // Keep left in manual mode unless explicitly reset
     }
   }
 
@@ -842,9 +842,7 @@ class TimeframeManager {
     this.scaleRecomputeTimeout = setTimeout(() => {
       this.computeScaleFactorsForVisibleRange();
       this.refreshVisibleMALines();
-      if (this.yAxisControl !== 'Left') {
-        try { chart.priceScale('left').setAutoScale(true); } catch (_) {}
-      }
+      // Never auto-fit left
     }, 250);
   }
 
@@ -995,9 +993,7 @@ class TimeframeManager {
       }
     }
     this.applyMAVisibility();
-    if (this.yAxisControl !== 'Left') {
-      try { chart.priceScale('left').setAutoScale(true); } catch(_) {}
-    }
+    // Never auto-fit left
   }
 }
 
@@ -1106,8 +1102,11 @@ function fitContent() {
 // Enhanced Y-axis scale functions for dual axis
 function resetLeftScale() {
   if (window.chart) {
-    if (manager && manager.yAxisControl === 'Left') return;
+    // Explicit manual reset only; do not auto-fit unless called
     window.chart.priceScale('left').setAutoScale(true);
+    setTimeout(() => {
+      window.chart.priceScale('left').setAutoScale(false);
+    }, 50);
   }
 }
 
