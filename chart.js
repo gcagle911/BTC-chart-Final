@@ -229,7 +229,7 @@ class TimeframeManager {
   applyAutoScale() {
     try {
       chart.priceScale('right').applyOptions({ autoScale: true });
-      chart.priceScale('left').applyOptions({ autoScale: true });
+      if (this.yAxisControl !== 'Left') chart.priceScale('left').applyOptions({ autoScale: true });
     } catch (e) {
       console.error('Failed to apply auto-scale:', e);
     }
@@ -1106,19 +1106,14 @@ function fitContent() {
 // Enhanced Y-axis scale functions for dual axis
 function resetLeftScale() {
   if (window.chart) {
-    window.chart.priceScale('left').applyOptions({ autoScale: true });
-    setTimeout(() => {
-      window.chart.priceScale('left').applyOptions({ autoScale: false });
-    }, 100);
+    if (manager && manager.yAxisControl === 'Left') return;
+    window.chart.priceScale('left').setAutoScale(true);
   }
 }
 
 function resetRightScale() {
   if (window.chart) {
-    window.chart.priceScale('right').applyOptions({ autoScale: true });
-    setTimeout(() => {
-      window.chart.priceScale('right').applyOptions({ autoScale: false });
-    }, 100);
+    window.chart.priceScale('right').setAutoScale(true);
   }
 }
 
