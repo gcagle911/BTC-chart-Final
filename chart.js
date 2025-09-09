@@ -665,9 +665,10 @@ class TimeframeManager {
       }
     }
 
-    // Update volume chart if enabled
-    if (this.volumeIndicatorEnabled) {
-      this.updateVolumeChart();
+    // Update volume chart if enabled (only after main processing is complete)
+    if (this.volumeIndicatorEnabled && !isUpdate) {
+      // Only update on full data loads, not on incremental updates
+      setTimeout(() => this.updateVolumeChart(), 50);
     }
 
     if (isUpdate) {
@@ -1050,23 +1051,23 @@ class TimeframeManager {
       // Show indicator panel
       indicatorPanel.style.display = 'block';
       
-      // Adjust main chart height  
-      const mainChart = document.getElementById('main-chart');
-      mainChart.style.height = 'calc(100% - 200px)';
+      // DON'T touch the main chart - let CSS handle the layout
       
       // Create volume chart
-      const chart = createVolumeChart();
-      if (chart) {
-        console.log('✅ Volume chart created successfully');
-        
-        // Process existing data if available
-        if (this.rawData && this.rawData.length > 0) {
-          console.log(`📊 Processing ${this.rawData.length} existing data points for volume`);
-          this.updateVolumeChart();
+      setTimeout(() => {
+        const chart = createVolumeChart();
+        if (chart) {
+          console.log('✅ Volume chart created successfully');
+          
+          // Process existing data if available
+          if (this.rawData && this.rawData.length > 0) {
+            console.log(`📊 Processing ${this.rawData.length} existing data points for volume`);
+            this.updateVolumeChart();
+          }
+        } else {
+          console.error('❌ Failed to create volume chart');
         }
-      } else {
-        console.error('❌ Failed to create volume chart');
-      }
+      }, 100);
       
     } else {
       // Hide indicator panel
@@ -1074,18 +1075,9 @@ class TimeframeManager {
       
       // Destroy volume chart
       destroyVolumeChart();
-      
-      // Restore main chart height
-      const mainChart = document.getElementById('main-chart');
-      mainChart.style.height = '100%';
     }
     
-    // Resize main chart
-    setTimeout(() => {
-      if (window.chart) {
-        window.chart.resize();
-      }
-    }, 50);
+    // DON'T resize the main chart - it should be unaffected
   }
 
   updateVolumeChart() {
