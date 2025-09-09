@@ -1124,13 +1124,24 @@ class TimeframeManager {
     
     for (const item of dataToUse) {
       if (item.vol_L50_bids && item.vol_L50_asks) {
-        const time = item.time;
+        // Convert time to Unix timestamp for LightweightCharts
+        const time = this.toUnixTimestamp(item.time);
         const bidsValue = parseFloat(item.vol_L50_bids);
         const asksValue = parseFloat(item.vol_L50_asks);
         
         bidsData.push({ time, value: bidsValue });
         asksData.push({ time, value: asksValue });
         itemsWithVolume++;
+        
+        // Debug first few items
+        if (itemsWithVolume <= 3) {
+          console.log(`🔍 Volume item ${itemsWithVolume}:`, {
+            originalTime: item.time,
+            convertedTime: time,
+            bids: bidsValue,
+            asks: asksValue
+          });
+        }
       } else {
         itemsWithoutVolume++;
         if (itemsWithoutVolume <= 3) {
