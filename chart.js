@@ -202,56 +202,76 @@ let volumeAsksSeries = null;
 let volumeIndicatorEnabled = false;
 
 function createVolumeChart() {
-  if (volumeChart) return volumeChart;
+  if (volumeChart) {
+    console.log('📊 Volume chart already exists, returning existing chart');
+    return volumeChart;
+  }
+
+  console.log('📊 Creating new volume chart');
   
-  volumeChart = LightweightCharts.createChart(document.getElementById('volume-chart'), {
-    layout: {
-      background: { color: '#131722' },
-      textColor: '#d1d4dc',
-    },
-    grid: {
-      vertLines: { color: 'rgba(42, 46, 57, 0.5)' },
-      horzLines: { color: 'rgba(42, 46, 57, 0.5)' },
-    },
-    crosshair: {
-      mode: LightweightCharts.CrosshairMode.Normal,
-    },
-    rightPriceScale: {
-      visible: true,
-      borderColor: 'rgba(197, 203, 206, 0.8)',
-      scaleMargins: { top: 0.1, bottom: 0.1 },
-    },
-    timeScale: {
-      visible: false, // Hide time scale on volume chart to sync with main chart
-      borderColor: 'rgba(197, 203, 206, 0.8)',
-    },
-    handleScroll: {
-      mouseWheel: false, // Disable independent scrolling
-      pressedMouseMove: false,
-      horzTouchDrag: false,
-      vertTouchDrag: false,
-    },
-    handleScale: {
-      axisPressedMouseMove: false,
-      mouseWheel: false,
-      pinch: false,
-    },
-  });
+  try {
+    const volumeChartElement = document.getElementById('volume-chart');
+    if (!volumeChartElement) {
+      console.error('❌ Volume chart element not found');
+      return null;
+    }
 
-  // Create volume series
-  volumeBidsSeries = volumeChart.addHistogramSeries({
-    color: '#26a69a', // Green for bids
-    priceFormat: { type: 'volume' },
-    title: 'Bids Volume',
-  });
+    volumeChart = LightweightCharts.createChart(volumeChartElement, {
+      layout: {
+        background: { color: '#131722' },
+        textColor: '#d1d4dc',
+      },
+      grid: {
+        vertLines: { color: 'rgba(42, 46, 57, 0.5)' },
+        horzLines: { color: 'rgba(42, 46, 57, 0.5)' },
+      },
+      crosshair: {
+        mode: LightweightCharts.CrosshairMode.Normal,
+      },
+      rightPriceScale: {
+        visible: true,
+        borderColor: 'rgba(197, 203, 206, 0.8)',
+        scaleMargins: { top: 0.1, bottom: 0.1 },
+      },
+      timeScale: {
+        visible: false, // Hide time scale on volume chart to sync with main chart
+        borderColor: 'rgba(197, 203, 206, 0.8)',
+      },
+      handleScroll: {
+        mouseWheel: false, // Disable independent scrolling
+        pressedMouseMove: false,
+        horzTouchDrag: false,
+        vertTouchDrag: false,
+      },
+      handleScale: {
+        axisPressedMouseMove: false,
+        mouseWheel: false,
+        pinch: false,
+      },
+    });
 
-  volumeAsksSeries = volumeChart.addHistogramSeries({
-    color: '#ef5350', // Red for asks  
-    priceFormat: { type: 'volume' },
-    title: 'Asks Volume',
-  });
+    console.log('📊 Volume chart created successfully');
 
-  return volumeChart;
+    // Create volume series
+    volumeBidsSeries = volumeChart.addHistogramSeries({
+      color: '#26a69a', // Green for bids
+      priceFormat: { type: 'volume' },
+      title: 'Bids Volume',
+    });
+
+    volumeAsksSeries = volumeChart.addHistogramSeries({
+      color: '#ef5350', // Red for asks  
+      priceFormat: { type: 'volume' },
+      title: 'Asks Volume',
+    });
+
+    console.log('📊 Volume series created successfully');
+    return volumeChart;
+    
+  } catch (error) {
+    console.error('❌ Error creating volume chart:', error);
+    return null;
+  }
 }
 
 function destroyVolumeChart() {
@@ -1015,40 +1035,70 @@ class TimeframeManager {
   }
 
   processVolumeData(bucketedData, isUpdate) {
+    if (!this.volumeIndicatorEnabled) {
+      console.log('📊 Volume indicator disabled, skipping volume data processing');
+      return;
+    }
+
+    console.log(`📊 Processing volume data: ${bucketedData.length} data points, isUpdate: ${isUpdate}`);
+    
     const volumePoints = [];
+    let validPoints = 0;
     
     for (const item of bucketedData) {
-      if (item.vol_L50_bids !== null && item.vol_L50_asks !== null) {
+      if (item.vol_L50_bids !== null && item.vol_L50_bids !== undefined && 
+          item.vol_L50_asks !== null && item.vol_L50_asks !== undefined) {
         volumePoints.push({
           time: item.time,
-          bids: item.vol_L50_bids,
-          asks: item.vol_L50_asks
+          bids: parseFloat(item.vol_L50_bids),
+          asks: parseFloat(item.vol_L50_asks)
         });
+        validPoints++;
       }
     }
     
-    if (volumePoints.length === 0) return;
+    console.log(`📊 Found ${validPoints} valid volume points out of ${bucketedData.length} total points`);
     
-    if (isUpdate) {
-      // Add new volume data points
-      volumePoints.forEach(point => {
-        this.volumeData.push(point);
-        if (volumeBidsSeries) {
-          volumeBidsSeries.update({ time: point.time, value: point.bids });
+    if (volumePoints.length === 0) {
+      console.warn('⚠️  No valid volume data found');
+      return;
+    }
+
+    // Log sample data for debugging
+    if (volumePoints.length > 0) {
+      console.log('📊 Sample volume data:', volumePoints.slice(0, 3));
+    }
+    
+    try {
+      if (isUpdate) {
+        // Add new volume data points
+        volumePoints.forEach(point => {
+          this.volumeData.push(point);
+          if (volumeBidsSeries && volumeAsksSeries) {
+            volumeBidsSeries.update({ time: point.time, value: point.bids });
+            volumeAsksSeries.update({ time: point.time, value: point.asks });
+          } else {
+            console.warn('⚠️  Volume series not available for update');
+          }
+        });
+        console.log(`✅ Updated volume chart with ${volumePoints.length} new points`);
+      } else {
+        // Set complete volume dataset
+        this.volumeData = volumePoints;
+        if (volumeBidsSeries && volumeAsksSeries) {
+          const bidsData = volumePoints.map(p => ({ time: p.time, value: p.bids }));
+          const asksData = volumePoints.map(p => ({ time: p.time, value: p.asks }));
+          
+          console.log(`📊 Setting volume data: ${bidsData.length} bids points, ${asksData.length} asks points`);
+          volumeBidsSeries.setData(bidsData);
+          volumeAsksSeries.setData(asksData);
+          console.log('✅ Volume chart data set successfully');
+        } else {
+          console.error('❌ Volume series not available - chart may not be created');
         }
-        if (volumeAsksSeries) {
-          volumeAsksSeries.update({ time: point.time, value: point.asks });
-        }
-      });
-    } else {
-      // Set complete volume dataset
-      this.volumeData = volumePoints;
-      if (volumeBidsSeries && volumeAsksSeries) {
-        const bidsData = volumePoints.map(p => ({ time: p.time, value: p.bids }));
-        const asksData = volumePoints.map(p => ({ time: p.time, value: p.asks }));
-        volumeBidsSeries.setData(bidsData);
-        volumeAsksSeries.setData(asksData);
       }
+    } catch (error) {
+      console.error('❌ Error processing volume data:', error);
     }
   }
 
