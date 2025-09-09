@@ -246,9 +246,9 @@ class TimeframeManager {
     this.isFullDataLoaded = false;
     this.updateInterval = null;
     this.refreshInterval = null;
-    // Multi-layer MA controls
-    this.selectedLayers = new Set(); // e.g., 'spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg'
-    this.selectedDurations = new Set(); // e.g., 20, 50, 100, 200
+    // Multi-layer MA controls with sensible defaults
+    this.selectedLayers = new Set(['spread_L50_pct_avg']); // Default to L50 layer
+    this.selectedDurations = new Set([50, 200]); // Default to 50 and 200 period MAs
     this.maSeriesByKey = new Map(); // key: `${layerKey}|${duration}` -> lineSeries
     this.avgSeriesByLayer = new Map(); // key: layerKey -> white average line series
     this.maRawDataByKey = new Map(); // key: `${layerKey}|${duration}` -> raw [{time,value}]
@@ -273,8 +273,10 @@ class TimeframeManager {
 
   applyAutoScale() {
     try {
+      // Only auto-scale right axis (price data)
       chart.priceScale('right').applyOptions({ autoScale: true });
-      if (this.yAxisControl !== 'Left') chart.priceScale('left').applyOptions({ autoScale: true });
+      // Never auto-scale left axis to prevent MA visibility issues
+      // Left axis is manually controlled via Y-axis drag overlay
     } catch (e) {
       console.error('Failed to apply auto-scale:', e);
     }
@@ -509,26 +511,41 @@ class TimeframeManager {
 
   applyMAVisibility() {
     try {
+      let visibleCount = 0;
+      
+      // Apply MA series visibility
       for (const [key, series] of this.maSeriesByKey.entries()) {
         const [layerKey, durationStr] = key.split('|');
         const duration = parseInt(durationStr, 10);
-        const visible = this.selectedLayers.has(layerKey) && this.selectedDurations.has(duration);
-        series.applyOptions({ visible });
+        const shouldBeVisible = this.selectedLayers.has(layerKey) && this.selectedDurations.has(duration);
+        
+        series.applyOptions({ visible: shouldBeVisible });
+        if (shouldBeVisible) visibleCount++;
+        
         // Update title suffix for current factor
         const factor = this.normalizeEnabled ? (this.scaleFactorsByKey.get(key) || 1) : 1;
         const baseTitle = `${formatLayerShort(layerKey)}MA${duration}`;
         const suffix = this.normalizeEnabled ? ` ×${factor.toFixed(2)}` : '';
         series.applyOptions({ title: baseTitle + suffix });
       }
-      // Ensure left scale stays autoscaled with margins
+      
+      // Apply cumulative avg visibility
+      for (const [layerKey, series] of this.avgSeriesByLayer.entries()) {
+        const avgVisible = !!this.cumulativeAvgVisible;
+        series.applyOptions({ visible: avgVisible });
+        if (avgVisible) visibleCount++;
+      }
+      
+      // Ensure left scale configuration is stable
       chart.priceScale('left').applyOptions({
         mode: LightweightCharts.PriceScaleMode.Normal,
-        autoScale: false,
+        autoScale: false, // Never auto-scale to prevent disappearing MAs
         scaleMargins: { top: 0.15, bottom: 0.15 }
       });
-      // Do not auto-fit left; only manual control moves it
+      
+      console.log(`✅ MA Visibility: ${visibleCount} series now visible`);
     } catch (e) {
-      console.warn('Failed to apply MA visibility:', e);
+      console.error('❌ Failed to apply MA visibility:', e);
     }
   }
 
@@ -704,7 +721,7 @@ class TimeframeManager {
     this.lastTimestamp = 0;
     this.processAndSetData(this.rawData);
     
-    // Re-apply y-axis autoscale on timeframe change
+    // Only auto-scale right axis on timeframe change
     this.applyAutoScale();
     console.log(`✅ Switched to ${this.timeframes[timeframe].label}`);
   }
@@ -712,7 +729,15 @@ class TimeframeManager {
   toggleLayer(layerKey, enabled) {
     const allowed = new Set(['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg']);
     if (!allowed.has(layerKey)) return;
-    if (enabled) this.selectedLayers.add(layerKey); else this.selectedLayers.delete(layerKey);
+    
+    if (enabled) {
+      this.selectedLayers.add(layerKey);
+    } else {
+      this.selectedLayers.delete(layerKey);
+    }
+    
+    console.log(`🔄 Layer ${layerKey}: ${enabled ? 'ENABLED' : 'DISABLED'}`);
+    
     // Recompute only if there are active durations; otherwise just update visibility
     if (this.selectedDurations.size > 0) {
       this.lastTimestamp = 0;
@@ -720,13 +745,22 @@ class TimeframeManager {
     } else {
       this.applyMAVisibility();
     }
-    this.applyAutoScale();
+    
+    // Don't auto-scale here - it interferes with MA visibility
   }
 
   toggleDuration(duration, enabled) {
     const allowed = new Set([20, 50, 100, 200]);
     if (!allowed.has(duration)) return;
-    if (enabled) this.selectedDurations.add(duration); else this.selectedDurations.delete(duration);
+    
+    if (enabled) {
+      this.selectedDurations.add(duration);
+    } else {
+      this.selectedDurations.delete(duration);
+    }
+    
+    console.log(`🔄 Duration ${duration}: ${enabled ? 'ENABLED' : 'DISABLED'}`);
+    
     // Ensure corresponding series exist if both layer(s) and this duration are active
     if (enabled && this.selectedLayers.size > 0) {
       this.lastTimestamp = 0;
@@ -917,8 +951,9 @@ class TimeframeManager {
     this.scaleRecomputeTimeout = setTimeout(() => {
       this.computeScaleFactorsForVisibleRange();
       this.refreshVisibleMALines();
-      // Never auto-fit left
-    }, 250);
+      // Ensure visibility is maintained after refresh
+      this.applyMAVisibility();
+    }, 100); // Reduced debounce time to minimize flicker
   }
 
   getVisibleTimeRange() {
@@ -1045,13 +1080,20 @@ class TimeframeManager {
       const factor = this.normalizeEnabled ? (this.scaleFactorsByKey.get(key) || 1) : 1;
       const points = raw.map(p => ({ time: p.time, value: p.value * factor }));
       series.setData(points);
+      
       // Update title with multiplier
       const [layerKey, durationStr] = key.split('|');
       const duration = parseInt(durationStr, 10);
       const baseTitle = `${formatLayerShort(layerKey)}MA${duration}`;
       const clampedNote = this.normalizeEnabled && (factor <= 0.1001 || factor >= 9.999) ? ' (clamped)' : '';
       const suffix = this.normalizeEnabled ? ` ×${(factor).toFixed(2)}${clampedNote}` : '';
-      series.applyOptions({ title: baseTitle + suffix });
+      
+      // IMPORTANT: Maintain visibility state during refresh
+      const shouldBeVisible = this.selectedLayers.has(layerKey) && this.selectedDurations.has(duration);
+      series.applyOptions({ 
+        title: baseTitle + suffix,
+        visible: shouldBeVisible  // Explicitly maintain visibility
+      });
     }
     // Update cumulative avg titles when visible
     if (this.avgRawDataByLayer) {
