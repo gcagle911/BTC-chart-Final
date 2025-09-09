@@ -1156,14 +1156,6 @@ class TimeframeManager {
         // Sync time range with main chart
         this.syncVolumeTimeRange();
         
-        // Test: Add some simple test data to verify chart rendering
-        setTimeout(() => {
-          console.log('🧪 Testing volume chart with sample data');
-          const testTime = Math.floor(Date.now() / 1000);
-          volumeBidsSeries.update({ time: testTime, value: 100 });
-          volumeAsksSeries.update({ time: testTime, value: 80 });
-        }, 500);
-        
       } catch (error) {
         console.error('❌ Error setting volume data:', error);
       }
