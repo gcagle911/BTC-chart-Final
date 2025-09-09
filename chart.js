@@ -5,6 +5,9 @@
 const API_BASE = 'https://storage.googleapis.com/bananazone';
 let API_EXCHANGE = 'coinbase';
 
+// Earliest available data date
+const EARLIEST_DATA_DATE = new Date('2025-01-09T00:00:00Z');
+
 function formatDateYYYYMMDD(date) {
   const year = date.getUTCFullYear();
   const month = String(date.getUTCMonth() + 1).padStart(2, '0');
@@ -529,11 +532,19 @@ class TimeframeManager {
   async loadAllAvailableDays() {
     const combined = [];
     const seen = new Set();
-    const maxLookbackDays = 3650; // up to 10 years
     const maxConsecutiveMisses = 30; // stop if we miss an entire month
     let misses = 0;
 
-    for (let offset = 0; offset < maxLookbackDays; offset++) {
+    for (let offset = 0; ; offset++) {
+      const currentDate = new Date();
+      currentDate.setUTCDate(currentDate.getUTCDate() - offset);
+      
+      // Stop if we've gone before the earliest available data
+      if (currentDate < EARLIEST_DATA_DATE) {
+        console.log(`📅 Reached earliest data date: ${formatDateYYYYMMDD(EARLIEST_DATA_DATE)}`);
+        break;
+      }
+      
       const day = getDateStringWithOffset(-offset);
       this.showStatus(`Loading ${this.currentSymbol} ${day}...`);
       const dayData = await this.fetchDayData(day);
