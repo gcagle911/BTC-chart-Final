@@ -565,7 +565,13 @@ class TimeframeManager {
         ma_50: item.ma_50 ?? null,
         ma_100: item.ma_100 ?? null,
         ma_200: item.ma_200 ?? null,
-        spread_avg_L20_pct: item.spread_avg_L20_pct ?? item.spread_pct ?? null
+        spread_avg_L20_pct: item.spread_avg_L20_pct ?? item.spread_pct ?? null,
+        // CRITICAL: Include ALL spread and volume fields for bucketing
+        spread_L5_pct_avg: item.spread_L5_pct_avg,
+        spread_L50_pct_avg: item.spread_L50_pct_avg,
+        spread_L100_pct_avg: item.spread_L100_pct_avg,
+        vol_L50_bids: item.vol_L50_bids,
+        vol_L50_asks: item.vol_L50_asks
       });
     });
 
@@ -586,6 +592,14 @@ class TimeframeManager {
         // Use consistent bucket timestamp for all timeframes
         const bucketTimestamp = new Date(bucketTime * 1000).toISOString();
         
+        // CRITICAL: Calculate average volume for the bucket
+        const avgVolBids = bucket.dataPoints
+          .filter(p => p.vol_L50_bids !== null)
+          .reduce((sum, p, _, arr) => sum + p.vol_L50_bids / arr.length, 0) || null;
+        const avgVolAsks = bucket.dataPoints
+          .filter(p => p.vol_L50_asks !== null)
+          .reduce((sum, p, _, arr) => sum + p.vol_L50_asks / arr.length, 0) || null;
+
         aggregated.push({
           time: bucketTimestamp,
           open: openPoint.price,
@@ -597,6 +611,13 @@ class TimeframeManager {
           ma_100: closeMAs.ma_100,
           ma_200: closeMAs.ma_200,
           spread_avg_L20_pct: closePoint.spread_avg_L20_pct,
+          // CRITICAL: Include spread fields from close point
+          spread_L5_pct_avg: closePoint.spread_L5_pct_avg,
+          spread_L50_pct_avg: closePoint.spread_L50_pct_avg,
+          spread_L100_pct_avg: closePoint.spread_L100_pct_avg,
+          // CRITICAL: Include aggregated volume data
+          vol_L50_bids: avgVolBids,
+          vol_L50_asks: avgVolAsks,
           bucketStart: bucketTime,
           dataPoints: bucket.dataPoints.length
         });
@@ -759,10 +780,10 @@ class TimeframeManager {
       }
     }
 
-    // Update volume chart if enabled
+    // CRITICAL: Update volume chart with SAME bucketed data as candlesticks
     if (this.volumeIndicatorEnabled && !isUpdate) {
-      // Update volume chart after main processing is complete
-      setTimeout(() => this.updateVolumeChart(this.rawData), 50);
+      // Use the EXACT same bucketed data that candlesticks use
+      setTimeout(() => this.updateVolumeChart(bucketedData), 50);
     }
 
     if (isUpdate) {
@@ -1197,87 +1218,67 @@ class TimeframeManager {
       return;
     }
 
-    // Use bucketed data if provided, otherwise fall back to raw data
-    const dataToUse = bucketedData || this.rawData;
-    console.log(`📊 Updating volume chart with ${dataToUse.length} data points (bucketed: ${!!bucketedData})`);
-    
-    // Debug: Check first few raw data items
-    if (dataToUse.length > 0) {
-      console.log('🔍 First 3 raw data items:', dataToUse.slice(0, 3));
+    // CRITICAL: Use bucketed data - this ensures EXACT same time range as candlesticks
+    if (!bucketedData || bucketedData.length === 0) {
+      console.warn('⚠️  No bucketed data provided to volume chart');
+      return;
     }
+    
+    console.log(`📊 CRITICAL: Using ${bucketedData.length} bucketed data points for volume`);
     
     const bidsData = [];
     const asksData = [];
     let itemsWithVolume = 0;
-    let itemsWithoutVolume = 0;
     
-    for (const item of dataToUse) {
-      if (item.vol_L50_bids && item.vol_L50_asks) {
-        // Convert time to Unix timestamp for LightweightCharts
+    // CRITICAL: Use EXACT same data points as candlesticks
+    for (const item of bucketedData) {
+      if (item.vol_L50_bids !== null && item.vol_L50_asks !== null) {
+        // Use the exact same timestamp format as candlesticks
         const time = this.toUnixTimestamp(item.time);
-        const bidsValue = parseFloat(item.vol_L50_bids);
-        const asksValue = parseFloat(item.vol_L50_asks);
         
-        bidsData.push({ time, value: bidsValue });
-        asksData.push({ time, value: asksValue });
+        bidsData.push({ time, value: parseFloat(item.vol_L50_bids) });
+        asksData.push({ time, value: parseFloat(item.vol_L50_asks) });
         itemsWithVolume++;
         
         // Debug first few items
         if (itemsWithVolume <= 3) {
-          console.log(`🔍 Volume item ${itemsWithVolume}:`, {
-            originalTime: item.time,
+          console.log(`🔍 BUCKETED Volume item ${itemsWithVolume}:`, {
+            bucketTime: item.time,
             convertedTime: time,
-            bids: bidsValue,
-            asks: asksValue
+            bids: item.vol_L50_bids,
+            asks: item.vol_L50_asks
           });
-        }
-      } else {
-        itemsWithoutVolume++;
-        if (itemsWithoutVolume <= 3) {
-          console.log(`🔍 Item without volume data:`, item);
         }
       }
     }
     
-    console.log(`📊 Volume data processing: ${itemsWithVolume} items with volume, ${itemsWithoutVolume} items without`);
-    console.log(`📊 Final volume data: ${bidsData.length} bids, ${asksData.length} asks`);
+    console.log(`📊 CRITICAL SYNC: Volume uses EXACT same ${itemsWithVolume} time points as candlesticks`);
     
     if (bidsData.length > 0 && asksData.length > 0) {
-      console.log('📊 Setting volume data on series...');
-      
       try {
         volumeBidsSeries.setData(bidsData);
         volumeAsksSeries.setData(asksData);
-        console.log('✅ Volume series data set successfully');
+        console.log('✅ PERFECT SYNC: Volume data set with candlestick boundaries');
         
-        // Log sample data for debugging
-        console.log('📊 Sample volume data:', {
-          first: { time: bidsData[0].time, bids: bidsData[0].value, asks: asksData[0].value },
-          last: { time: bidsData[bidsData.length-1].time, bids: bidsData[bidsData.length-1].value, asks: asksData[asksData.length-1].value }
+        // Log boundary verification
+        console.log('📊 Volume boundaries match candlesticks:', {
+          firstVolumeTime: new Date(bidsData[0].time * 1000).toISOString(),
+          lastVolumeTime: new Date(bidsData[bidsData.length-1].time * 1000).toISOString(),
+          totalVolumePoints: bidsData.length
         });
-        
-        // CRITICAL: Setup permanent synchronization FIRST
-        this.setupPermanentVolumeSync();
-        
-        // Then do initial sync
-        this.syncVolumeTimeRange();
         
       } catch (error) {
         console.error('❌ Error setting volume data:', error);
       }
     } else {
-      console.warn('⚠️  No valid volume data found - check data structure');
-      
-      // Debug: Show what we're missing
-      if (dataToUse.length > 0) {
-        const sampleItem = dataToUse[0];
-        console.log('🔍 Sample data item keys:', Object.keys(sampleItem));
-        console.log('🔍 Sample data item:', sampleItem);
-      }
+      console.warn('⚠️  No valid volume data in bucketed data');
+      // Clear volume chart if no data
+      volumeBidsSeries.setData([]);
+      volumeAsksSeries.setData([]);
     }
   }
 
-  // CRITICAL: Perfect X-axis synchronization - show EXACTLY same data as main chart
+  // CRITICAL: Simple time range sync - data is already perfectly aligned
   syncVolumeTimeRange() {
     if (!volumeChart || !window.chart) {
       console.warn('⚠️  Cannot sync: missing charts');
@@ -1288,89 +1289,27 @@ class TimeframeManager {
       const mainTimeScale = window.chart.timeScale();
       const volumeTimeScale = volumeChart.timeScale();
       
-      // Get EXACT visible range from main chart
+      // Get current visible range from main chart
       const visibleRange = mainTimeScale.getVisibleRange();
       
       if (visibleRange) {
-        // Filter volume data to ONLY show what's visible in main chart
-        const visibleVolumeData = this.getVolumeDataForTimeRange(visibleRange.from, visibleRange.to);
+        // Set volume chart to show EXACTLY the same time range
+        volumeTimeScale.setVisibleRange({
+          from: visibleRange.from,
+          to: visibleRange.to
+        });
         
-        // Update volume series with ONLY visible data
-        if (visibleVolumeData.bids.length > 0 && visibleVolumeData.asks.length > 0) {
-          volumeBidsSeries.setData(visibleVolumeData.bids);
-          volumeAsksSeries.setData(visibleVolumeData.asks);
-          
-          // Set volume chart to show EXACTLY the same time range
-          volumeTimeScale.setVisibleRange({
-            from: visibleRange.from,
-            to: visibleRange.to
-          });
-          
-          console.log('🔄 PERFECT SYNC: Volume shows EXACT same time range as main chart', {
-            from: new Date(visibleRange.from * 1000).toISOString(),
-            to: new Date(visibleRange.to * 1000).toISOString(),
-            volumePoints: visibleVolumeData.bids.length
-          });
-        } else {
-          // No data in visible range - clear volume chart
-          volumeBidsSeries.setData([]);
-          volumeAsksSeries.setData([]);
-          console.log('🔄 NO DATA: Cleared volume chart - no data in visible range');
-        }
+        console.log('🔄 PERFECT SYNC: Volume time range locked to main chart', {
+          from: new Date(visibleRange.from * 1000).toISOString(),
+          to: new Date(visibleRange.to * 1000).toISOString()
+        });
       }
       
     } catch (e) {
-      console.error('❌ CRITICAL: Failed perfect sync:', e);
+      console.error('❌ CRITICAL: Failed time range sync:', e);
     }
   }
 
-  // Get volume data that matches EXACTLY the same data range as candlesticks
-  getVolumeDataForTimeRange(fromTime, toTime) {
-    const bidsData = [];
-    const asksData = [];
-    
-    // Get the current price series data to match exact boundaries
-    let priceDataRange = null;
-    try {
-      const priceData = priceSeries.data();
-      if (priceData && priceData.length > 0) {
-        const firstPrice = priceData[0];
-        const lastPrice = priceData[priceData.length - 1];
-        priceDataRange = {
-          start: firstPrice.time,
-          end: lastPrice.time
-        };
-        console.log('📊 Price data range:', {
-          start: new Date(firstPrice.time * 1000).toISOString(),
-          end: new Date(lastPrice.time * 1000).toISOString(),
-          totalPricePoints: priceData.length
-        });
-      }
-    } catch (e) {
-      console.warn('Could not get price data range:', e);
-    }
-    
-    for (const item of this.rawData) {
-      if (item.vol_L50_bids && item.vol_L50_asks) {
-        const itemTime = this.toUnixTimestamp(item.time);
-        
-        // Only include data that:
-        // 1. Falls within the visible time range AND
-        // 2. Falls within the price data range (candlestick boundaries)
-        const withinVisibleRange = itemTime >= fromTime && itemTime <= toTime;
-        const withinPriceRange = !priceDataRange || 
-          (itemTime >= priceDataRange.start && itemTime <= priceDataRange.end);
-        
-        if (withinVisibleRange && withinPriceRange) {
-          bidsData.push({ time: itemTime, value: parseFloat(item.vol_L50_bids) });
-          asksData.push({ time: itemTime, value: parseFloat(item.vol_L50_asks) });
-        }
-      }
-    }
-    
-    console.log(`📊 Volume filtered: ${bidsData.length} points within candlestick boundaries`);
-    return { bids: bidsData, asks: asksData };
-  }
 
   // CRITICAL: Setup permanent X-axis synchronization
   setupPermanentVolumeSync() {
@@ -1386,38 +1325,21 @@ class TimeframeManager {
         if (!volumeChart || !this.volumeIndicatorEnabled) return;
         
         try {
-          // Filter volume data to show ONLY what's visible in main chart
-          const visibleVolumeData = this.getVolumeDataForTimeRange(timeRange.from, timeRange.to);
-          
-          // CRITICAL: Update volume series with filtered data
-          volumeBidsSeries.setData(visibleVolumeData.bids);
-          volumeAsksSeries.setData(visibleVolumeData.asks);
-          
-          // CRITICAL: Force volume chart to show EXACT same range - no independent behavior
+          // CRITICAL: Simply sync the visible range - data is already perfectly aligned
           const volumeTimeScale = volumeChart.timeScale();
           
-          // Disable auto-scaling to prevent independent behavior
-          volumeTimeScale.applyOptions({
-            rightOffset: 50, // Match main chart exactly
-            barSpacing: 8, // Match main chart exactly
-            minBarSpacing: 2,
-          });
-          
-          // Set exact visible range
+          // Force volume chart to show EXACT same range
           volumeTimeScale.setVisibleRange({
             from: timeRange.from,
             to: timeRange.to
           });
           
-          console.log('🔄 PERFECT AUTO-SYNC: Volume locked to main chart', {
-            timeRange: {
-              from: new Date(timeRange.from * 1000).toISOString(),
-              to: new Date(timeRange.to * 1000).toISOString()
-            },
-            volumePoints: visibleVolumeData.bids.length
+          console.log('🔄 AUTO-SYNC: Volume range locked to main chart', {
+            from: new Date(timeRange.from * 1000).toISOString(),
+            to: new Date(timeRange.to * 1000).toISOString()
           });
         } catch (e) {
-          console.error('❌ CRITICAL AUTO-SYNC FAILED:', e);
+          console.error('❌ AUTO-SYNC FAILED:', e);
         }
       });
       
