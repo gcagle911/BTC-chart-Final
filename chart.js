@@ -1173,11 +1173,11 @@ class TimeframeManager {
           last: { time: bidsData[bidsData.length-1].time, bids: bidsData[bidsData.length-1].value, asks: asksData[asksData.length-1].value }
         });
         
-        // Sync time range with main chart
-        this.syncVolumeTimeRange();
-        
-        // CRITICAL: Setup permanent synchronization
+        // CRITICAL: Setup permanent synchronization FIRST
         this.setupPermanentVolumeSync();
+        
+        // Then do initial sync
+        this.syncVolumeTimeRange();
         
       } catch (error) {
         console.error('❌ Error setting volume data:', error);
@@ -1194,7 +1194,7 @@ class TimeframeManager {
     }
   }
 
-  // CRITICAL: Bulletproof X-axis synchronization
+  // CRITICAL: Perfect X-axis synchronization - show EXACTLY same data as main chart
   syncVolumeTimeRange() {
     if (!volumeChart || !window.chart) {
       console.warn('⚠️  Cannot sync: missing charts');
@@ -1205,28 +1205,60 @@ class TimeframeManager {
       const mainTimeScale = window.chart.timeScale();
       const volumeTimeScale = volumeChart.timeScale();
       
-      // Get current main chart visible range
+      // Get EXACT visible range from main chart
       const visibleRange = mainTimeScale.getVisibleRange();
       
       if (visibleRange) {
-        // Force exact synchronization
-        volumeTimeScale.setVisibleRange({
-          from: visibleRange.from,
-          to: visibleRange.to
-        });
-        console.log('🔄 CRITICAL SYNC: Volume X-axis synced', {
-          from: new Date(visibleRange.from * 1000).toISOString(),
-          to: new Date(visibleRange.to * 1000).toISOString()
-        });
-      } else {
-        // Fallback: fit content if no range available
-        volumeTimeScale.fitContent();
-        console.log('📊 SYNC FALLBACK: Volume chart fitted to content');
+        // Filter volume data to ONLY show what's visible in main chart
+        const visibleVolumeData = this.getVolumeDataForTimeRange(visibleRange.from, visibleRange.to);
+        
+        // Update volume series with ONLY visible data
+        if (visibleVolumeData.bids.length > 0 && visibleVolumeData.asks.length > 0) {
+          volumeBidsSeries.setData(visibleVolumeData.bids);
+          volumeAsksSeries.setData(visibleVolumeData.asks);
+          
+          // Set volume chart to show EXACTLY the same time range
+          volumeTimeScale.setVisibleRange({
+            from: visibleRange.from,
+            to: visibleRange.to
+          });
+          
+          console.log('🔄 PERFECT SYNC: Volume shows EXACT same time range as main chart', {
+            from: new Date(visibleRange.from * 1000).toISOString(),
+            to: new Date(visibleRange.to * 1000).toISOString(),
+            volumePoints: visibleVolumeData.bids.length
+          });
+        } else {
+          // No data in visible range - clear volume chart
+          volumeBidsSeries.setData([]);
+          volumeAsksSeries.setData([]);
+          console.log('🔄 NO DATA: Cleared volume chart - no data in visible range');
+        }
       }
       
     } catch (e) {
-      console.error('❌ CRITICAL: Failed to sync volume time range:', e);
+      console.error('❌ CRITICAL: Failed perfect sync:', e);
     }
+  }
+
+  // Get volume data that falls within specific time range
+  getVolumeDataForTimeRange(fromTime, toTime) {
+    const bidsData = [];
+    const asksData = [];
+    
+    for (const item of this.rawData) {
+      if (item.vol_L50_bids && item.vol_L50_asks) {
+        const itemTime = this.toUnixTimestamp(item.time);
+        
+        // Only include data that falls within the visible time range
+        if (itemTime >= fromTime && itemTime <= toTime) {
+          bidsData.push({ time: itemTime, value: parseFloat(item.vol_L50_bids) });
+          asksData.push({ time: itemTime, value: parseFloat(item.vol_L50_asks) });
+        }
+      }
+    }
+    
+    return { bids: bidsData, asks: asksData };
   }
 
   // CRITICAL: Setup permanent X-axis synchronization
@@ -1240,21 +1272,36 @@ class TimeframeManager {
       
       // Subscribe to ALL main chart time range changes
       mainTimeScale.subscribeVisibleTimeRangeChange((timeRange) => {
-        if (!volumeChart) return;
+        if (!volumeChart || !this.volumeIndicatorEnabled) return;
         
         try {
+          // Filter volume data to show ONLY what's visible in main chart
+          const visibleVolumeData = this.getVolumeDataForTimeRange(timeRange.from, timeRange.to);
+          
+          // Update volume series with filtered data
+          volumeBidsSeries.setData(visibleVolumeData.bids);
+          volumeAsksSeries.setData(visibleVolumeData.asks);
+          
+          // Set volume chart to exact same range
           const volumeTimeScale = volumeChart.timeScale();
           volumeTimeScale.setVisibleRange({
             from: timeRange.from,
             to: timeRange.to
           });
-          console.log('🔄 AUTO-SYNC: Volume chart synced to main chart range');
+          
+          console.log('🔄 PERFECT AUTO-SYNC: Volume shows EXACT same data as main chart', {
+            timeRange: {
+              from: new Date(timeRange.from * 1000).toISOString(),
+              to: new Date(timeRange.to * 1000).toISOString()
+            },
+            volumePoints: visibleVolumeData.bids.length
+          });
         } catch (e) {
           console.warn('⚠️  Auto-sync failed:', e);
         }
       });
       
-      console.log('✅ PERMANENT sync subscription established');
+      console.log('✅ PERMANENT perfect sync subscription established');
       
     } catch (e) {
       console.error('❌ CRITICAL: Failed to setup permanent sync:', e);
