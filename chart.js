@@ -1070,8 +1070,8 @@ class TimeframeManager {
           // Process existing data if available
           if (this.rawData && this.rawData.length > 0) {
             console.log(`📊 Processing ${this.rawData.length} existing data points for volume`);
-            // Need to reprocess the data with current timeframe to get bucketed data
-            this.processAndSetData(this.rawData, false);
+            // Directly update volume chart with existing raw data
+            this.updateVolumeChart(this.rawData);
           }
         } else {
           console.error('❌ Failed to create volume chart');
