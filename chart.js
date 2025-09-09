@@ -243,15 +243,15 @@ function createVolumeChart() {
         minBarSpacing: 2,
       },
       handleScroll: {
-        mouseWheel: true, // Enable scrolling
-        pressedMouseMove: true,
-        horzTouchDrag: true,
-        vertTouchDrag: false, // Keep vertical touch disabled
+        mouseWheel: false, // DISABLE - volume chart should not scroll independently
+        pressedMouseMove: false, // DISABLE - volume chart should not pan independently
+        horzTouchDrag: false, // DISABLE - volume chart should not drag independently
+        vertTouchDrag: false, // DISABLE - no vertical interactions
       },
       handleScale: {
-        axisPressedMouseMove: true,
-        mouseWheel: true,
-        pinch: true,
+        axisPressedMouseMove: false, // DISABLE - no independent scaling
+        mouseWheel: false, // DISABLE - no independent wheel zoom
+        pinch: false, // DISABLE - no independent pinch zoom
       },
     });
 
@@ -1278,18 +1278,27 @@ class TimeframeManager {
           // Filter volume data to show ONLY what's visible in main chart
           const visibleVolumeData = this.getVolumeDataForTimeRange(timeRange.from, timeRange.to);
           
-          // Update volume series with filtered data
+          // CRITICAL: Update volume series with filtered data
           volumeBidsSeries.setData(visibleVolumeData.bids);
           volumeAsksSeries.setData(visibleVolumeData.asks);
           
-          // Set volume chart to exact same range
+          // CRITICAL: Force volume chart to show EXACT same range - no independent behavior
           const volumeTimeScale = volumeChart.timeScale();
+          
+          // Disable auto-scaling to prevent independent behavior
+          volumeTimeScale.applyOptions({
+            rightOffset: 50, // Match main chart exactly
+            barSpacing: 8, // Match main chart exactly
+            minBarSpacing: 2,
+          });
+          
+          // Set exact visible range
           volumeTimeScale.setVisibleRange({
             from: timeRange.from,
             to: timeRange.to
           });
           
-          console.log('🔄 PERFECT AUTO-SYNC: Volume shows EXACT same data as main chart', {
+          console.log('🔄 PERFECT AUTO-SYNC: Volume locked to main chart', {
             timeRange: {
               from: new Date(timeRange.from * 1000).toISOString(),
               to: new Date(timeRange.to * 1000).toISOString()
@@ -1297,7 +1306,7 @@ class TimeframeManager {
             volumePoints: visibleVolumeData.bids.length
           });
         } catch (e) {
-          console.warn('⚠️  Auto-sync failed:', e);
+          console.error('❌ CRITICAL AUTO-SYNC FAILED:', e);
         }
       });
       
