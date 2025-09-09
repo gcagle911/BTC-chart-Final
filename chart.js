@@ -514,15 +514,31 @@ class TimeframeManager {
   applyMAVisibility() {
     try {
       let visibleCount = 0;
+      let totalSeries = 0;
       
       // Apply MA series visibility
       for (const [key, series] of this.maSeriesByKey.entries()) {
+        if (!series) {
+          console.warn(`⚠️  Missing series for key: ${key}`);
+          continue;
+        }
+        
+        totalSeries++;
         const [layerKey, durationStr] = key.split('|');
         const duration = parseInt(durationStr, 10);
         const shouldBeVisible = this.selectedLayers.has(layerKey) && this.selectedDurations.has(duration);
         
+        // Force visibility state - don't rely on previous state
         series.applyOptions({ visible: shouldBeVisible });
-        if (shouldBeVisible) visibleCount++;
+        
+        if (shouldBeVisible) {
+          visibleCount++;
+          // Ensure the series has data
+          const rawData = this.maRawDataByKey.get(key);
+          if (!rawData || rawData.length === 0) {
+            console.warn(`⚠️  Series ${key} is visible but has no data`);
+          }
+        }
         
         // Update title suffix for current factor
         const factor = this.normalizeEnabled ? (this.scaleFactorsByKey.get(key) || 1) : 1;
@@ -533,12 +549,24 @@ class TimeframeManager {
       
       // Apply cumulative avg visibility
       for (const [layerKey, series] of this.avgSeriesByLayer.entries()) {
+        if (!series) {
+          console.warn(`⚠️  Missing avg series for layer: ${layerKey}`);
+          continue;
+        }
+        
         const avgVisible = !!this.cumulativeAvgVisible;
         series.applyOptions({ visible: avgVisible });
         if (avgVisible) visibleCount++;
       }
       
-      console.log(`✅ MA Visibility: ${visibleCount} series now visible`);
+      console.log(`✅ MA Visibility: ${visibleCount}/${totalSeries} series visible`);
+      
+      if (visibleCount === 0 && totalSeries > 0) {
+        console.warn(`⚠️  No MA series are visible despite ${totalSeries} series existing`);
+        console.log(`📊 Selected layers: [${Array.from(this.selectedLayers).join(', ')}]`);
+        console.log(`📊 Selected durations: [${Array.from(this.selectedDurations).join(', ')}]`);
+        this.validateMASeriesState();
+      }
     } catch (e) {
       console.error('❌ Failed to apply MA visibility:', e);
     }
@@ -725,28 +753,33 @@ class TimeframeManager {
     const allowed = new Set(['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg']);
     if (!allowed.has(layerKey)) return;
     
+    console.log(`🔄 Layer toggle: ${layerKey} -> ${enabled ? 'ENABLED' : 'DISABLED'}`);
+    
     if (enabled) {
       this.selectedLayers.add(layerKey);
     } else {
       this.selectedLayers.delete(layerKey);
     }
     
-    console.log(`🔄 Layer ${layerKey}: ${enabled ? 'ENABLED' : 'DISABLED'}`);
+    console.log(`📊 Selected layers: [${Array.from(this.selectedLayers).join(', ')}]`);
+    console.log(`📊 Selected durations: [${Array.from(this.selectedDurations).join(', ')}]`);
     
-    // Recompute only if there are active durations; otherwise just update visibility
-    if (this.selectedDurations.size > 0) {
+    // Always reprocess data to ensure proper series creation/deletion
+    if (this.rawData && this.rawData.length > 0) {
       this.lastTimestamp = 0;
       this.processAndSetData(this.rawData);
+      console.log(`✅ Layer toggle complete - reprocessed ${this.rawData.length} data points`);
     } else {
+      // If no data yet, just apply visibility
       this.applyMAVisibility();
     }
-    
-    // Don't auto-scale here - it interferes with MA visibility
   }
 
   toggleDuration(duration, enabled) {
     const allowed = new Set([20, 50, 100, 200]);
     if (!allowed.has(duration)) return;
+    
+    console.log(`🔄 Duration toggle: ${duration} -> ${enabled ? 'ENABLED' : 'DISABLED'}`);
     
     if (enabled) {
       this.selectedDurations.add(duration);
@@ -754,13 +787,16 @@ class TimeframeManager {
       this.selectedDurations.delete(duration);
     }
     
-    console.log(`🔄 Duration ${duration}: ${enabled ? 'ENABLED' : 'DISABLED'}`);
+    console.log(`📊 Selected layers: [${Array.from(this.selectedLayers).join(', ')}]`);
+    console.log(`📊 Selected durations: [${Array.from(this.selectedDurations).join(', ')}]`);
     
-    // Ensure corresponding series exist if both layer(s) and this duration are active
-    if (enabled && this.selectedLayers.size > 0) {
+    // Always reprocess data to ensure proper series creation/deletion
+    if (this.rawData && this.rawData.length > 0) {
       this.lastTimestamp = 0;
       this.processAndSetData(this.rawData);
+      console.log(`✅ Duration toggle complete - reprocessed ${this.rawData.length} data points`);
     } else {
+      // If no data yet, just apply visibility
       this.applyMAVisibility();
     }
   }
@@ -788,6 +824,7 @@ class TimeframeManager {
     // Clear existing chart data
     priceSeries.setData([]);
     // Remove dynamic MA and avg series completely to avoid extra scales/panes
+    console.log(`🧹 Clearing ${this.maSeriesByKey.size} MA series and ${this.avgSeriesByLayer.size} avg series for symbol switch`);
     try {
       for (const [key, series] of this.maSeriesByKey.entries()) {
         chart.removeSeries(series);
@@ -797,7 +834,9 @@ class TimeframeManager {
         chart.removeSeries(series);
       }
       this.avgSeriesByLayer.clear();
-    } catch (e) { console.warn('Failed clearing series', e); }
+    } catch (e) { 
+      console.error('❌ Failed clearing series during symbol switch:', e); 
+    }
 
     // Load data and restart update cycles
     await this.initializeChart();
@@ -814,13 +853,16 @@ class TimeframeManager {
     if (this.updateInterval) clearInterval(this.updateInterval);
     if (this.refreshInterval) clearInterval(this.refreshInterval);
     // Clear series
+    console.log(`🧹 Clearing ${this.maSeriesByKey.size} MA series and ${this.avgSeriesByLayer.size} avg series for exchange switch`);
     try {
       priceSeries.setData([]);
       for (const [key, series] of this.maSeriesByKey.entries()) { chart.removeSeries(series); }
       this.maSeriesByKey.clear();
       for (const [key, series] of this.avgSeriesByLayer.entries()) { chart.removeSeries(series); }
       this.avgSeriesByLayer.clear();
-    } catch(_) {}
+    } catch(e) {
+      console.error('❌ Failed clearing series during exchange switch:', e);
+    }
     this.rawData = [];
     this.lastTimestamp = 0;
     this.isFullDataLoaded = false;
@@ -840,11 +882,15 @@ class TimeframeManager {
     // Refresh complete historical data every hour
     this.refreshInterval = setInterval(() => this.refreshHistoricalData(), 3600000);
 
-    // Subscribe to visible range changes to recompute scaling (debounced)
+    // DISABLED: Subscribe to visible range changes to prevent MA disappearing during scroll
+    // This was causing MAs to disappear randomly during chart interactions
+    // Normalization will only update when explicitly toggled or when data changes
+    /*
     try {
       const debounced = () => this.recomputeScaleFactorsAndRefresh();
       chart.timeScale().subscribeVisibleTimeRangeChange(debounced);
     } catch (_) {}
+    */
   }
 
   setYAxisControl(mode) {
@@ -1070,6 +1116,31 @@ class TimeframeManager {
     const [layerKey, durationStr] = key.split('|');
     const duration = parseInt(durationStr, 10);
     return this.selectedLayers.has(layerKey) && this.selectedDurations.has(duration);
+  }
+
+  // Debug function to validate MA series state
+  validateMASeriesState() {
+    const expectedSeries = [];
+    for (const layerKey of this.selectedLayers) {
+      for (const duration of this.selectedDurations) {
+        expectedSeries.push(`${layerKey}|${duration}`);
+      }
+    }
+    
+    const actualSeries = Array.from(this.maSeriesByKey.keys());
+    const missingSeries = expectedSeries.filter(key => !this.maSeriesByKey.has(key));
+    const extraSeries = actualSeries.filter(key => !expectedSeries.includes(key));
+    
+    if (missingSeries.length > 0 || extraSeries.length > 0) {
+      console.warn(`⚠️  MA Series State Mismatch:`);
+      console.warn(`   Expected: [${expectedSeries.join(', ')}]`);
+      console.warn(`   Actual: [${actualSeries.join(', ')}]`);
+      if (missingSeries.length > 0) console.warn(`   Missing: [${missingSeries.join(', ')}]`);
+      if (extraSeries.length > 0) console.warn(`   Extra: [${extraSeries.join(', ')}]`);
+      return false;
+    }
+    
+    return true;
   }
 
   refreshVisibleMALines() {
