@@ -673,10 +673,10 @@ class TimeframeManager {
       }
     }
 
-    // Update volume chart if enabled (use same bucketed data as main chart)
+    // Update volume chart if enabled
     if (this.volumeIndicatorEnabled && !isUpdate) {
-      // Use the same bucketed data that the main chart is using
-      setTimeout(() => this.updateVolumeChart(bucketedData), 50);
+      // Update volume chart after main processing is complete
+      setTimeout(() => this.updateVolumeChart(this.rawData), 50);
     }
 
     if (isUpdate) {
@@ -1070,7 +1070,7 @@ class TimeframeManager {
           // Process existing data if available
           if (this.rawData && this.rawData.length > 0) {
             console.log(`📊 Processing ${this.rawData.length} existing data points for volume`);
-            // Directly update volume chart with existing raw data
+            // Directly update volume chart with raw data (no bucketing needed for volume)
             this.updateVolumeChart(this.rawData);
           }
         } else {
