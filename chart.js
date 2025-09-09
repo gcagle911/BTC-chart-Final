@@ -499,9 +499,11 @@ class TimeframeManager {
       // Set complete dataset
       priceSeries.setData(priceData);
       
-      // Fit content to show all data
-      chart.timeScale().fitContent();
-      // Ensure y-axes scale to new data range
+      // Only fit content on initial load, not on updates to preserve user's zoom/pan position
+      if (!isUpdate) {
+        chart.timeScale().fitContent();
+      }
+      // Ensure right axis scales to new data range (left axis stays manual)
       this.applyAutoScale();
     }
 
@@ -535,13 +537,6 @@ class TimeframeManager {
         series.applyOptions({ visible: avgVisible });
         if (avgVisible) visibleCount++;
       }
-      
-      // Ensure left scale configuration is stable
-      chart.priceScale('left').applyOptions({
-        mode: LightweightCharts.PriceScaleMode.Normal,
-        autoScale: false, // Never auto-scale to prevent disappearing MAs
-        scaleMargins: { top: 0.15, bottom: 0.15 }
-      });
       
       console.log(`✅ MA Visibility: ${visibleCount} series now visible`);
     } catch (e) {
@@ -949,10 +944,13 @@ class TimeframeManager {
   recomputeScaleFactorsAndRefresh() {
     if (this.scaleRecomputeTimeout) clearTimeout(this.scaleRecomputeTimeout);
     this.scaleRecomputeTimeout = setTimeout(() => {
-      this.computeScaleFactorsForVisibleRange();
-      this.refreshVisibleMALines();
-      // Ensure visibility is maintained after refresh
-      this.applyMAVisibility();
+      // Only recompute if normalization is enabled, otherwise skip to avoid axis interference
+      if (this.normalizeEnabled) {
+        this.computeScaleFactorsForVisibleRange();
+        this.refreshVisibleMALines();
+      }
+      // Don't call applyMAVisibility here as it's not needed for range changes
+      // and can interfere with manual left axis positioning
     }, 100); // Reduced debounce time to minimize flicker
   }
 
@@ -1075,6 +1073,16 @@ class TimeframeManager {
   }
 
   refreshVisibleMALines() {
+    // Preserve current left axis range if it was manually set
+    let preservedLeftRange = null;
+    try {
+      const leftScale = chart.priceScale('left');
+      const currentRange = leftScale.getPriceRange?.();
+      if (currentRange && isFinite(currentRange.minValue) && isFinite(currentRange.maxValue)) {
+        preservedLeftRange = { minValue: currentRange.minValue, maxValue: currentRange.maxValue };
+      }
+    } catch (_) {}
+    
     for (const [key, series] of this.maSeriesByKey.entries()) {
       const raw = this.maRawDataByKey.get(key) || [];
       const factor = this.normalizeEnabled ? (this.scaleFactorsByKey.get(key) || 1) : 1;
@@ -1094,6 +1102,15 @@ class TimeframeManager {
         title: baseTitle + suffix,
         visible: shouldBeVisible  // Explicitly maintain visibility
       });
+    }
+    
+    // Restore preserved left axis range to prevent snapping
+    if (preservedLeftRange) {
+      try {
+        setTimeout(() => {
+          chart.priceScale('left').setPriceRange(preservedLeftRange);
+        }, 10); // Small delay to ensure setData operations are complete
+      } catch (_) {}
     }
     // Update cumulative avg titles when visible
     if (this.avgRawDataByLayer) {
