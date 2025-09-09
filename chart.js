@@ -234,8 +234,10 @@ function createVolumeChart() {
         scaleMargins: { top: 0.1, bottom: 0.1 },
       },
       timeScale: {
-        visible: false, // Hide time scale on volume chart to sync with main chart
+        visible: true, // Show time scale on volume chart for proper rendering
         borderColor: 'rgba(197, 203, 206, 0.8)',
+        timeVisible: true,
+        secondsVisible: false,
       },
       handleScroll: {
         mouseWheel: false, // Disable independent scrolling
@@ -252,15 +254,21 @@ function createVolumeChart() {
 
     console.log('📊 Volume chart created successfully');
 
-    // Create volume series
-    volumeBidsSeries = volumeChart.addHistogramSeries({
-      color: '#26a69a', // Green for bids
+    // Create volume series - using area series for better visibility
+    volumeBidsSeries = volumeChart.addAreaSeries({
+      topColor: 'rgba(38, 166, 154, 0.4)', // Green for bids with transparency
+      bottomColor: 'rgba(38, 166, 154, 0.1)',
+      lineColor: '#26a69a',
+      lineWidth: 2,
       priceFormat: { type: 'volume' },
       title: 'Bids Volume',
     });
 
-    volumeAsksSeries = volumeChart.addHistogramSeries({
-      color: '#ef5350', // Red for asks  
+    volumeAsksSeries = volumeChart.addAreaSeries({
+      topColor: 'rgba(239, 83, 80, 0.4)', // Red for asks with transparency
+      bottomColor: 'rgba(239, 83, 80, 0.1)', 
+      lineColor: '#ef5350',
+      lineWidth: 2,
       priceFormat: { type: 'volume' },
       title: 'Asks Volume',
     });
@@ -1147,6 +1155,15 @@ class TimeframeManager {
         
         // Sync time range with main chart
         this.syncVolumeTimeRange();
+        
+        // Test: Add some simple test data to verify chart rendering
+        setTimeout(() => {
+          console.log('🧪 Testing volume chart with sample data');
+          const testTime = Math.floor(Date.now() / 1000);
+          volumeBidsSeries.update({ time: testTime, value: 100 });
+          volumeAsksSeries.update({ time: testTime, value: 80 });
+        }, 500);
+        
       } catch (error) {
         console.error('❌ Error setting volume data:', error);
       }
