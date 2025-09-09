@@ -275,11 +275,17 @@ function createVolumeChart() {
 }
 
 function destroyVolumeChart() {
+  console.log('📊 Destroying volume chart');
   if (volumeChart) {
-    volumeChart.remove();
+    try {
+      volumeChart.remove();
+    } catch (e) {
+      console.warn('Warning destroying volume chart:', e);
+    }
     volumeChart = null;
     volumeBidsSeries = null;
     volumeAsksSeries = null;
+    console.log('✅ Volume chart destroyed');
   }
 }
 
@@ -395,8 +401,7 @@ class TimeframeManager {
     this.scaleFactorsByKey = new Map(); // key -> factor number
     this.emaScaleFactorsByKey = new Map(); // key -> EMA factor number
     this.normalizeEnabled = false;
-    // Volume indicator data
-    this.volumeData = []; // Array of {time, bids, asks} for volume chart
+    // Volume indicator
     this.volumeIndicatorEnabled = false;
     this.scaleRecomputeTimeout = null;
     this.autoRefitPending = false;
@@ -660,9 +665,9 @@ class TimeframeManager {
       }
     }
 
-    // Process volume data for indicator
+    // Update volume chart if enabled
     if (this.volumeIndicatorEnabled) {
-      this.processVolumeData(bucketedData, isUpdate);
+      this.updateVolumeChart();
     }
 
     if (isUpdate) {
@@ -1034,73 +1039,6 @@ class TimeframeManager {
     }
   }
 
-  processVolumeData(bucketedData, isUpdate) {
-    if (!this.volumeIndicatorEnabled) {
-      console.log('📊 Volume indicator disabled, skipping volume data processing');
-      return;
-    }
-
-    console.log(`📊 Processing volume data: ${bucketedData.length} data points, isUpdate: ${isUpdate}`);
-    
-    const volumePoints = [];
-    let validPoints = 0;
-    
-    for (const item of bucketedData) {
-      if (item.vol_L50_bids !== null && item.vol_L50_bids !== undefined && 
-          item.vol_L50_asks !== null && item.vol_L50_asks !== undefined) {
-        volumePoints.push({
-          time: item.time,
-          bids: parseFloat(item.vol_L50_bids),
-          asks: parseFloat(item.vol_L50_asks)
-        });
-        validPoints++;
-      }
-    }
-    
-    console.log(`📊 Found ${validPoints} valid volume points out of ${bucketedData.length} total points`);
-    
-    if (volumePoints.length === 0) {
-      console.warn('⚠️  No valid volume data found');
-      return;
-    }
-
-    // Log sample data for debugging
-    if (volumePoints.length > 0) {
-      console.log('📊 Sample volume data:', volumePoints.slice(0, 3));
-    }
-    
-    try {
-      if (isUpdate) {
-        // Add new volume data points
-        volumePoints.forEach(point => {
-          this.volumeData.push(point);
-          if (volumeBidsSeries && volumeAsksSeries) {
-            volumeBidsSeries.update({ time: point.time, value: point.bids });
-            volumeAsksSeries.update({ time: point.time, value: point.asks });
-          } else {
-            console.warn('⚠️  Volume series not available for update');
-          }
-        });
-        console.log(`✅ Updated volume chart with ${volumePoints.length} new points`);
-      } else {
-        // Set complete volume dataset
-        this.volumeData = volumePoints;
-        if (volumeBidsSeries && volumeAsksSeries) {
-          const bidsData = volumePoints.map(p => ({ time: p.time, value: p.bids }));
-          const asksData = volumePoints.map(p => ({ time: p.time, value: p.asks }));
-          
-          console.log(`📊 Setting volume data: ${bidsData.length} bids points, ${asksData.length} asks points`);
-          volumeBidsSeries.setData(bidsData);
-          volumeAsksSeries.setData(asksData);
-          console.log('✅ Volume chart data set successfully');
-        } else {
-          console.error('❌ Volume series not available - chart may not be created');
-        }
-      }
-    } catch (error) {
-      console.error('❌ Error processing volume data:', error);
-    }
-  }
 
   toggleVolumeIndicator(enabled) {
     console.log(`🔄 Volume Indicator: ${enabled ? 'ENABLED' : 'DISABLED'}`);
@@ -1109,66 +1047,76 @@ class TimeframeManager {
     const indicatorPanel = document.getElementById('indicator-panel');
     
     if (enabled) {
-      // Show indicator panel and create volume chart
+      // Show indicator panel
       indicatorPanel.style.display = 'block';
-      createVolumeChart();
       
-      // Adjust main chart height
+      // Adjust main chart height  
       const mainChart = document.getElementById('main-chart');
       mainChart.style.height = 'calc(100% - 200px)';
       
-      // Process existing data for volume
-      if (this.rawData && this.rawData.length > 0) {
-        this.processVolumeData(this.rawData, false);
+      // Create volume chart
+      const chart = createVolumeChart();
+      if (chart) {
+        console.log('✅ Volume chart created successfully');
+        
+        // Process existing data if available
+        if (this.rawData && this.rawData.length > 0) {
+          console.log(`📊 Processing ${this.rawData.length} existing data points for volume`);
+          this.updateVolumeChart();
+        }
+      } else {
+        console.error('❌ Failed to create volume chart');
       }
       
-      // Sync time scale with main chart
-      this.syncVolumeChartTimeScale();
-      
     } else {
-      // Hide indicator panel and destroy volume chart
+      // Hide indicator panel
       indicatorPanel.style.display = 'none';
+      
+      // Destroy volume chart
       destroyVolumeChart();
       
       // Restore main chart height
       const mainChart = document.getElementById('main-chart');
       mainChart.style.height = '100%';
-      
-      // Clear volume data
-      this.volumeData = [];
     }
     
-    // Trigger chart resize
+    // Resize main chart
     setTimeout(() => {
       if (window.chart) {
-        window.chart.timeScale().fitContent();
+        window.chart.resize();
       }
-    }, 100);
+    }, 50);
   }
 
-  syncVolumeChartTimeScale() {
-    if (!volumeChart || !window.chart) return;
+  updateVolumeChart() {
+    if (!this.volumeIndicatorEnabled || !volumeBidsSeries || !volumeAsksSeries) {
+      return;
+    }
+
+    console.log(`📊 Updating volume chart with ${this.rawData.length} data points`);
     
-    try {
-      const mainTimeScale = window.chart.timeScale();
-      const volumeTimeScale = volumeChart.timeScale();
-      
-      // Sync visible range
-      const visibleRange = mainTimeScale.getVisibleRange();
-      if (visibleRange) {
-        volumeTimeScale.setVisibleRange(visibleRange);
+    const bidsData = [];
+    const asksData = [];
+    
+    for (const item of this.rawData) {
+      if (item.vol_L50_bids && item.vol_L50_asks) {
+        const time = item.time;
+        bidsData.push({ time, value: parseFloat(item.vol_L50_bids) });
+        asksData.push({ time, value: parseFloat(item.vol_L50_asks) });
       }
-      
-      // Subscribe to main chart time scale changes
-      mainTimeScale.subscribeVisibleTimeRangeChange((timeRange) => {
-        if (timeRange) {
-          volumeTimeScale.setVisibleRange(timeRange);
-        }
-      });
-    } catch (e) {
-      console.warn('Failed to sync volume chart time scale:', e);
+    }
+    
+    console.log(`📊 Volume data: ${bidsData.length} bids, ${asksData.length} asks`);
+    
+    if (bidsData.length > 0 && asksData.length > 0) {
+      volumeBidsSeries.setData(bidsData);
+      volumeAsksSeries.setData(asksData);
+      console.log('✅ Volume chart updated successfully');
+    } else {
+      console.warn('⚠️  No valid volume data found');
     }
   }
+
 
   async switchSymbol(symbol) {
     if (!DATA_SOURCES[symbol]) return;
