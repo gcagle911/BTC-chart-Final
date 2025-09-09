@@ -91,6 +91,10 @@ function normalizeApiData(items) {
       const spreadL50 = row.spread_L50_pct ?? row.spread_L50_pct_avg ?? row.spread_avg_L50_pct ?? null;
       const spreadL100 = row.spread_L100_pct ?? row.spread_L100_pct_avg ?? row.spread_avg_L100_pct ?? null;
       
+      // Extract volume data
+      const volL50Bids = row.vol_L50_bids ?? null;
+      const volL50Asks = row.vol_L50_asks ?? null;
+      
       if (!time || price === null || price === undefined) {
         if (index < 3) console.warn(`⚠️  Skipping row ${index}: missing time or price`, {time, price});
         return null;
@@ -102,7 +106,10 @@ function normalizeApiData(items) {
         // Expose all spread layer fields with expected naming
         spread_L5_pct_avg: spreadL5 ? parseFloat(spreadL5) : null,
         spread_L50_pct_avg: spreadL50 ? parseFloat(spreadL50) : null,
-        spread_L100_pct_avg: spreadL100 ? parseFloat(spreadL100) : null
+        spread_L100_pct_avg: spreadL100 ? parseFloat(spreadL100) : null,
+        // Expose volume data
+        vol_L50_bids: volL50Bids ? parseFloat(volL50Bids) : null,
+        vol_L50_asks: volL50Asks ? parseFloat(volL50Asks) : null
       };
       
       if (index < 2) {
@@ -187,6 +194,74 @@ chart.priceScale('right').applyOptions({
   scaleMargins: { top: 0.02, bottom: 0.02 },
 });
 priceSeries.applyOptions({ priceFormat: { type: 'price', precision: 3, minMove: 0.001 } });
+
+// Volume Indicator Chart (initially null, created when needed)
+let volumeChart = null;
+let volumeBidsSeries = null;
+let volumeAsksSeries = null;
+let volumeIndicatorEnabled = false;
+
+function createVolumeChart() {
+  if (volumeChart) return volumeChart;
+  
+  volumeChart = LightweightCharts.createChart(document.getElementById('volume-chart'), {
+    layout: {
+      background: { color: '#131722' },
+      textColor: '#d1d4dc',
+    },
+    grid: {
+      vertLines: { color: 'rgba(42, 46, 57, 0.5)' },
+      horzLines: { color: 'rgba(42, 46, 57, 0.5)' },
+    },
+    crosshair: {
+      mode: LightweightCharts.CrosshairMode.Normal,
+    },
+    rightPriceScale: {
+      visible: true,
+      borderColor: 'rgba(197, 203, 206, 0.8)',
+      scaleMargins: { top: 0.1, bottom: 0.1 },
+    },
+    timeScale: {
+      visible: false, // Hide time scale on volume chart to sync with main chart
+      borderColor: 'rgba(197, 203, 206, 0.8)',
+    },
+    handleScroll: {
+      mouseWheel: false, // Disable independent scrolling
+      pressedMouseMove: false,
+      horzTouchDrag: false,
+      vertTouchDrag: false,
+    },
+    handleScale: {
+      axisPressedMouseMove: false,
+      mouseWheel: false,
+      pinch: false,
+    },
+  });
+
+  // Create volume series
+  volumeBidsSeries = volumeChart.addHistogramSeries({
+    color: '#26a69a', // Green for bids
+    priceFormat: { type: 'volume' },
+    title: 'Bids Volume',
+  });
+
+  volumeAsksSeries = volumeChart.addHistogramSeries({
+    color: '#ef5350', // Red for asks  
+    priceFormat: { type: 'volume' },
+    title: 'Asks Volume',
+  });
+
+  return volumeChart;
+}
+
+function destroyVolumeChart() {
+  if (volumeChart) {
+    volumeChart.remove();
+    volumeChart = null;
+    volumeBidsSeries = null;
+    volumeAsksSeries = null;
+  }
+}
 
 // Dynamic MA series registry for multi-layer/duration combinations
 function createMASeries(color, title) {
@@ -300,6 +375,9 @@ class TimeframeManager {
     this.scaleFactorsByKey = new Map(); // key -> factor number
     this.emaScaleFactorsByKey = new Map(); // key -> EMA factor number
     this.normalizeEnabled = false;
+    // Volume indicator data
+    this.volumeData = []; // Array of {time, bids, asks} for volume chart
+    this.volumeIndicatorEnabled = false;
     this.scaleRecomputeTimeout = null;
     this.autoRefitPending = false;
     
@@ -560,6 +638,11 @@ class TimeframeManager {
           emaLineSeries.setData(emaScaled);
         }
       }
+    }
+
+    // Process volume data for indicator
+    if (this.volumeIndicatorEnabled) {
+      this.processVolumeData(bucketedData, isUpdate);
     }
 
     if (isUpdate) {
@@ -928,6 +1011,112 @@ class TimeframeManager {
     } else {
       // If no data yet, just apply visibility
       this.applyMAVisibility();
+    }
+  }
+
+  processVolumeData(bucketedData, isUpdate) {
+    const volumePoints = [];
+    
+    for (const item of bucketedData) {
+      if (item.vol_L50_bids !== null && item.vol_L50_asks !== null) {
+        volumePoints.push({
+          time: item.time,
+          bids: item.vol_L50_bids,
+          asks: item.vol_L50_asks
+        });
+      }
+    }
+    
+    if (volumePoints.length === 0) return;
+    
+    if (isUpdate) {
+      // Add new volume data points
+      volumePoints.forEach(point => {
+        this.volumeData.push(point);
+        if (volumeBidsSeries) {
+          volumeBidsSeries.update({ time: point.time, value: point.bids });
+        }
+        if (volumeAsksSeries) {
+          volumeAsksSeries.update({ time: point.time, value: point.asks });
+        }
+      });
+    } else {
+      // Set complete volume dataset
+      this.volumeData = volumePoints;
+      if (volumeBidsSeries && volumeAsksSeries) {
+        const bidsData = volumePoints.map(p => ({ time: p.time, value: p.bids }));
+        const asksData = volumePoints.map(p => ({ time: p.time, value: p.asks }));
+        volumeBidsSeries.setData(bidsData);
+        volumeAsksSeries.setData(asksData);
+      }
+    }
+  }
+
+  toggleVolumeIndicator(enabled) {
+    console.log(`🔄 Volume Indicator: ${enabled ? 'ENABLED' : 'DISABLED'}`);
+    
+    this.volumeIndicatorEnabled = enabled;
+    const indicatorPanel = document.getElementById('indicator-panel');
+    
+    if (enabled) {
+      // Show indicator panel and create volume chart
+      indicatorPanel.style.display = 'block';
+      createVolumeChart();
+      
+      // Adjust main chart height
+      const mainChart = document.getElementById('main-chart');
+      mainChart.style.height = 'calc(100% - 200px)';
+      
+      // Process existing data for volume
+      if (this.rawData && this.rawData.length > 0) {
+        this.processVolumeData(this.rawData, false);
+      }
+      
+      // Sync time scale with main chart
+      this.syncVolumeChartTimeScale();
+      
+    } else {
+      // Hide indicator panel and destroy volume chart
+      indicatorPanel.style.display = 'none';
+      destroyVolumeChart();
+      
+      // Restore main chart height
+      const mainChart = document.getElementById('main-chart');
+      mainChart.style.height = '100%';
+      
+      // Clear volume data
+      this.volumeData = [];
+    }
+    
+    // Trigger chart resize
+    setTimeout(() => {
+      if (window.chart) {
+        window.chart.timeScale().fitContent();
+      }
+    }, 100);
+  }
+
+  syncVolumeChartTimeScale() {
+    if (!volumeChart || !window.chart) return;
+    
+    try {
+      const mainTimeScale = window.chart.timeScale();
+      const volumeTimeScale = volumeChart.timeScale();
+      
+      // Sync visible range
+      const visibleRange = mainTimeScale.getVisibleRange();
+      if (visibleRange) {
+        volumeTimeScale.setVisibleRange(visibleRange);
+      }
+      
+      // Subscribe to main chart time scale changes
+      mainTimeScale.subscribeVisibleTimeRangeChange((timeRange) => {
+        if (timeRange) {
+          volumeTimeScale.setVisibleRange(timeRange);
+        }
+      });
+    } catch (e) {
+      console.warn('Failed to sync volume chart time scale:', e);
     }
   }
 
@@ -1446,6 +1635,10 @@ function setYAxisControl(mode) {
 
 function setExchange(exchange) {
   manager.switchExchange(exchange);
+}
+
+function toggleVolumeIndicator(enabled) {
+  manager.toggleVolumeIndicator(enabled);
 }
 
 // Enhanced zoom functions with MASSIVE zoom range like TradingView
