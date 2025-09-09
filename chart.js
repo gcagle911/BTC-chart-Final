@@ -665,10 +665,10 @@ class TimeframeManager {
       }
     }
 
-    // Update volume chart if enabled (only after main processing is complete)
+    // Update volume chart if enabled (use same bucketed data as main chart)
     if (this.volumeIndicatorEnabled && !isUpdate) {
-      // Only update on full data loads, not on incremental updates
-      setTimeout(() => this.updateVolumeChart(), 50);
+      // Use the same bucketed data that the main chart is using
+      setTimeout(() => this.updateVolumeChart(bucketedData), 50);
     }
 
     if (isUpdate) {
@@ -1062,7 +1062,8 @@ class TimeframeManager {
           // Process existing data if available
           if (this.rawData && this.rawData.length > 0) {
             console.log(`📊 Processing ${this.rawData.length} existing data points for volume`);
-            this.updateVolumeChart();
+            // Need to reprocess the data with current timeframe to get bucketed data
+            this.processAndSetData(this.rawData, false);
           }
         } else {
           console.error('❌ Failed to create volume chart');
@@ -1080,17 +1081,19 @@ class TimeframeManager {
     // DON'T resize the main chart - it should be unaffected
   }
 
-  updateVolumeChart() {
+  updateVolumeChart(bucketedData = null) {
     if (!this.volumeIndicatorEnabled || !volumeBidsSeries || !volumeAsksSeries) {
       return;
     }
 
-    console.log(`📊 Updating volume chart with ${this.rawData.length} data points`);
+    // Use bucketed data if provided, otherwise fall back to raw data
+    const dataToUse = bucketedData || this.rawData;
+    console.log(`📊 Updating volume chart with ${dataToUse.length} data points (bucketed: ${!!bucketedData})`);
     
     const bidsData = [];
     const asksData = [];
     
-    for (const item of this.rawData) {
+    for (const item of dataToUse) {
       if (item.vol_L50_bids && item.vol_L50_asks) {
         const time = item.time;
         bidsData.push({ time, value: parseFloat(item.vol_L50_bids) });
@@ -1103,9 +1106,39 @@ class TimeframeManager {
     if (bidsData.length > 0 && asksData.length > 0) {
       volumeBidsSeries.setData(bidsData);
       volumeAsksSeries.setData(asksData);
+      
+      // Log sample data for debugging
+      if (bidsData.length > 0) {
+        console.log('📊 Sample volume data:', {
+          first: { time: bidsData[0].time, bids: bidsData[0].value, asks: asksData[0].value },
+          last: { time: bidsData[bidsData.length-1].time, bids: bidsData[bidsData.length-1].value, asks: asksData[asksData.length-1].value }
+        });
+      }
+      
       console.log('✅ Volume chart updated successfully');
+      
+      // Sync time range with main chart
+      this.syncVolumeTimeRange();
     } else {
-      console.warn('⚠️  No valid volume data found');
+      console.warn('⚠️  No valid volume data found in bucketed data');
+    }
+  }
+
+  syncVolumeTimeRange() {
+    if (!volumeChart || !window.chart) return;
+    
+    try {
+      const mainTimeScale = window.chart.timeScale();
+      const volumeTimeScale = volumeChart.timeScale();
+      
+      // Get current visible range from main chart
+      const visibleRange = mainTimeScale.getVisibleRange();
+      if (visibleRange) {
+        volumeTimeScale.setVisibleRange(visibleRange);
+        console.log('📊 Volume chart time range synced with main chart');
+      }
+    } catch (e) {
+      console.warn('Failed to sync volume time range:', e);
     }
   }
 
