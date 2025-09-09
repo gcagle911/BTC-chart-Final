@@ -747,10 +747,10 @@ class TimeframeManager {
       }
     }
 
-    // CRITICAL: Update volume chart with SAME bucketed data as candlesticks
+    // CRITICAL: Update volume chart with SAME data as candlesticks
     if (this.volumeIndicatorEnabled && !isUpdate) {
-      // Use the EXACT same bucketed data that candlesticks use
-      setTimeout(() => this.updateVolumeChart(bucketedData), 50);
+      // Use the raw data since volume series are on the same chart now
+      setTimeout(() => this.updateVolumeChart(rawMinuteData), 50);
     }
 
     if (isUpdate) {
@@ -1164,24 +1164,25 @@ class TimeframeManager {
     }
   }
 
-  updateVolumeChart(bucketedData = null) {
+  updateVolumeChart(rawData = null) {
     if (!this.volumeIndicatorEnabled || !volumeBidsSeries || !volumeAsksSeries) {
       return;
     }
 
-    // CRITICAL: Use same bucketed data as candlesticks for perfect alignment
-    if (!bucketedData || bucketedData.length === 0) {
-      console.warn('⚠️  No bucketed data for volume');
+    // Use raw data since volume series are on the same chart
+    const dataToUse = rawData || this.rawData;
+    if (!dataToUse || dataToUse.length === 0) {
+      console.warn('⚠️  No data for volume');
       return;
     }
     
-    console.log(`📊 TRADINGVIEW-STYLE: Updating volume with ${bucketedData.length} bucketed points`);
+    console.log(`📊 TRADINGVIEW-STYLE: Updating volume with ${dataToUse.length} data points`);
     
     const bidsData = [];
     const asksData = [];
     
-    // CRITICAL: Process EXACT same data points as candlesticks
-    for (const item of bucketedData) {
+    // Process volume data from raw minute data
+    for (const item of dataToUse) {
       if (item.vol_L50_bids !== null && item.vol_L50_asks !== null) {
         const time = this.toUnixTimestamp(item.time);
         bidsData.push({ time, value: parseFloat(item.vol_L50_bids) });
@@ -1189,12 +1190,12 @@ class TimeframeManager {
       }
     }
     
-    console.log(`📊 PERFECT ALIGNMENT: ${bidsData.length} volume points match ${bucketedData.length} candlestick points`);
+    console.log(`📊 TRADINGVIEW-STYLE: Setting ${bidsData.length} volume points on main chart`);
     
     if (bidsData.length > 0) {
       volumeBidsSeries.setData(bidsData);
       volumeAsksSeries.setData(asksData);
-      console.log('✅ TRADINGVIEW-STYLE: Volume perfectly aligned with price data');
+      console.log('✅ TRADINGVIEW-STYLE: Volume data set on main chart');
     }
   }
 
