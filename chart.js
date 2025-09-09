@@ -970,6 +970,12 @@ class TimeframeManager {
     
     // Only auto-scale right axis on timeframe change
     this.applyAutoScale();
+    
+    // CRITICAL: Re-sync volume chart after timeframe change
+    if (this.volumeIndicatorEnabled) {
+      setTimeout(() => this.syncVolumeTimeRange(), 100);
+    }
+    
     console.log(`✅ Switched to ${this.timeframes[timeframe].label}`);
   }
 
@@ -1170,6 +1176,9 @@ class TimeframeManager {
         // Sync time range with main chart
         this.syncVolumeTimeRange();
         
+        // CRITICAL: Setup permanent synchronization
+        this.setupPermanentVolumeSync();
+        
       } catch (error) {
         console.error('❌ Error setting volume data:', error);
       }
@@ -1185,28 +1194,70 @@ class TimeframeManager {
     }
   }
 
+  // CRITICAL: Bulletproof X-axis synchronization
   syncVolumeTimeRange() {
-    if (!volumeChart || !window.chart) return;
+    if (!volumeChart || !window.chart) {
+      console.warn('⚠️  Cannot sync: missing charts');
+      return;
+    }
     
     try {
       const mainTimeScale = window.chart.timeScale();
       const volumeTimeScale = volumeChart.timeScale();
       
-      // First fit content to show all data
-      volumeTimeScale.fitContent();
-      console.log('📊 Volume chart fitted to content');
+      // Get current main chart visible range
+      const visibleRange = mainTimeScale.getVisibleRange();
       
-      // Then sync with main chart range
-      setTimeout(() => {
-        const visibleRange = mainTimeScale.getVisibleRange();
-        if (visibleRange) {
-          volumeTimeScale.setVisibleRange(visibleRange);
-          console.log('📊 Volume chart time range synced with main chart', visibleRange);
-        }
-      }, 100);
+      if (visibleRange) {
+        // Force exact synchronization
+        volumeTimeScale.setVisibleRange({
+          from: visibleRange.from,
+          to: visibleRange.to
+        });
+        console.log('🔄 CRITICAL SYNC: Volume X-axis synced', {
+          from: new Date(visibleRange.from * 1000).toISOString(),
+          to: new Date(visibleRange.to * 1000).toISOString()
+        });
+      } else {
+        // Fallback: fit content if no range available
+        volumeTimeScale.fitContent();
+        console.log('📊 SYNC FALLBACK: Volume chart fitted to content');
+      }
       
     } catch (e) {
-      console.warn('Failed to sync volume time range:', e);
+      console.error('❌ CRITICAL: Failed to sync volume time range:', e);
+    }
+  }
+
+  // CRITICAL: Setup permanent X-axis synchronization
+  setupPermanentVolumeSync() {
+    if (!volumeChart || !window.chart) return;
+    
+    console.log('🔗 Setting up PERMANENT volume X-axis sync');
+    
+    try {
+      const mainTimeScale = window.chart.timeScale();
+      
+      // Subscribe to ALL main chart time range changes
+      mainTimeScale.subscribeVisibleTimeRangeChange((timeRange) => {
+        if (!volumeChart) return;
+        
+        try {
+          const volumeTimeScale = volumeChart.timeScale();
+          volumeTimeScale.setVisibleRange({
+            from: timeRange.from,
+            to: timeRange.to
+          });
+          console.log('🔄 AUTO-SYNC: Volume chart synced to main chart range');
+        } catch (e) {
+          console.warn('⚠️  Auto-sync failed:', e);
+        }
+      });
+      
+      console.log('✅ PERMANENT sync subscription established');
+      
+    } catch (e) {
+      console.error('❌ CRITICAL: Failed to setup permanent sync:', e);
     }
   }
 
@@ -1257,6 +1308,14 @@ class TimeframeManager {
     // Apply autoscale after loading new symbol
     this.applyAutoScale();
     this.startUpdateCycle();
+    
+    // CRITICAL: Re-sync volume chart after symbol switch
+    if (this.volumeIndicatorEnabled) {
+      setTimeout(() => {
+        this.syncVolumeTimeRange();
+        this.setupPermanentVolumeSync(); // Re-establish sync subscription
+      }, 200);
+    }
   }
 
   async switchExchange(exchange) {
@@ -1285,6 +1344,14 @@ class TimeframeManager {
     await this.initializeChart();
     this.applyAutoScale();
     this.startUpdateCycle();
+    
+    // CRITICAL: Re-sync volume chart after exchange switch
+    if (this.volumeIndicatorEnabled) {
+      setTimeout(() => {
+        this.syncVolumeTimeRange();
+        this.setupPermanentVolumeSync(); // Re-establish sync subscription
+      }, 200);
+    }
   }
 
   startUpdateCycle() {
@@ -1741,10 +1808,19 @@ function zoomIn() {
       const middle = (visibleRange.from + visibleRange.to) / 2;
       const range = visibleRange.to - visibleRange.from;
       const newRange = range * 0.6; // Zoom in
-      timeScale.setVisibleRange({
+      const newVisibleRange = {
         from: middle - newRange / 2,
         to: middle + newRange / 2
-      });
+      };
+      timeScale.setVisibleRange(newVisibleRange);
+      
+      // CRITICAL: Sync volume chart immediately after zoom
+      if (volumeChart && manager.volumeIndicatorEnabled) {
+        setTimeout(() => {
+          volumeChart.timeScale().setVisibleRange(newVisibleRange);
+          console.log('🔄 ZOOM SYNC: Volume chart synced after zoom in');
+        }, 10);
+      }
     }
   }
 }
@@ -1757,10 +1833,19 @@ function zoomOut() {
       const middle = (visibleRange.from + visibleRange.to) / 2;
       const range = visibleRange.to - visibleRange.from;
       const newRange = range * 2.6; // Zoom out even more to fit more data
-      timeScale.setVisibleRange({
+      const newVisibleRange = {
         from: middle - newRange / 2,
         to: middle + newRange / 2
-      });
+      };
+      timeScale.setVisibleRange(newVisibleRange);
+      
+      // CRITICAL: Sync volume chart immediately after zoom
+      if (volumeChart && manager.volumeIndicatorEnabled) {
+        setTimeout(() => {
+          volumeChart.timeScale().setVisibleRange(newVisibleRange);
+          console.log('🔄 ZOOM SYNC: Volume chart synced after zoom out');
+        }, 10);
+      }
     }
   }
 }
@@ -1768,6 +1853,14 @@ function zoomOut() {
 function fitContent() {
   if (window.chart) {
     window.chart.timeScale().fitContent();
+    
+    // CRITICAL: Sync volume chart after fit content
+    if (volumeChart && manager.volumeIndicatorEnabled) {
+      setTimeout(() => {
+        volumeChart.timeScale().fitContent();
+        console.log('🔄 FIT SYNC: Volume chart synced after fit content');
+      }, 10);
+    }
   }
 }
 
