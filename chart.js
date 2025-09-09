@@ -2,7 +2,7 @@
 // Main price chart with Bid Spread MAs on LEFT y-axis and enhanced zoom capability
 
 // Data sources mapped by symbol
-const API_BASE = 'https://multiexchangereal-j4ep.onrender.com/files/json';
+const API_BASE = 'https://storage.googleapis.com/bananazone';
 let API_EXCHANGE = 'coinbase';
 
 function formatDateYYYYMMDD(date) {
@@ -20,7 +20,23 @@ function getDateStringWithOffset(offsetDays = 0) {
 }
 
 function buildDailyUrl(asset, day) {
-  return `${API_BASE}?exchange=${API_EXCHANGE}&asset=${asset}&day=${day}`;
+  return `${API_BASE}/${API_EXCHANGE}/${asset}/1min/${day}.jsonl`;
+}
+
+// Parse JSONL (JSON Lines) format
+function parseJsonLines(text) {
+  if (!text || text.trim() === '') return [];
+  return text.trim().split('\n')
+    .filter(line => line.trim())
+    .map(line => {
+      try {
+        return JSON.parse(line);
+      } catch (e) {
+        console.warn('Failed to parse JSON line:', line);
+        return null;
+      }
+    })
+    .filter(Boolean);
 }
 
 const DATA_SOURCES = {
@@ -39,10 +55,6 @@ const DATA_SOURCES = {
   XRP: {
     recent: () => buildDailyUrl('XRP', getDateStringWithOffset(0)),
     historical: () => buildDailyUrl('XRP', getDateStringWithOffset(-1))
-  },
-  SOL: {
-    recent: () => buildDailyUrl('SOL', getDateStringWithOffset(0)),
-    historical: () => buildDailyUrl('SOL', getDateStringWithOffset(-1))
   }
 };
 
@@ -54,7 +66,6 @@ function normalizeApiData(items) {
       const time = row.time || row.t || null;
       const price = row.price ?? row.price_avg ?? row.close ?? row.open ?? row.high ?? row.low ?? null;
       const spreadL5 = row.spread_L5_pct_avg ?? row.spread_avg_L5_pct ?? null;
-      const spreadL20 = row.spread_L20_pct_avg ?? row.spread_avg_L20_pct ?? row.spread_pct ?? null;
       const spreadL50 = row.spread_L50_pct_avg ?? row.spread_avg_L50_pct ?? null;
       const spreadL100 = row.spread_L100_pct_avg ?? row.spread_avg_L100_pct ?? null;
       if (!time || price === null || price === undefined) return null;
@@ -63,7 +74,6 @@ function normalizeApiData(items) {
         price,
         // Expose all spread layer fields
         spread_L5_pct_avg: spreadL5,
-        spread_L20_pct_avg: spreadL20,
         spread_L50_pct_avg: spreadL50,
         spread_L100_pct_avg: spreadL100
       };
@@ -169,14 +179,13 @@ function createAvgSeries(title) {
 
 function formatLayerShort(layerKey) {
   if (layerKey === 'spread_L5_pct_avg') return 'L5';
-  if (layerKey === 'spread_L20_pct_avg') return 'L20';
   if (layerKey === 'spread_L50_pct_avg') return 'L50';
   if (layerKey === 'spread_L100_pct_avg') return 'L100';
   return 'L?';
 }
 
 // Unique bright colors per (layer,duration)
-const LAYER_ORDER = ['spread_L5_pct_avg','spread_L20_pct_avg','spread_L50_pct_avg','spread_L100_pct_avg'];
+const LAYER_ORDER = ['spread_L5_pct_avg','spread_L50_pct_avg','spread_L100_pct_avg'];
 const DURATION_ORDER = [20, 50, 100, 200];
 const BRIGHT_PALETTE = [
   '#e6194B', '#3cb44b', '#ffe119', '#4363d8',
@@ -202,7 +211,7 @@ class TimeframeManager {
     this.updateInterval = null;
     this.refreshInterval = null;
     // Multi-layer MA controls
-    this.selectedLayers = new Set(); // e.g., 'spread_L5_pct_avg', 'spread_L20_pct_avg'
+    this.selectedLayers = new Set(); // e.g., 'spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg'
     this.selectedDurations = new Set(); // e.g., 20, 50, 100, 200
     this.maSeriesByKey = new Map(); // key: `${layerKey}|${duration}` -> lineSeries
     this.avgSeriesByLayer = new Map(); // key: layerKey -> white average line series
@@ -505,13 +514,12 @@ class TimeframeManager {
 
   async fetchDayData(dateStr) {
     try {
-      const url = typeof this.dataSource.recent === 'function'
-        ? `${API_BASE}?exchange=${API_EXCHANGE}&asset=${this.currentSymbol}&day=${dateStr}`
-        : this.dataSource.recent; // fallback
+      const url = buildDailyUrl(this.currentSymbol, dateStr);
       const res = await fetch(url);
       if (!res.ok) return [];
-      const json = await res.json();
-      const data = normalizeApiData(json);
+      const text = await res.text();
+      const jsonLines = parseJsonLines(text);
+      const data = normalizeApiData(jsonLines);
       return Array.isArray(data) ? data : [];
     } catch (_) {
       return [];
@@ -582,9 +590,11 @@ class TimeframeManager {
   async fetchAndUpdate() {
     try {
       const today = getDateStringWithOffset(0);
-      const url = `${API_BASE}?exchange=${API_EXCHANGE}&asset=${this.currentSymbol}&day=${today}`;
+      const url = buildDailyUrl(this.currentSymbol, today);
       const res = await fetch(url);
-      const data = normalizeApiData(await res.json());
+      const text = await res.text();
+      const jsonLines = parseJsonLines(text);
+      const data = normalizeApiData(jsonLines);
 
       // Find new data points
       const newData = data.filter(d => {
@@ -641,7 +651,7 @@ class TimeframeManager {
   }
 
   toggleLayer(layerKey, enabled) {
-    const allowed = new Set(['spread_L5_pct_avg', 'spread_L20_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg']);
+    const allowed = new Set(['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg']);
     if (!allowed.has(layerKey)) return;
     if (enabled) this.selectedLayers.add(layerKey); else this.selectedLayers.delete(layerKey);
     // Recompute only if there are active durations; otherwise just update visibility

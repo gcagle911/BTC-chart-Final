@@ -189,7 +189,7 @@
       <label class="timeframe-label" for="exchange-dropdown">Exchange:</label>
       <select id="exchange-dropdown" onchange="setExchange(this.value)">
         <option value="coinbase" selected>Coinbase</option>
-        <option value="binanceus">Binance.US</option>
+        <option value="kraken">Kraken</option>
       </select>
       <label class="timeframe-label" for="symbol-dropdown">Symbol:</label>
       <select id="symbol-dropdown" onchange="setSymbol(this.value)">
@@ -197,7 +197,6 @@
         <option value="ETH">ETH</option>
         <option value="ADA">ADA</option>
         <option value="XRP">XRP</option>
-        <option value="SOL">SOL</option>
       </select>
       <label class="timeframe-label" for="timeframe-dropdown">Timeframe:</label>
       <select id="timeframe-dropdown" onchange="setTimeframe(this.value)">
@@ -231,7 +230,6 @@
           </div>
           <div class="ma-toggle-list">
             <label><input type="checkbox" onchange="toggleMALayer('spread_L5_pct_avg', this.checked)"> L5 Layer</label>
-            <label><input type="checkbox" onchange="toggleMALayer('spread_L20_pct_avg', this.checked)"> L20 Layer</label>
             <label><input type="checkbox" onchange="toggleMALayer('spread_L50_pct_avg', this.checked)"> L50 Layer</label>
             <label><input type="checkbox" onchange="toggleMALayer('spread_L100_pct_avg', this.checked)"> L100 Layer</label>
           </div>
