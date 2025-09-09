@@ -28,18 +28,32 @@ function buildDailyUrl(asset, day) {
 
 // Parse JSONL (JSON Lines) format
 function parseJsonLines(text) {
-  if (!text || text.trim() === '') return [];
-  return text.trim().split('\n')
-    .filter(line => line.trim())
-    .map(line => {
-      try {
-        return JSON.parse(line);
-      } catch (e) {
-        console.warn('Failed to parse JSON line:', line);
-        return null;
-      }
-    })
-    .filter(Boolean);
+  if (!text || text.trim() === '') {
+    console.log('📄 Empty or null text received');
+    return [];
+  }
+  
+  const lines = text.trim().split('\n').filter(line => line.trim());
+  console.log(`📄 Found ${lines.length} non-empty lines`);
+  
+  if (lines.length > 0) {
+    console.log('📄 First line sample:', lines[0].substring(0, 200) + '...');
+  }
+  
+  const parsed = lines.map((line, index) => {
+    try {
+      return JSON.parse(line);
+    } catch (e) {
+      console.warn(`Failed to parse JSON line ${index + 1}:`, line.substring(0, 100), e.message);
+      return null;
+    }
+  }).filter(Boolean);
+  
+  if (parsed.length > 0) {
+    console.log('📊 Sample parsed object:', JSON.stringify(parsed[0], null, 2));
+  }
+  
+  return parsed;
 }
 
 const DATA_SOURCES = {
@@ -64,25 +78,44 @@ const DATA_SOURCES = {
 // Normalize API rows to internal schema expected by the charting logic
 function normalizeApiData(items) {
   if (!Array.isArray(items)) return [];
-  return items
-    .map((row) => {
-      const time = row.time || row.t || null;
-      const price = row.price ?? row.price_avg ?? row.close ?? row.open ?? row.high ?? row.low ?? null;
-      const spreadL5 = row.spread_L5_pct_avg ?? row.spread_avg_L5_pct ?? null;
-      const spreadL50 = row.spread_L50_pct_avg ?? row.spread_avg_L50_pct ?? null;
-      const spreadL100 = row.spread_L100_pct_avg ?? row.spread_avg_L100_pct ?? null;
-      if (!time || price === null || price === undefined) return null;
-      return {
+  console.log(`🔄 Normalizing ${items.length} items`);
+  
+  const normalized = items
+    .map((row, index) => {
+      // Map the new data format fields
+      const time = row.t || row.time || null;
+      const price = row.mid ?? row.price ?? row.price_avg ?? row.close ?? row.open ?? row.high ?? row.low ?? null;
+      
+      // Map the spread fields from the new format
+      const spreadL5 = row.spread_L5_pct ?? row.spread_L5_pct_avg ?? row.spread_avg_L5_pct ?? null;
+      const spreadL50 = row.spread_L50_pct ?? row.spread_L50_pct_avg ?? row.spread_avg_L50_pct ?? null;
+      const spreadL100 = row.spread_L100_pct ?? row.spread_L100_pct_avg ?? row.spread_avg_L100_pct ?? null;
+      
+      if (!time || price === null || price === undefined) {
+        if (index < 3) console.warn(`⚠️  Skipping row ${index}: missing time or price`, {time, price});
+        return null;
+      }
+      
+      const normalized = {
         time,
-        price,
-        // Expose all spread layer fields
-        spread_L5_pct_avg: spreadL5,
-        spread_L50_pct_avg: spreadL50,
-        spread_L100_pct_avg: spreadL100
+        price: parseFloat(price),
+        // Expose all spread layer fields with expected naming
+        spread_L5_pct_avg: spreadL5 ? parseFloat(spreadL5) : null,
+        spread_L50_pct_avg: spreadL50 ? parseFloat(spreadL50) : null,
+        spread_L100_pct_avg: spreadL100 ? parseFloat(spreadL100) : null
       };
+      
+      if (index < 2) {
+        console.log(`📊 Sample normalized row ${index}:`, normalized);
+      }
+      
+      return normalized;
     })
     .filter(Boolean)
     .sort((a, b) => new Date(a.time) - new Date(b.time));
+    
+  console.log(`✅ Normalized to ${normalized.length} valid data points`);
+  return normalized;
 }
 
 // Chart configuration with LEFT/RIGHT dual y-axis and massive zoom range
@@ -518,13 +551,22 @@ class TimeframeManager {
   async fetchDayData(dateStr) {
     try {
       const url = buildDailyUrl(this.currentSymbol, dateStr);
+      console.log(`🔍 Fetching: ${url}`);
       const res = await fetch(url);
-      if (!res.ok) return [];
+      console.log(`📡 Response status: ${res.status} ${res.statusText}`);
+      if (!res.ok) {
+        console.warn(`❌ Failed to fetch ${url}: ${res.status} ${res.statusText}`);
+        return [];
+      }
       const text = await res.text();
+      console.log(`📄 Response length: ${text.length} characters`);
       const jsonLines = parseJsonLines(text);
+      console.log(`📊 Parsed ${jsonLines.length} JSON lines`);
       const data = normalizeApiData(jsonLines);
+      console.log(`✅ Normalized to ${data.length} data points`);
       return Array.isArray(data) ? data : [];
-    } catch (_) {
+    } catch (error) {
+      console.error(`❌ Error fetching ${dateStr}:`, error);
       return [];
     }
   }
@@ -602,7 +644,13 @@ class TimeframeManager {
     try {
       const today = getDateStringWithOffset(0);
       const url = buildDailyUrl(this.currentSymbol, today);
+      console.log(`🔄 Update fetch: ${url}`);
       const res = await fetch(url);
+      console.log(`📡 Update response: ${res.status} ${res.statusText}`);
+      if (!res.ok) {
+        console.warn(`❌ Update failed: ${res.status} ${res.statusText}`);
+        return;
+      }
       const text = await res.text();
       const jsonLines = parseJsonLines(text);
       const data = normalizeApiData(jsonLines);
