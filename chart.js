@@ -56,6 +56,85 @@ function parseJsonLines(text) {
   return parsed;
 }
 
+// CRITICAL: Deterministic UTC time bucketing for perfect sync
+function resampleData(rows, tfMinutes, fields) {
+  const step = tfMinutes * 60_000; // Timeframe in milliseconds
+  const buckets = new Map();
+  
+  console.log(`🔄 Resampling ${rows.length} rows to ${tfMinutes}m timeframe`);
+  
+  for (const r of rows) {
+    if (!r.ts || typeof r.ts !== 'number') continue;
+    
+    // CRITICAL: Floor-based UTC bucketing - deterministic
+    const bucketStart = Math.floor(r.ts / step) * step;
+    
+    let bucket = buckets.get(bucketStart);
+    if (!bucket) {
+      bucket = {};
+      buckets.set(bucketStart, bucket);
+    }
+    
+    // Aggregate all specified fields
+    for (const field of fields) {
+      const value = r[field];
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        if (!bucket[field]) bucket[field] = [];
+        bucket[field].push(value);
+      }
+    }
+  }
+  
+  // Convert buckets to sorted array
+  const bucketKeys = Array.from(buckets.keys()).sort((a, b) => a - b);
+  const resampled = [];
+  
+  for (const bucketStart of bucketKeys) {
+    const bucket = buckets.get(bucketStart);
+    const row = { ts: bucketStart };
+    
+    // Calculate mean for each field
+    for (const field of fields) {
+      const values = bucket[field];
+      if (values && values.length > 0) {
+        row[field] = values.reduce((a, b) => a + b, 0) / values.length;
+      } else {
+        row[field] = null;
+      }
+    }
+    
+    resampled.push(row);
+  }
+  
+  console.log(`✅ Resampled to ${resampled.length} ${tfMinutes}m buckets`);
+  return resampled;
+}
+
+// CRITICAL: Pad missing minutes with nulls to maintain MA alignment
+function padMissingMinutes(rows, tfMinutes) {
+  if (!rows.length) return rows;
+  
+  const step = tfMinutes * 60_000;
+  const out = [];
+  let currentTime = rows[0].ts;
+  let dataIndex = 0;
+  
+  while (currentTime <= rows[rows.length - 1].ts) {
+    if (dataIndex < rows.length && rows[dataIndex].ts === currentTime) {
+      // Data exists for this timestamp
+      out.push(rows[dataIndex]);
+      dataIndex++;
+    } else {
+      // Missing data - insert null row
+      out.push({ ts: currentTime });
+    }
+    currentTime += step;
+  }
+  
+  console.log(`📊 Padded ${out.length - rows.length} missing ${tfMinutes}m intervals`);
+  return out;
+}
+
 const DATA_SOURCES = {
   BTC: {
     recent: () => buildDailyUrl('BTC', getDateStringWithOffset(0)),
@@ -100,8 +179,12 @@ function normalizeApiData(items) {
         return null;
       }
       
+      // CRITICAL: Convert to UTC epoch milliseconds
+      const utcTimestamp = new Date(time).getTime(); // Parse as UTC
+      
       const normalized = {
-        time,
+        time, // Keep original for compatibility
+        ts: utcTimestamp, // CRITICAL: UTC epoch ms for deterministic bucketing
         price: parseFloat(price),
         // Expose all spread layer fields with expected naming
         spread_L5_pct_avg: spreadL5 ? parseFloat(spreadL5) : null,
