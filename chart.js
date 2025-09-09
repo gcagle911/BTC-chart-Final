@@ -201,6 +201,48 @@ function createMASeries(color, title) {
   });
 }
 
+// Dynamic EMA series registry for multi-layer/duration combinations
+function createEMASeries(color, title) {
+  return chart.addLineSeries({
+    priceScaleId: 'left',
+    color,
+    lineWidth: 0.7,
+    lineStyle: LightweightCharts.LineStyle.Dashed, // Distinguish EMAs with dashed lines
+    title,
+    lastValueVisible: false,
+    priceLineVisible: false,
+    crosshairMarkerVisible: false,
+  });
+}
+
+// Calculate EMA (Exponential Moving Average)
+function calculateEMA(data, period) {
+  if (!data || data.length === 0 || period <= 0) return [];
+  
+  const emaData = [];
+  const multiplier = 2 / (period + 1);
+  
+  // First EMA value is the SMA of the first 'period' values
+  if (data.length < period) return [];
+  
+  let smaSum = 0;
+  for (let i = 0; i < period; i++) {
+    smaSum += data[i].value;
+  }
+  const firstEMA = smaSum / period;
+  emaData.push({ time: data[period - 1].time, value: firstEMA });
+  
+  // Calculate subsequent EMA values
+  let previousEMA = firstEMA;
+  for (let i = period; i < data.length; i++) {
+    const currentEMA = (data[i].value * multiplier) + (previousEMA * (1 - multiplier));
+    emaData.push({ time: data[i].time, value: currentEMA });
+    previousEMA = currentEMA;
+  }
+  
+  return emaData;
+}
+
 function createAvgSeries(title) {
   return chart.addLineSeries({
     priceScaleId: 'left',
@@ -249,10 +291,14 @@ class TimeframeManager {
     // Multi-layer MA controls with sensible defaults
     this.selectedLayers = new Set(['spread_L50_pct_avg']); // Default to L50 layer
     this.selectedDurations = new Set([50, 200]); // Default to 50 and 200 period MAs
+    this.selectedEMADurations = new Set([50]); // Default to 50 period EMA
     this.maSeriesByKey = new Map(); // key: `${layerKey}|${duration}` -> lineSeries
+    this.emaSeriesByKey = new Map(); // key: `${layerKey}|${duration}` -> EMA lineSeries
     this.avgSeriesByLayer = new Map(); // key: layerKey -> white average line series
     this.maRawDataByKey = new Map(); // key: `${layerKey}|${duration}` -> raw [{time,value}]
+    this.emaRawDataByKey = new Map(); // key: `${layerKey}|${duration}` -> raw EMA [{time,value}]
     this.scaleFactorsByKey = new Map(); // key -> factor number
+    this.emaScaleFactorsByKey = new Map(); // key -> EMA factor number
     this.normalizeEnabled = false;
     this.scaleRecomputeTimeout = null;
     this.autoRefitPending = false;
@@ -489,6 +535,33 @@ class TimeframeManager {
       }
     }
 
+    // Calculate and set/update EMA series for each combination
+    const activeEMADurations = Array.from(this.selectedEMADurations);
+    for (const layerKey of activeLayers) {
+      const series = layerToSeries.get(layerKey);
+      if (!series || series.length === 0) continue;
+      for (const duration of activeEMADurations) {
+        const key = `${layerKey}|EMA${duration}`;
+        if (!this.emaSeriesByKey.has(key)) {
+          const color = colorFor(layerKey, duration + 1000); // Offset color index for EMAs
+          const title = `${formatLayerShort(layerKey)}EMA${duration}`;
+          this.emaSeriesByKey.set(key, createEMASeries(color, title));
+          // start hidden; visibility applied after computation
+          this.emaSeriesByKey.get(key).applyOptions({ visible: false });
+        }
+        const emaLineSeries = this.emaSeriesByKey.get(key);
+        const emaPoints = calculateEMA(series, duration);
+        this.emaRawDataByKey.set(key, emaPoints);
+        const emaFactor = this.normalizeEnabled ? (this.emaScaleFactorsByKey.get(key) || 1) : 1;
+        const emaScaled = emaFactor === 1 ? emaPoints : emaPoints.map(p => ({ time: p.time, value: p.value * emaFactor }));
+        if (isUpdate) {
+          emaScaled.forEach(p => emaLineSeries.update(p));
+        } else {
+          emaLineSeries.setData(emaScaled);
+        }
+      }
+    }
+
     if (isUpdate) {
       // Add new data points
       if (priceData.length > 0) {
@@ -547,6 +620,37 @@ class TimeframeManager {
         series.applyOptions({ title: baseTitle + suffix });
       }
       
+      // Apply EMA series visibility
+      for (const [key, series] of this.emaSeriesByKey.entries()) {
+        if (!series) {
+          console.warn(`⚠️  Missing EMA series for key: ${key}`);
+          continue;
+        }
+        
+        totalSeries++;
+        const [layerKey, emaDurationStr] = key.split('|');
+        const duration = parseInt(emaDurationStr.replace('EMA', ''), 10);
+        const shouldBeVisible = this.selectedLayers.has(layerKey) && this.selectedEMADurations.has(duration);
+        
+        // Force visibility state - don't rely on previous state
+        series.applyOptions({ visible: shouldBeVisible });
+        
+        if (shouldBeVisible) {
+          visibleCount++;
+          // Ensure the series has data
+          const rawData = this.emaRawDataByKey.get(key);
+          if (!rawData || rawData.length === 0) {
+            console.warn(`⚠️  EMA Series ${key} is visible but has no data`);
+          }
+        }
+        
+        // Update title suffix for current factor
+        const factor = this.normalizeEnabled ? (this.emaScaleFactorsByKey.get(key) || 1) : 1;
+        const baseTitle = `${formatLayerShort(layerKey)}EMA${duration}`;
+        const suffix = this.normalizeEnabled ? ` ×${factor.toFixed(2)}` : '';
+        series.applyOptions({ title: baseTitle + suffix });
+      }
+
       // Apply cumulative avg visibility
       for (const [layerKey, series] of this.avgSeriesByLayer.entries()) {
         if (!series) {
@@ -779,7 +883,7 @@ class TimeframeManager {
     const allowed = new Set([20, 50, 100, 200]);
     if (!allowed.has(duration)) return;
     
-    console.log(`🔄 Duration toggle: ${duration} -> ${enabled ? 'ENABLED' : 'DISABLED'}`);
+    console.log(`🔄 MA Duration toggle: ${duration} -> ${enabled ? 'ENABLED' : 'DISABLED'}`);
     
     if (enabled) {
       this.selectedDurations.add(duration);
@@ -788,13 +892,39 @@ class TimeframeManager {
     }
     
     console.log(`📊 Selected layers: [${Array.from(this.selectedLayers).join(', ')}]`);
-    console.log(`📊 Selected durations: [${Array.from(this.selectedDurations).join(', ')}]`);
+    console.log(`📊 Selected MA durations: [${Array.from(this.selectedDurations).join(', ')}]`);
     
     // Always reprocess data to ensure proper series creation/deletion
     if (this.rawData && this.rawData.length > 0) {
       this.lastTimestamp = 0;
       this.processAndSetData(this.rawData);
-      console.log(`✅ Duration toggle complete - reprocessed ${this.rawData.length} data points`);
+      console.log(`✅ MA Duration toggle complete - reprocessed ${this.rawData.length} data points`);
+    } else {
+      // If no data yet, just apply visibility
+      this.applyMAVisibility();
+    }
+  }
+
+  toggleEMADuration(duration, enabled) {
+    const allowed = new Set([20, 50, 100, 200]);
+    if (!allowed.has(duration)) return;
+    
+    console.log(`🔄 EMA Duration toggle: ${duration} -> ${enabled ? 'ENABLED' : 'DISABLED'}`);
+    
+    if (enabled) {
+      this.selectedEMADurations.add(duration);
+    } else {
+      this.selectedEMADurations.delete(duration);
+    }
+    
+    console.log(`📊 Selected layers: [${Array.from(this.selectedLayers).join(', ')}]`);
+    console.log(`📊 Selected EMA durations: [${Array.from(this.selectedEMADurations).join(', ')}]`);
+    
+    // Always reprocess data to ensure proper series creation/deletion
+    if (this.rawData && this.rawData.length > 0) {
+      this.lastTimestamp = 0;
+      this.processAndSetData(this.rawData);
+      console.log(`✅ EMA Duration toggle complete - reprocessed ${this.rawData.length} data points`);
     } else {
       // If no data yet, just apply visibility
       this.applyMAVisibility();
@@ -823,13 +953,17 @@ class TimeframeManager {
 
     // Clear existing chart data
     priceSeries.setData([]);
-    // Remove dynamic MA and avg series completely to avoid extra scales/panes
-    console.log(`🧹 Clearing ${this.maSeriesByKey.size} MA series and ${this.avgSeriesByLayer.size} avg series for symbol switch`);
+    // Remove dynamic MA, EMA and avg series completely to avoid extra scales/panes
+    console.log(`🧹 Clearing ${this.maSeriesByKey.size} MA series, ${this.emaSeriesByKey.size} EMA series, and ${this.avgSeriesByLayer.size} avg series for symbol switch`);
     try {
       for (const [key, series] of this.maSeriesByKey.entries()) {
         chart.removeSeries(series);
       }
       this.maSeriesByKey.clear();
+      for (const [key, series] of this.emaSeriesByKey.entries()) {
+        chart.removeSeries(series);
+      }
+      this.emaSeriesByKey.clear();
       for (const [key, series] of this.avgSeriesByLayer.entries()) {
         chart.removeSeries(series);
       }
@@ -853,11 +987,13 @@ class TimeframeManager {
     if (this.updateInterval) clearInterval(this.updateInterval);
     if (this.refreshInterval) clearInterval(this.refreshInterval);
     // Clear series
-    console.log(`🧹 Clearing ${this.maSeriesByKey.size} MA series and ${this.avgSeriesByLayer.size} avg series for exchange switch`);
+    console.log(`🧹 Clearing ${this.maSeriesByKey.size} MA series, ${this.emaSeriesByKey.size} EMA series, and ${this.avgSeriesByLayer.size} avg series for exchange switch`);
     try {
       priceSeries.setData([]);
       for (const [key, series] of this.maSeriesByKey.entries()) { chart.removeSeries(series); }
       this.maSeriesByKey.clear();
+      for (const [key, series] of this.emaSeriesByKey.entries()) { chart.removeSeries(series); }
+      this.emaSeriesByKey.clear();
       for (const [key, series] of this.avgSeriesByLayer.entries()) { chart.removeSeries(series); }
       this.avgSeriesByLayer.clear();
     } catch(e) {
@@ -1118,29 +1254,49 @@ class TimeframeManager {
     return this.selectedLayers.has(layerKey) && this.selectedDurations.has(duration);
   }
 
-  // Debug function to validate MA series state
+  // Debug function to validate MA and EMA series state
   validateMASeriesState() {
-    const expectedSeries = [];
+    const expectedMASeries = [];
+    const expectedEMASeries = [];
+    
     for (const layerKey of this.selectedLayers) {
       for (const duration of this.selectedDurations) {
-        expectedSeries.push(`${layerKey}|${duration}`);
+        expectedMASeries.push(`${layerKey}|${duration}`);
+      }
+      for (const duration of this.selectedEMADurations) {
+        expectedEMASeries.push(`${layerKey}|EMA${duration}`);
       }
     }
     
-    const actualSeries = Array.from(this.maSeriesByKey.keys());
-    const missingSeries = expectedSeries.filter(key => !this.maSeriesByKey.has(key));
-    const extraSeries = actualSeries.filter(key => !expectedSeries.includes(key));
+    const actualMASeries = Array.from(this.maSeriesByKey.keys());
+    const actualEMASeries = Array.from(this.emaSeriesByKey.keys());
     
-    if (missingSeries.length > 0 || extraSeries.length > 0) {
+    const missingMASeries = expectedMASeries.filter(key => !this.maSeriesByKey.has(key));
+    const extraMASeries = actualMASeries.filter(key => !expectedMASeries.includes(key));
+    const missingEMASeries = expectedEMASeries.filter(key => !this.emaSeriesByKey.has(key));
+    const extraEMASeries = actualEMASeries.filter(key => !expectedEMASeries.includes(key));
+    
+    let hasIssues = false;
+    
+    if (missingMASeries.length > 0 || extraMASeries.length > 0) {
       console.warn(`⚠️  MA Series State Mismatch:`);
-      console.warn(`   Expected: [${expectedSeries.join(', ')}]`);
-      console.warn(`   Actual: [${actualSeries.join(', ')}]`);
-      if (missingSeries.length > 0) console.warn(`   Missing: [${missingSeries.join(', ')}]`);
-      if (extraSeries.length > 0) console.warn(`   Extra: [${extraSeries.join(', ')}]`);
-      return false;
+      console.warn(`   Expected: [${expectedMASeries.join(', ')}]`);
+      console.warn(`   Actual: [${actualMASeries.join(', ')}]`);
+      if (missingMASeries.length > 0) console.warn(`   Missing: [${missingMASeries.join(', ')}]`);
+      if (extraMASeries.length > 0) console.warn(`   Extra: [${extraMASeries.join(', ')}]`);
+      hasIssues = true;
     }
     
-    return true;
+    if (missingEMASeries.length > 0 || extraEMASeries.length > 0) {
+      console.warn(`⚠️  EMA Series State Mismatch:`);
+      console.warn(`   Expected: [${expectedEMASeries.join(', ')}]`);
+      console.warn(`   Actual: [${actualEMASeries.join(', ')}]`);
+      if (missingEMASeries.length > 0) console.warn(`   Missing: [${missingEMASeries.join(', ')}]`);
+      if (extraEMASeries.length > 0) console.warn(`   Extra: [${extraEMASeries.join(', ')}]`);
+      hasIssues = true;
+    }
+    
+    return !hasIssues;
   }
 
   refreshVisibleMALines() {
@@ -1183,6 +1339,29 @@ class TimeframeManager {
         }, 10); // Small delay to ensure setData operations are complete
       } catch (_) {}
     }
+
+    // Also refresh EMA series
+    for (const [key, series] of this.emaSeriesByKey.entries()) {
+      const raw = this.emaRawDataByKey.get(key) || [];
+      const factor = this.normalizeEnabled ? (this.emaScaleFactorsByKey.get(key) || 1) : 1;
+      const points = raw.map(p => ({ time: p.time, value: p.value * factor }));
+      series.setData(points);
+      
+      // Update title with multiplier
+      const [layerKey, emaDurationStr] = key.split('|');
+      const duration = parseInt(emaDurationStr.replace('EMA', ''), 10);
+      const baseTitle = `${formatLayerShort(layerKey)}EMA${duration}`;
+      const clampedNote = this.normalizeEnabled && (factor <= 0.1001 || factor >= 9.999) ? ' (clamped)' : '';
+      const suffix = this.normalizeEnabled ? ` ×${(factor).toFixed(2)}${clampedNote}` : '';
+      
+      // IMPORTANT: Maintain visibility state during refresh
+      const shouldBeVisible = this.selectedLayers.has(layerKey) && this.selectedEMADurations.has(duration);
+      series.applyOptions({ 
+        title: baseTitle + suffix,
+        visible: shouldBeVisible  // Explicitly maintain visibility
+      });
+    }
+
     // Update cumulative avg titles when visible
     if (this.avgRawDataByLayer) {
       for (const [layerKey, raw] of this.avgRawDataByLayer.entries()) {
@@ -1247,6 +1426,10 @@ function toggleMALayer(layerKey, enabled) {
 
 function toggleMADuration(duration, enabled) {
   manager.toggleDuration(duration, enabled);
+}
+
+function toggleEMADuration(duration, enabled) {
+  manager.toggleEMADuration(duration, enabled);
 }
 
 function toggleNormalize(enabled) {
