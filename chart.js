@@ -278,108 +278,75 @@ chart.priceScale('right').applyOptions({
 });
 priceSeries.applyOptions({ priceFormat: { type: 'price', precision: 3, minMove: 0.001 } });
 
-// Volume Indicator Chart (initially null, created when needed)
-let volumeChart = null;
+// TRADINGVIEW-STYLE: Volume indicator as part of main chart system
 let volumeBidsSeries = null;
 let volumeAsksSeries = null;
 let volumeIndicatorEnabled = false;
 
-function createVolumeChart() {
-  if (volumeChart) {
-    console.log('📊 Volume chart already exists, returning existing chart');
-    return volumeChart;
+// Create volume series on the main chart with separate price scale
+function createVolumeSeries() {
+  if (volumeBidsSeries && volumeAsksSeries) {
+    console.log('📊 Volume series already exist');
+    return true;
   }
 
-  console.log('📊 Creating new volume chart');
+  console.log('📊 Creating volume series on main chart');
   
   try {
-    const volumeChartElement = document.getElementById('volume-chart');
-    if (!volumeChartElement) {
-      console.error('❌ Volume chart element not found');
-      return null;
-    }
-
-    volumeChart = LightweightCharts.createChart(volumeChartElement, {
-      layout: {
-        background: { color: '#131722' },
-        textColor: '#d1d4dc',
-      },
-      grid: {
-        vertLines: { color: 'rgba(42, 46, 57, 0.5)' },
-        horzLines: { color: 'rgba(42, 46, 57, 0.5)' },
-      },
-      crosshair: {
-        mode: LightweightCharts.CrosshairMode.Normal,
-      },
-      rightPriceScale: {
-        visible: true,
-        borderColor: 'rgba(197, 203, 206, 0.8)',
-        scaleMargins: { top: 0.1, bottom: 0.1 },
-      },
-      timeScale: {
-        visible: true, // Show time scale on volume chart for proper rendering
-        borderColor: 'rgba(197, 203, 206, 0.8)',
-        timeVisible: true,
-        secondsVisible: false,
-        rightOffset: 50, // Match main chart offset
-        barSpacing: 8, // Match main chart spacing
-        minBarSpacing: 2,
-      },
-      handleScroll: {
-        mouseWheel: false, // DISABLE - volume chart should not scroll independently
-        pressedMouseMove: false, // DISABLE - volume chart should not pan independently
-        horzTouchDrag: false, // DISABLE - volume chart should not drag independently
-        vertTouchDrag: false, // DISABLE - no vertical interactions
-      },
-      handleScale: {
-        axisPressedMouseMove: false, // DISABLE - no independent scaling
-        mouseWheel: false, // DISABLE - no independent wheel zoom
-        pinch: false, // DISABLE - no independent pinch zoom
-      },
-    });
-
-    console.log('📊 Volume chart created successfully');
-
-    // Create volume series - using area series for better visibility
-    volumeBidsSeries = volumeChart.addAreaSeries({
-      topColor: 'rgba(38, 166, 154, 0.4)', // Green for bids with transparency
+    // CRITICAL: Use main chart but with separate 'volume' price scale
+    volumeBidsSeries = chart.addAreaSeries({
+      topColor: 'rgba(38, 166, 154, 0.4)', // Green for bids
       bottomColor: 'rgba(38, 166, 154, 0.1)',
       lineColor: '#26a69a',
       lineWidth: 2,
+      priceScaleId: 'volume', // CRITICAL: Separate price scale for volume
       priceFormat: { type: 'volume' },
       title: 'Bids Volume',
+      visible: false, // Start hidden
     });
 
-    volumeAsksSeries = volumeChart.addAreaSeries({
-      topColor: 'rgba(239, 83, 80, 0.4)', // Red for asks with transparency
+    volumeAsksSeries = chart.addAreaSeries({
+      topColor: 'rgba(239, 83, 80, 0.4)', // Red for asks
       bottomColor: 'rgba(239, 83, 80, 0.1)', 
       lineColor: '#ef5350',
       lineWidth: 2,
+      priceScaleId: 'volume', // CRITICAL: Same volume price scale
       priceFormat: { type: 'volume' },
       title: 'Asks Volume',
+      visible: false, // Start hidden
     });
 
-    console.log('📊 Volume series created successfully');
-    return volumeChart;
+    // Configure the volume price scale
+    chart.priceScale('volume').applyOptions({
+      visible: false, // Hidden by default
+      scaleMargins: { top: 0.7, bottom: 0.05 }, // Position at bottom
+      mode: LightweightCharts.PriceScaleMode.Normal,
+      autoScale: true,
+    });
+
+    console.log('✅ Volume series created on main chart with separate price scale');
+    return true;
     
   } catch (error) {
-    console.error('❌ Error creating volume chart:', error);
-    return null;
+    console.error('❌ Error creating volume series:', error);
+    return false;
   }
 }
 
-function destroyVolumeChart() {
-  console.log('📊 Destroying volume chart');
-  if (volumeChart) {
-    try {
-      volumeChart.remove();
-    } catch (e) {
-      console.warn('Warning destroying volume chart:', e);
+function destroyVolumeSeries() {
+  console.log('📊 Destroying volume series');
+  try {
+    if (volumeBidsSeries) {
+      chart.removeSeries(volumeBidsSeries);
+      volumeBidsSeries = null;
     }
-    volumeChart = null;
-    volumeBidsSeries = null;
-    volumeAsksSeries = null;
-    console.log('✅ Volume chart destroyed');
+    if (volumeAsksSeries) {
+      chart.removeSeries(volumeAsksSeries);
+      volumeAsksSeries = null;
+    }
+    console.log('✅ Volume series destroyed');
+  } catch (e) {
+    console.warn('Warning destroying volume series:', e);
   }
 }
 
@@ -1075,10 +1042,7 @@ class TimeframeManager {
     // Only auto-scale right axis on timeframe change
     this.applyAutoScale();
     
-    // CRITICAL: Re-sync volume chart after timeframe change
-    if (this.volumeIndicatorEnabled) {
-      setTimeout(() => this.syncVolumeTimeRange(), 100);
-    }
+    // Volume automatically syncs since it's on the same chart
     
     console.log(`✅ Switched to ${this.timeframes[timeframe].label}`);
   }
@@ -1163,192 +1127,77 @@ class TimeframeManager {
 
 
   toggleVolumeIndicator(enabled) {
-    console.log(`🔄 Volume Indicator: ${enabled ? 'ENABLED' : 'DISABLED'}`);
+    console.log(`🔄 TRADINGVIEW-STYLE Volume Indicator: ${enabled ? 'ENABLED' : 'DISABLED'}`);
     
     this.volumeIndicatorEnabled = enabled;
-    const indicatorPanel = document.getElementById('indicator-panel');
     
     if (enabled) {
-      // Show indicator panel
-      indicatorPanel.style.display = 'block';
-      
-      // DON'T touch the main chart - let CSS handle the layout
-      
-      // Create volume chart
-      setTimeout(() => {
-        const chart = createVolumeChart();
-        if (chart) {
-          console.log('✅ Volume chart created successfully');
-          
-          // Process existing data if available
-          if (this.rawData && this.rawData.length > 0) {
-            console.log(`📊 Processing ${this.rawData.length} existing data points for volume`);
-            // Directly update volume chart with raw data (no bucketing needed for volume)
-            this.updateVolumeChart(this.rawData);
-          }
-        } else {
-          console.error('❌ Failed to create volume chart');
+      // CRITICAL: Create volume series on main chart (TradingView style)
+      const success = createVolumeSeries();
+      if (success) {
+        // Show volume price scale
+        chart.priceScale('volume').applyOptions({ visible: true });
+        
+        // Show volume series
+        volumeBidsSeries.applyOptions({ visible: true });
+        volumeAsksSeries.applyOptions({ visible: true });
+        
+        // Process existing data if available
+        if (this.rawData && this.rawData.length > 0) {
+          console.log(`📊 Processing existing data for TradingView-style volume`);
+          // Reprocess data to include volume in bucketing
+          this.processAndSetData(this.rawData, false);
         }
-      }, 100);
+        
+        console.log('✅ TRADINGVIEW-STYLE: Volume indicator enabled on main chart');
+      } else {
+        console.error('❌ Failed to create volume series');
+      }
       
     } else {
-      // Hide indicator panel
-      indicatorPanel.style.display = 'none';
+      // Hide volume series and price scale
+      if (volumeBidsSeries) volumeBidsSeries.applyOptions({ visible: false });
+      if (volumeAsksSeries) volumeAsksSeries.applyOptions({ visible: false });
+      chart.priceScale('volume').applyOptions({ visible: false });
       
-      // Destroy volume chart
-      destroyVolumeChart();
+      console.log('✅ TRADINGVIEW-STYLE: Volume indicator disabled');
     }
-    
-    // DON'T resize the main chart - it should be unaffected
   }
 
   updateVolumeChart(bucketedData = null) {
-    console.log('🔍 updateVolumeChart called');
-    console.log('🔍 volumeIndicatorEnabled:', this.volumeIndicatorEnabled);
-    console.log('🔍 volumeBidsSeries exists:', !!volumeBidsSeries);
-    console.log('🔍 volumeAsksSeries exists:', !!volumeAsksSeries);
-    
-    if (!this.volumeIndicatorEnabled) {
-      console.log('❌ Volume indicator not enabled, skipping');
-      return;
-    }
-    
-    if (!volumeBidsSeries || !volumeAsksSeries) {
-      console.log('❌ Volume series not created, skipping');
+    if (!this.volumeIndicatorEnabled || !volumeBidsSeries || !volumeAsksSeries) {
       return;
     }
 
-    // CRITICAL: Use bucketed data - this ensures EXACT same time range as candlesticks
+    // CRITICAL: Use same bucketed data as candlesticks for perfect alignment
     if (!bucketedData || bucketedData.length === 0) {
-      console.warn('⚠️  No bucketed data provided to volume chart');
+      console.warn('⚠️  No bucketed data for volume');
       return;
     }
     
-    console.log(`📊 CRITICAL: Using ${bucketedData.length} bucketed data points for volume`);
+    console.log(`📊 TRADINGVIEW-STYLE: Updating volume with ${bucketedData.length} bucketed points`);
     
     const bidsData = [];
     const asksData = [];
-    let itemsWithVolume = 0;
     
-    // CRITICAL: Use EXACT same data points as candlesticks
+    // CRITICAL: Process EXACT same data points as candlesticks
     for (const item of bucketedData) {
       if (item.vol_L50_bids !== null && item.vol_L50_asks !== null) {
-        // Use the exact same timestamp format as candlesticks
         const time = this.toUnixTimestamp(item.time);
-        
         bidsData.push({ time, value: parseFloat(item.vol_L50_bids) });
         asksData.push({ time, value: parseFloat(item.vol_L50_asks) });
-        itemsWithVolume++;
-        
-        // Debug first few items
-        if (itemsWithVolume <= 3) {
-          console.log(`🔍 BUCKETED Volume item ${itemsWithVolume}:`, {
-            bucketTime: item.time,
-            convertedTime: time,
-            bids: item.vol_L50_bids,
-            asks: item.vol_L50_asks
-          });
-        }
       }
     }
     
-    console.log(`📊 CRITICAL SYNC: Volume uses EXACT same ${itemsWithVolume} time points as candlesticks`);
+    console.log(`📊 PERFECT ALIGNMENT: ${bidsData.length} volume points match ${bucketedData.length} candlestick points`);
     
-    if (bidsData.length > 0 && asksData.length > 0) {
-      try {
-        volumeBidsSeries.setData(bidsData);
-        volumeAsksSeries.setData(asksData);
-        console.log('✅ PERFECT SYNC: Volume data set with candlestick boundaries');
-        
-        // Log boundary verification
-        console.log('📊 Volume boundaries match candlesticks:', {
-          firstVolumeTime: new Date(bidsData[0].time * 1000).toISOString(),
-          lastVolumeTime: new Date(bidsData[bidsData.length-1].time * 1000).toISOString(),
-          totalVolumePoints: bidsData.length
-        });
-        
-      } catch (error) {
-        console.error('❌ Error setting volume data:', error);
-      }
-    } else {
-      console.warn('⚠️  No valid volume data in bucketed data');
-      // Clear volume chart if no data
-      volumeBidsSeries.setData([]);
-      volumeAsksSeries.setData([]);
+    if (bidsData.length > 0) {
+      volumeBidsSeries.setData(bidsData);
+      volumeAsksSeries.setData(asksData);
+      console.log('✅ TRADINGVIEW-STYLE: Volume perfectly aligned with price data');
     }
   }
 
-  // CRITICAL: Simple time range sync - data is already perfectly aligned
-  syncVolumeTimeRange() {
-    if (!volumeChart || !window.chart) {
-      console.warn('⚠️  Cannot sync: missing charts');
-      return;
-    }
-    
-    try {
-      const mainTimeScale = window.chart.timeScale();
-      const volumeTimeScale = volumeChart.timeScale();
-      
-      // Get current visible range from main chart
-      const visibleRange = mainTimeScale.getVisibleRange();
-      
-      if (visibleRange) {
-        // Set volume chart to show EXACTLY the same time range
-        volumeTimeScale.setVisibleRange({
-          from: visibleRange.from,
-          to: visibleRange.to
-        });
-        
-        console.log('🔄 PERFECT SYNC: Volume time range locked to main chart', {
-          from: new Date(visibleRange.from * 1000).toISOString(),
-          to: new Date(visibleRange.to * 1000).toISOString()
-        });
-      }
-      
-    } catch (e) {
-      console.error('❌ CRITICAL: Failed time range sync:', e);
-    }
-  }
-
-
-  // CRITICAL: Setup permanent X-axis synchronization
-  setupPermanentVolumeSync() {
-    if (!volumeChart || !window.chart) return;
-    
-    console.log('🔗 Setting up PERMANENT volume X-axis sync');
-    
-    try {
-      const mainTimeScale = window.chart.timeScale();
-      
-      // Subscribe to ALL main chart time range changes
-      mainTimeScale.subscribeVisibleTimeRangeChange((timeRange) => {
-        if (!volumeChart || !this.volumeIndicatorEnabled) return;
-        
-        try {
-          // CRITICAL: Simply sync the visible range - data is already perfectly aligned
-          const volumeTimeScale = volumeChart.timeScale();
-          
-          // Force volume chart to show EXACT same range
-          volumeTimeScale.setVisibleRange({
-            from: timeRange.from,
-            to: timeRange.to
-          });
-          
-          console.log('🔄 AUTO-SYNC: Volume range locked to main chart', {
-            from: new Date(timeRange.from * 1000).toISOString(),
-            to: new Date(timeRange.to * 1000).toISOString()
-          });
-        } catch (e) {
-          console.error('❌ AUTO-SYNC FAILED:', e);
-        }
-      });
-      
-      console.log('✅ PERMANENT perfect sync subscription established');
-      
-    } catch (e) {
-      console.error('❌ CRITICAL: Failed to setup permanent sync:', e);
-    }
-  }
 
 
   async switchSymbol(symbol) {
@@ -1373,7 +1222,7 @@ class TimeframeManager {
 
     // Clear existing chart data
     priceSeries.setData([]);
-    // Remove dynamic MA, EMA and avg series completely to avoid extra scales/panes
+    // Remove dynamic MA, EMA, avg, and volume series completely
     console.log(`🧹 Clearing ${this.maSeriesByKey.size} MA series, ${this.emaSeriesByKey.size} EMA series, and ${this.avgSeriesByLayer.size} avg series for symbol switch`);
     try {
       for (const [key, series] of this.maSeriesByKey.entries()) {
@@ -1388,6 +1237,9 @@ class TimeframeManager {
         chart.removeSeries(series);
       }
       this.avgSeriesByLayer.clear();
+      
+      // Clear volume series
+      destroyVolumeSeries();
     } catch (e) { 
       console.error('❌ Failed clearing series during symbol switch:', e); 
     }
@@ -1398,13 +1250,7 @@ class TimeframeManager {
     this.applyAutoScale();
     this.startUpdateCycle();
     
-    // CRITICAL: Re-sync volume chart after symbol switch
-    if (this.volumeIndicatorEnabled) {
-      setTimeout(() => {
-        this.syncVolumeTimeRange();
-        this.setupPermanentVolumeSync(); // Re-establish sync subscription
-      }, 200);
-    }
+    // Volume automatically syncs since it's on the same chart
   }
 
   async switchExchange(exchange) {
@@ -1434,13 +1280,7 @@ class TimeframeManager {
     this.applyAutoScale();
     this.startUpdateCycle();
     
-    // CRITICAL: Re-sync volume chart after exchange switch
-    if (this.volumeIndicatorEnabled) {
-      setTimeout(() => {
-        this.syncVolumeTimeRange();
-        this.setupPermanentVolumeSync(); // Re-establish sync subscription
-      }, 200);
-    }
+    // Volume automatically syncs since it's on the same chart
   }
 
   startUpdateCycle() {
@@ -2073,6 +1913,9 @@ function handlePinchZoom(scaleChange) {
 // Initialize everything
 manager.initializeChart().then(() => {
   console.log('🎯 Chart ready with bid spread data and dual y-axis!');
+  
+  // CRITICAL: Initialize volume series for TradingView-style indicators
+  createVolumeSeries();
   
   // Start update cycle
   manager.startUpdateCycle();
