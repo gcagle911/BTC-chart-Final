@@ -6,7 +6,7 @@ const API_BASE = 'https://storage.googleapis.com/bananazone';
 let API_EXCHANGE = 'coinbase';
 
 // Earliest available data date
-const EARLIEST_DATA_DATE = new Date('2025-01-09T00:00:00Z');
+const EARLIEST_DATA_DATE = new Date('2025-09-09T00:00:00Z');
 
 function formatDateYYYYMMDD(date) {
   const year = date.getUTCFullYear();
