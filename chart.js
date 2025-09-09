@@ -1241,23 +1241,51 @@ class TimeframeManager {
     }
   }
 
-  // Get volume data that falls within specific time range
+  // Get volume data that matches EXACTLY the same data range as candlesticks
   getVolumeDataForTimeRange(fromTime, toTime) {
     const bidsData = [];
     const asksData = [];
+    
+    // Get the current price series data to match exact boundaries
+    let priceDataRange = null;
+    try {
+      const priceData = priceSeries.data();
+      if (priceData && priceData.length > 0) {
+        const firstPrice = priceData[0];
+        const lastPrice = priceData[priceData.length - 1];
+        priceDataRange = {
+          start: firstPrice.time,
+          end: lastPrice.time
+        };
+        console.log('📊 Price data range:', {
+          start: new Date(firstPrice.time * 1000).toISOString(),
+          end: new Date(lastPrice.time * 1000).toISOString(),
+          totalPricePoints: priceData.length
+        });
+      }
+    } catch (e) {
+      console.warn('Could not get price data range:', e);
+    }
     
     for (const item of this.rawData) {
       if (item.vol_L50_bids && item.vol_L50_asks) {
         const itemTime = this.toUnixTimestamp(item.time);
         
-        // Only include data that falls within the visible time range
-        if (itemTime >= fromTime && itemTime <= toTime) {
+        // Only include data that:
+        // 1. Falls within the visible time range AND
+        // 2. Falls within the price data range (candlestick boundaries)
+        const withinVisibleRange = itemTime >= fromTime && itemTime <= toTime;
+        const withinPriceRange = !priceDataRange || 
+          (itemTime >= priceDataRange.start && itemTime <= priceDataRange.end);
+        
+        if (withinVisibleRange && withinPriceRange) {
           bidsData.push({ time: itemTime, value: parseFloat(item.vol_L50_bids) });
           asksData.push({ time: itemTime, value: parseFloat(item.vol_L50_asks) });
         }
       }
     }
     
+    console.log(`📊 Volume filtered: ${bidsData.length} points within candlestick boundaries`);
     return { bids: bidsData, asks: asksData };
   }
 
