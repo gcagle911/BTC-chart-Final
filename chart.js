@@ -238,17 +238,20 @@ function createVolumeChart() {
         borderColor: 'rgba(197, 203, 206, 0.8)',
         timeVisible: true,
         secondsVisible: false,
+        rightOffset: 50, // Match main chart offset
+        barSpacing: 8, // Match main chart spacing
+        minBarSpacing: 2,
       },
       handleScroll: {
-        mouseWheel: false, // Disable independent scrolling
-        pressedMouseMove: false,
-        horzTouchDrag: false,
-        vertTouchDrag: false,
+        mouseWheel: true, // Enable scrolling
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: false, // Keep vertical touch disabled
       },
       handleScale: {
-        axisPressedMouseMove: false,
-        mouseWheel: false,
-        pinch: false,
+        axisPressedMouseMove: true,
+        mouseWheel: true,
+        pinch: true,
       },
     });
 
@@ -1178,12 +1181,19 @@ class TimeframeManager {
       const mainTimeScale = window.chart.timeScale();
       const volumeTimeScale = volumeChart.timeScale();
       
-      // Get current visible range from main chart
-      const visibleRange = mainTimeScale.getVisibleRange();
-      if (visibleRange) {
-        volumeTimeScale.setVisibleRange(visibleRange);
-        console.log('📊 Volume chart time range synced with main chart');
-      }
+      // First fit content to show all data
+      volumeTimeScale.fitContent();
+      console.log('📊 Volume chart fitted to content');
+      
+      // Then sync with main chart range
+      setTimeout(() => {
+        const visibleRange = mainTimeScale.getVisibleRange();
+        if (visibleRange) {
+          volumeTimeScale.setVisibleRange(visibleRange);
+          console.log('📊 Volume chart time range synced with main chart', visibleRange);
+        }
+      }, 100);
+      
     } catch (e) {
       console.warn('Failed to sync volume time range:', e);
     }
