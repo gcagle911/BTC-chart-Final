@@ -1082,7 +1082,18 @@ class TimeframeManager {
   }
 
   updateVolumeChart(bucketedData = null) {
-    if (!this.volumeIndicatorEnabled || !volumeBidsSeries || !volumeAsksSeries) {
+    console.log('🔍 updateVolumeChart called');
+    console.log('🔍 volumeIndicatorEnabled:', this.volumeIndicatorEnabled);
+    console.log('🔍 volumeBidsSeries exists:', !!volumeBidsSeries);
+    console.log('🔍 volumeAsksSeries exists:', !!volumeAsksSeries);
+    
+    if (!this.volumeIndicatorEnabled) {
+      console.log('❌ Volume indicator not enabled, skipping');
+      return;
+    }
+    
+    if (!volumeBidsSeries || !volumeAsksSeries) {
+      console.log('❌ Volume series not created, skipping');
       return;
     }
 
@@ -1090,37 +1101,64 @@ class TimeframeManager {
     const dataToUse = bucketedData || this.rawData;
     console.log(`📊 Updating volume chart with ${dataToUse.length} data points (bucketed: ${!!bucketedData})`);
     
+    // Debug: Check first few raw data items
+    if (dataToUse.length > 0) {
+      console.log('🔍 First 3 raw data items:', dataToUse.slice(0, 3));
+    }
+    
     const bidsData = [];
     const asksData = [];
+    let itemsWithVolume = 0;
+    let itemsWithoutVolume = 0;
     
     for (const item of dataToUse) {
       if (item.vol_L50_bids && item.vol_L50_asks) {
         const time = item.time;
-        bidsData.push({ time, value: parseFloat(item.vol_L50_bids) });
-        asksData.push({ time, value: parseFloat(item.vol_L50_asks) });
+        const bidsValue = parseFloat(item.vol_L50_bids);
+        const asksValue = parseFloat(item.vol_L50_asks);
+        
+        bidsData.push({ time, value: bidsValue });
+        asksData.push({ time, value: asksValue });
+        itemsWithVolume++;
+      } else {
+        itemsWithoutVolume++;
+        if (itemsWithoutVolume <= 3) {
+          console.log(`🔍 Item without volume data:`, item);
+        }
       }
     }
     
-    console.log(`📊 Volume data: ${bidsData.length} bids, ${asksData.length} asks`);
+    console.log(`📊 Volume data processing: ${itemsWithVolume} items with volume, ${itemsWithoutVolume} items without`);
+    console.log(`📊 Final volume data: ${bidsData.length} bids, ${asksData.length} asks`);
     
     if (bidsData.length > 0 && asksData.length > 0) {
-      volumeBidsSeries.setData(bidsData);
-      volumeAsksSeries.setData(asksData);
+      console.log('📊 Setting volume data on series...');
       
-      // Log sample data for debugging
-      if (bidsData.length > 0) {
+      try {
+        volumeBidsSeries.setData(bidsData);
+        volumeAsksSeries.setData(asksData);
+        console.log('✅ Volume series data set successfully');
+        
+        // Log sample data for debugging
         console.log('📊 Sample volume data:', {
           first: { time: bidsData[0].time, bids: bidsData[0].value, asks: asksData[0].value },
           last: { time: bidsData[bidsData.length-1].time, bids: bidsData[bidsData.length-1].value, asks: asksData[asksData.length-1].value }
         });
+        
+        // Sync time range with main chart
+        this.syncVolumeTimeRange();
+      } catch (error) {
+        console.error('❌ Error setting volume data:', error);
       }
-      
-      console.log('✅ Volume chart updated successfully');
-      
-      // Sync time range with main chart
-      this.syncVolumeTimeRange();
     } else {
-      console.warn('⚠️  No valid volume data found in bucketed data');
+      console.warn('⚠️  No valid volume data found - check data structure');
+      
+      // Debug: Show what we're missing
+      if (dataToUse.length > 0) {
+        const sampleItem = dataToUse[0];
+        console.log('🔍 Sample data item keys:', Object.keys(sampleItem));
+        console.log('🔍 Sample data item:', sampleItem);
+      }
     }
   }
 
