@@ -1665,11 +1665,20 @@ class TimeframeManager {
       this.clearAllLines();
     });
     
-    // Signal system test button
-    document.getElementById('btn-test-signal')?.addEventListener('click', () => {
+    // Signal system test buttons
+    document.getElementById('btn-test-skull')?.addEventListener('click', () => {
+      if (this.signalSystemEnabled) {
+        this.triggerSignal('skull', true);
+        console.log('🧪 Test skull signal triggered');
+      } else {
+        console.warn('⚠️ Signal system not enabled');
+      }
+    });
+    
+    document.getElementById('btn-test-goldx')?.addEventListener('click', () => {
       if (this.signalSystemEnabled) {
         this.triggerSignal('goldX', true);
-        console.log('🧪 Test signal triggered');
+        console.log('🧪 Test gold X signal triggered');
       } else {
         console.warn('⚠️ Signal system not enabled');
       }
@@ -1716,7 +1725,7 @@ class TimeframeManager {
   }
 
   // External trigger function - call this when your condition is met
-  triggerSignal(signalType = 'goldX', active = true) {
+  triggerSignal(signalType = 'skull', active = true) {
     console.log(`🔍 triggerSignal called: type=${signalType}, active=${active}`);
     console.log(`🔍 signalSystemEnabled: ${this.signalSystemEnabled}`);
     console.log(`🔍 signalMarkerSeries exists: ${!!signalMarkerSeries}`);
@@ -1795,14 +1804,36 @@ class TimeframeManager {
     for (const [time, signal] of this.activeSignals) {
       console.log(`🔍 Processing signal:`, { time, signal });
       if (signal.active) {
-        const marker = {
-          time: time,
-          position: 'aboveBar',
-          color: '#FFD700', // Gold color
-          shape: 'cross', // X shape
-          text: 'X',
-          size: 3, // Larger size for visibility
-        };
+        let marker;
+        if (signal.type === 'skull') {
+          marker = {
+            time: time,
+            position: 'aboveBar',
+            color: '#FFFFFF', // White color for skull
+            shape: 'circle',
+            text: '💀', // Skull emoji
+            size: 3,
+          };
+        } else if (signal.type === 'goldX') {
+          marker = {
+            time: time,
+            position: 'aboveBar',
+            color: '#FFD700', // Gold color
+            shape: 'cross', // X shape
+            text: '✖️', // Gold X
+            size: 3,
+          };
+        } else {
+          // Default fallback
+          marker = {
+            time: time,
+            position: 'aboveBar',
+            color: '#FFD700',
+            shape: 'cross',
+            text: '?',
+            size: 3,
+          };
+        }
         markers.push(marker);
         console.log(`📍 Added marker:`, marker);
       }
@@ -2608,7 +2639,11 @@ function toggleSignalSystem(enabled) {
   manager.enableSignalSystem(enabled);
 }
 
-// External function to trigger signals from your conditions
+// External functions to trigger signals from your conditions
+function triggerSkullSignal(active = true) {
+  manager.triggerSignal('skull', active);
+}
+
 function triggerGoldXSignal(active = true) {
   manager.triggerSignal('goldX', active);
 }
