@@ -1636,13 +1636,77 @@ class TimeframeManager {
     return bothConditionsMet;
   }
 
-  calculateCurrentSlope(currentData) {
-    // Add current data to history for slope calculation
+  // Version with data index for proper backtesting slope calculation
+  checkSkullConditionsWithIndex(currentData, dataIndex) {
+    const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
+    const spreadThreshold = this.spreadThresholds.get(assetExchangeKey);
+    const slopeThreshold = this.slopeThresholds.get(assetExchangeKey);
+    
+    if (!spreadThreshold || !slopeThreshold) return false;
+    
+    // Condition 1: Spread check (same as before)
+    const layers = ['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg'];
+    let spreadConditionMet = false;
+    
+    for (const layer of layers) {
+      const value = currentData[layer];
+      if (value !== null && value >= spreadThreshold.top5Percent) {
+        spreadConditionMet = true;
+        break;
+      }
+    }
+    
+    if (!spreadConditionMet) return false;
+    
+    // Condition 2: Slope check with proper index
+    const currentSlope = this.calculateCurrentSlope(currentData, dataIndex);
+    const slopeConditionMet = currentSlope >= slopeThreshold.top5Percent;
+    
+    // TEMPORARILY: Use OR for debugging
+    return spreadConditionMet || slopeConditionMet;
+  }
+
+  calculateCurrentSlope(currentData, dataIndex = null) {
+    // For backtesting, use the data index to get proper slope calculation
+    if (dataIndex !== null && this.rawData) {
+      // Use surrounding data points for slope calculation
+      const startIndex = Math.max(0, dataIndex - 5);
+      const endIndex = Math.min(this.rawData.length - 1, dataIndex + 1);
+      
+      if (endIndex - startIndex < 2) return 0;
+      
+      const layers = ['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg'];
+      let maxSlope = 0;
+      
+      // Calculate slope for each layer
+      for (const layer of layers) {
+        const values = this.rawData.slice(startIndex, endIndex + 1)
+          .map(item => ({ 
+            time: new Date(item.time).getTime(), 
+            value: item[layer] 
+          }))
+          .filter(item => item.value !== null && isFinite(item.value));
+        
+        if (values.length < 2) continue;
+        
+        // Calculate slope between consecutive points
+        for (let i = 1; i < values.length; i++) {
+          const timeDiff = values[i].time - values[i-1].time;
+          const valueDiff = values[i].value - values[i-1].value;
+          
+          if (timeDiff > 0) {
+            const slope = Math.abs(valueDiff / timeDiff);
+            maxSlope = Math.max(maxSlope, slope);
+          }
+        }
+      }
+      
+      return maxSlope;
+    }
+    
+    // For real-time, use the existing history approach
     const timestamp = new Date(currentData.time).getTime();
     const layers = ['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg'];
-    
-    // Keep only recent history for slope calculation (last 10 points)
-    this.spreadHistory = this.spreadHistory.slice(-9);
     
     const currentSpreadAvg = layers
       .map(layer => currentData[layer])
@@ -1650,10 +1714,10 @@ class TimeframeManager {
       .reduce((sum, val, _, arr) => sum + val / arr.length, 0);
     
     this.spreadHistory.push({ time: timestamp, value: currentSpreadAvg });
+    this.spreadHistory = this.spreadHistory.slice(-10); // Keep last 10
     
     if (this.spreadHistory.length < 2) return 0;
     
-    // Calculate slope from recent history
     const recent = this.spreadHistory[this.spreadHistory.length - 1];
     const previous = this.spreadHistory[this.spreadHistory.length - 2];
     
@@ -1725,8 +1789,8 @@ class TimeframeManager {
           .reduce((sum, val, _, arr) => sum + val / arr.length, 0)
       }));
       
-      // Check conditions
-      if (this.checkSkullConditions(currentData)) {
+      // Check conditions with proper slope calculation
+      if (this.checkSkullConditionsWithIndex(currentData, i)) {
         // Add historical skull signal
         this.activeSignals.set(currentTime, {
           type: 'skull',
