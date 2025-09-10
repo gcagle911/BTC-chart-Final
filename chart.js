@@ -654,6 +654,14 @@ class TimeframeManager {
     this.signalSystemEnabled = false;
     this.activeSignals = new Map(); // time -> {type, price, active}
     this.currentCandleTime = null;
+    
+    // Skull Trigger System
+    this.spreadThresholds = new Map(); // asset_exchange -> {top5Percent: value}
+    this.slopeThresholds = new Map(); // asset_exchange -> {top5Percent: value}
+    this.lastSkullTrigger = 0; // Timestamp of last skull trigger for cooloff
+    this.cooloffPeriod = 20 * 60 * 1000; // 20 minutes in milliseconds
+    this.pendingSkullSignals = new Map(); // time -> {conditions: [], startTime}
+    this.spreadHistory = []; // For slope calculation
     this.scaleRecomputeTimeout = null;
     this.autoRefitPending = false;
     
@@ -1477,6 +1485,264 @@ class TimeframeManager {
     }, 500); // Wait for data to be processed
   }
 
+  // SKULL TRIGGER SYSTEM IMPLEMENTATION
+  
+  calculateSpreadThresholds() {
+    const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
+    console.log(`📊 Calculating spread thresholds for ${assetExchangeKey}`);
+    
+    if (!this.rawData || this.rawData.length < 100) {
+      console.warn('⚠️ Insufficient data for threshold calculation');
+      return;
+    }
+    
+    // Collect all spread values from all layers
+    const allSpreadValues = [];
+    const layers = ['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg'];
+    
+    for (const item of this.rawData) {
+      for (const layer of layers) {
+        const value = item[layer];
+        if (value !== null && value !== undefined && isFinite(value)) {
+          allSpreadValues.push(value);
+        }
+      }
+    }
+    
+    if (allSpreadValues.length === 0) {
+      console.warn('⚠️ No valid spread values found');
+      return;
+    }
+    
+    // Sort to find percentiles
+    allSpreadValues.sort((a, b) => a - b);
+    
+    // Calculate top 5% threshold
+    const top5PercentIndex = Math.floor(allSpreadValues.length * 0.95);
+    const top5PercentThreshold = allSpreadValues[top5PercentIndex];
+    
+    this.spreadThresholds.set(assetExchangeKey, {
+      top5Percent: top5PercentThreshold,
+      totalValues: allSpreadValues.length,
+      min: allSpreadValues[0],
+      max: allSpreadValues[allSpreadValues.length - 1]
+    });
+    
+    console.log(`📊 Spread thresholds for ${assetExchangeKey}:`, {
+      top5Percent: top5PercentThreshold.toFixed(6),
+      totalValues: allSpreadValues.length,
+      range: `${allSpreadValues[0].toFixed(6)} - ${allSpreadValues[allSpreadValues.length - 1].toFixed(6)}`
+    });
+  }
+
+  calculateSlopeThresholds() {
+    const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
+    console.log(`📊 Calculating slope thresholds for ${assetExchangeKey}`);
+    
+    if (!this.rawData || this.rawData.length < 50) {
+      console.warn('⚠️ Insufficient data for slope calculation');
+      return;
+    }
+    
+    const slopeValues = [];
+    const layers = ['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg'];
+    
+    // Calculate slopes for each layer
+    for (const layer of layers) {
+      const layerValues = this.rawData
+        .map(item => ({ time: new Date(item.time).getTime(), value: item[layer] }))
+        .filter(item => item.value !== null && isFinite(item.value))
+        .sort((a, b) => a.time - b.time);
+      
+      // Calculate slope between consecutive points
+      for (let i = 1; i < layerValues.length; i++) {
+        const timeDiff = layerValues[i].time - layerValues[i-1].time;
+        const valueDiff = layerValues[i].value - layerValues[i-1].value;
+        
+        if (timeDiff > 0) {
+          const slope = Math.abs(valueDiff / timeDiff); // Absolute slope for acceleration
+          slopeValues.push(slope);
+        }
+      }
+    }
+    
+    if (slopeValues.length === 0) {
+      console.warn('⚠️ No valid slope values calculated');
+      return;
+    }
+    
+    // Sort to find top 5% acceleration
+    slopeValues.sort((a, b) => a - b);
+    const top5PercentIndex = Math.floor(slopeValues.length * 0.95);
+    const top5PercentSlope = slopeValues[top5PercentIndex];
+    
+    this.slopeThresholds.set(assetExchangeKey, {
+      top5Percent: top5PercentSlope,
+      totalSlopes: slopeValues.length,
+      min: slopeValues[0],
+      max: slopeValues[slopeValues.length - 1]
+    });
+    
+    console.log(`📊 Slope thresholds for ${assetExchangeKey}:`, {
+      top5Percent: top5PercentSlope.toExponential(3),
+      totalSlopes: slopeValues.length
+    });
+  }
+
+  // Check skull trigger conditions for current data
+  checkSkullConditions(currentData) {
+    const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
+    const spreadThreshold = this.spreadThresholds.get(assetExchangeKey);
+    const slopeThreshold = this.slopeThresholds.get(assetExchangeKey);
+    
+    if (!spreadThreshold || !slopeThreshold) {
+      console.warn(`⚠️ Missing thresholds for ${assetExchangeKey}`);
+      return false;
+    }
+    
+    // Condition 1: Check if ANY spread value is in top 5%
+    const layers = ['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg'];
+    let spreadConditionMet = false;
+    
+    for (const layer of layers) {
+      const value = currentData[layer];
+      if (value !== null && value >= spreadThreshold.top5Percent) {
+        spreadConditionMet = true;
+        console.log(`📊 Spread condition MET: ${layer} = ${value.toFixed(6)} >= ${spreadThreshold.top5Percent.toFixed(6)}`);
+        break;
+      }
+    }
+    
+    if (!spreadConditionMet) {
+      return false;
+    }
+    
+    // Condition 2: Check slope acceleration
+    const currentSlope = this.calculateCurrentSlope(currentData);
+    const slopeConditionMet = currentSlope >= slopeThreshold.top5Percent;
+    
+    if (slopeConditionMet) {
+      console.log(`📊 Slope condition MET: ${currentSlope.toExponential(3)} >= ${slopeThreshold.top5Percent.toExponential(3)}`);
+    }
+    
+    // BOTH conditions must be true
+    const bothConditionsMet = spreadConditionMet && slopeConditionMet;
+    
+    console.log(`📊 Skull conditions: Spread=${spreadConditionMet}, Slope=${slopeConditionMet}, Both=${bothConditionsMet}`);
+    
+    return bothConditionsMet;
+  }
+
+  calculateCurrentSlope(currentData) {
+    // Add current data to history for slope calculation
+    const timestamp = new Date(currentData.time).getTime();
+    const layers = ['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg'];
+    
+    // Keep only recent history for slope calculation (last 10 points)
+    this.spreadHistory = this.spreadHistory.slice(-9);
+    
+    const currentSpreadAvg = layers
+      .map(layer => currentData[layer])
+      .filter(val => val !== null && isFinite(val))
+      .reduce((sum, val, _, arr) => sum + val / arr.length, 0);
+    
+    this.spreadHistory.push({ time: timestamp, value: currentSpreadAvg });
+    
+    if (this.spreadHistory.length < 2) return 0;
+    
+    // Calculate slope from recent history
+    const recent = this.spreadHistory[this.spreadHistory.length - 1];
+    const previous = this.spreadHistory[this.spreadHistory.length - 2];
+    
+    const timeDiff = recent.time - previous.time;
+    const valueDiff = recent.value - previous.value;
+    
+    return timeDiff > 0 ? Math.abs(valueDiff / timeDiff) : 0;
+  }
+
+  // Check cooloff period
+  isInCooloff() {
+    const now = Date.now();
+    const timeSinceLastSkull = now - this.lastSkullTrigger;
+    return timeSinceLastSkull < this.cooloffPeriod;
+  }
+
+  // Main skull trigger evaluation
+  evaluateSkullTrigger(currentData) {
+    if (!this.signalSystemEnabled) return;
+    
+    // Check cooloff period
+    if (this.isInCooloff()) {
+      const remaining = Math.ceil((this.cooloffPeriod - (Date.now() - this.lastSkullTrigger)) / (60 * 1000));
+      console.log(`⏳ Skull cooloff: ${remaining} minutes remaining`);
+      return;
+    }
+    
+    // Check both conditions
+    const conditionsMet = this.checkSkullConditions(currentData);
+    
+    if (conditionsMet) {
+      console.log('💀 SKULL TRIGGER CONDITIONS MET!');
+      this.triggerSignal('skull', true);
+      this.lastSkullTrigger = Date.now();
+    }
+  }
+
+  // Backtest all historical data for skull triggers
+  backtestSkullSignals() {
+    console.log('🔄 Backtesting skull signals on all historical data...');
+    
+    if (!this.rawData || this.rawData.length === 0) {
+      console.warn('⚠️ No data available for backtesting');
+      return;
+    }
+    
+    // Calculate thresholds first
+    this.calculateSpreadThresholds();
+    this.calculateSlopeThresholds();
+    
+    let skullCount = 0;
+    let lastSkullTime = 0;
+    
+    // Process each data point
+    for (let i = 10; i < this.rawData.length; i++) { // Start at 10 for slope calculation
+      const currentData = this.rawData[i];
+      const currentTime = this.toUnixTimestamp(currentData.time);
+      
+      // Check cooloff (20 minutes = 1200 seconds)
+      if (currentTime - lastSkullTime < 1200) continue;
+      
+      // Temporarily set current data for slope calculation
+      const tempHistory = this.rawData.slice(i-10, i+1);
+      this.spreadHistory = tempHistory.map(item => ({
+        time: new Date(item.time).getTime(),
+        value: ['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg']
+          .map(layer => item[layer])
+          .filter(val => val !== null && isFinite(val))
+          .reduce((sum, val, _, arr) => sum + val / arr.length, 0)
+      }));
+      
+      // Check conditions
+      if (this.checkSkullConditions(currentData)) {
+        // Add historical skull signal
+        this.activeSignals.set(currentTime, {
+          type: 'skull',
+          price: currentData.price * 1.02,
+          active: true,
+          permanent: true, // Historical signals are permanent
+          backtested: true
+        });
+        
+        skullCount++;
+        lastSkullTime = currentTime;
+        console.log(`💀 Historical skull found at ${new Date(currentTime * 1000).toISOString()}`);
+      }
+    }
+    
+    console.log(`✅ Backtesting complete: Found ${skullCount} historical skull signals`);
+    this.updateSignalMarkers();
+  }
+
   // TRADING TOOLS
   setActiveTool(tool) {
     this.activeTool = tool;
@@ -1663,6 +1929,16 @@ class TimeframeManager {
     
     document.getElementById('btn-clear-lines')?.addEventListener('click', () => {
       this.clearAllLines();
+    });
+    
+    // Signal system buttons
+    document.getElementById('btn-backtest-skulls')?.addEventListener('click', () => {
+      if (this.signalSystemEnabled) {
+        this.backtestSkullSignals();
+        console.log('🔄 Skull backtesting initiated');
+      } else {
+        console.warn('⚠️ Enable signal system first');
+      }
     });
     
     // Signal system test buttons
