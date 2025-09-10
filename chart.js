@@ -1790,9 +1790,9 @@ class TimeframeManager {
     }
   }
 
-  // Backtest all historical data for skull triggers
+  // Backtest all historical data for skull triggers (candle-duration based)
   backtestSkullSignals() {
-    console.log('🔄 Backtesting skull signals on all historical data...');
+    console.log(`🔄 Backtesting skull signals for ${this.currentTimeframe} timeframe...`);
     
     if (!this.rawData || this.rawData.length === 0) {
       console.warn('⚠️ No data available for backtesting');
@@ -1803,48 +1803,137 @@ class TimeframeManager {
     this.calculateSpreadThresholds();
     this.calculateSlopeThresholds();
     
+    // Group data by candle timeframe for duration-based checking
+    const timeframeSeconds = this.timeframes[this.currentTimeframe].seconds;
+    const candleBuckets = new Map();
+    
+    // Group raw data into candle buckets
+    for (const item of this.rawData) {
+      const timestamp = this.toUnixTimestamp(item.time);
+      const candleTime = Math.floor(timestamp / timeframeSeconds) * timeframeSeconds;
+      
+      if (!candleBuckets.has(candleTime)) {
+        candleBuckets.set(candleTime, []);
+      }
+      candleBuckets.get(candleTime).push(item);
+    }
+    
+    console.log(`📊 Grouped data into ${candleBuckets.size} ${this.currentTimeframe} candles`);
+    
     let skullCount = 0;
     let lastSkullTime = 0;
     
-    // Process each data point
-    for (let i = 10; i < this.rawData.length; i++) { // Start at 10 for slope calculation
-      const currentData = this.rawData[i];
-      const currentTime = this.toUnixTimestamp(currentData.time);
-      
+    // Check each candle for sustained conditions
+    for (const [candleTime, candleData] of candleBuckets) {
       // Check cooloff (1 hour = 3600 seconds)
-      if (currentTime - lastSkullTime < 3600) continue;
+      if (candleTime - lastSkullTime < 3600) continue;
       
-      // Temporarily set current data for slope calculation
-      const tempHistory = this.rawData.slice(i-10, i+1);
-      this.spreadHistory = tempHistory.map(item => ({
-        time: new Date(item.time).getTime(),
-        value: ['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg']
-          .map(layer => item[layer])
-          .filter(val => val !== null && isFinite(val))
-          .reduce((sum, val, _, arr) => sum + val / arr.length, 0)
-      }));
-      
-      // Check conditions with proper slope calculation
-      if (this.checkSkullConditionsWithIndex(currentData, i)) {
-        // Add historical skull signal with asset/exchange info
-        this.activeSignals.set(currentTime, {
+      // Check if conditions are met for ENTIRE candle duration
+      if (this.checkCandleDurationConditions(candleData, candleTime)) {
+        // Add skull signal for this candle
+        const candlePrice = candleData[candleData.length - 1]?.price || 50000;
+        
+        this.activeSignals.set(candleTime, {
           type: 'skull',
-          price: currentData.price * 1.02,
+          price: candlePrice * 1.02,
           active: true,
-          permanent: true, // Historical signals are permanent
+          permanent: true,
           backtested: true,
           asset: this.currentSymbol,
-          exchange: API_EXCHANGE
+          exchange: API_EXCHANGE,
+          timeframe: this.currentTimeframe,
+          duration: `${candleData.length} minutes`
         });
         
         skullCount++;
-        lastSkullTime = currentTime;
-        console.log(`💀 Historical skull found at ${new Date(currentTime * 1000).toISOString()}`);
+        lastSkullTime = candleTime;
+        console.log(`💀 Skull candle found at ${new Date(candleTime * 1000).toISOString()} (${candleData.length} data points)`);
       }
     }
     
-    console.log(`✅ Backtesting complete: Found ${skullCount} historical skull signals`);
+    console.log(`✅ Backtesting complete: Found ${skullCount} skull candles for ${this.currentTimeframe}`);
     this.updateSignalMarkers();
+  }
+
+  // Check if skull conditions are sustained throughout entire candle
+  checkCandleDurationConditions(candleData, candleTime) {
+    if (!candleData || candleData.length === 0) return false;
+    
+    console.log(`🔍 Checking candle at ${new Date(candleTime * 1000).toISOString()} with ${candleData.length} data points`);
+    
+    const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
+    const spreadThreshold = this.spreadThresholds.get(assetExchangeKey);
+    const slopeThreshold = this.slopeThresholds.get(assetExchangeKey);
+    
+    if (!spreadThreshold || !slopeThreshold) return false;
+    
+    let sustainedSpreadCount = 0;
+    let sustainedSlopeCount = 0;
+    
+    // Check each minute within the candle
+    for (let i = 0; i < candleData.length; i++) {
+      const minuteData = candleData[i];
+      
+      // Check spread condition for this minute
+      const layers = ['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg'];
+      let minuteSpreadMet = false;
+      
+      for (const layer of layers) {
+        const value = minuteData[layer];
+        if (value !== null && value >= spreadThreshold.top5Percent) {
+          minuteSpreadMet = true;
+          break;
+        }
+      }
+      
+      if (minuteSpreadMet) sustainedSpreadCount++;
+      
+      // Check slope condition for this minute (if enough data)
+      if (i > 0) {
+        const currentSlope = this.calculateSlopeForMinute(candleData, i);
+        if (currentSlope >= slopeThreshold.top5Percent) {
+          sustainedSlopeCount++;
+        }
+      }
+    }
+    
+    // Require conditions to be sustained for majority of candle (>70%)
+    const requiredSustainedMinutes = Math.ceil(candleData.length * 0.7);
+    const spreadSustained = sustainedSpreadCount >= requiredSustainedMinutes;
+    const slopeSustained = sustainedSlopeCount >= requiredSustainedMinutes;
+    
+    const bothSustained = spreadSustained && slopeSustained;
+    
+    console.log(`📊 Candle conditions: Spread sustained ${sustainedSpreadCount}/${candleData.length} (${spreadSustained}), Slope sustained ${sustainedSlopeCount}/${candleData.length} (${slopeSustained}), Both=${bothSustained}`);
+    
+    return bothSustained;
+  }
+
+  calculateSlopeForMinute(candleData, minuteIndex) {
+    if (minuteIndex < 1) return 0;
+    
+    const current = candleData[minuteIndex];
+    const previous = candleData[minuteIndex - 1];
+    
+    const layers = ['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg'];
+    let maxSlope = 0;
+    
+    for (const layer of layers) {
+      const currentVal = current[layer];
+      const previousVal = previous[layer];
+      
+      if (currentVal !== null && previousVal !== null && isFinite(currentVal) && isFinite(previousVal)) {
+        const timeDiff = new Date(current.time).getTime() - new Date(previous.time).getTime();
+        const valueDiff = currentVal - previousVal;
+        
+        if (timeDiff > 0) {
+          const slope = Math.abs(valueDiff / timeDiff);
+          maxSlope = Math.max(maxSlope, slope);
+        }
+      }
+    }
+    
+    return maxSlope;
   }
 
   // TRADING TOOLS
