@@ -1451,31 +1451,26 @@ class TimeframeManager {
   }
 
   addVerticalLine(time) {
-    // Create a thin line series that spans the full price range
-    const vLineSeries = chart.addLineSeries({
-      color: '#FFFFFF',
-      lineWidth: 1,
-      lineStyle: LightweightCharts.LineStyle.Dashed,
-      priceScaleId: 'right',
-      lastValueVisible: false,
-      priceLineVisible: false,
-      crosshairMarkerVisible: false,
-    });
-    
-    // Get current visible price range to draw full-height line
-    const visibleRange = chart.priceScale('right').getPriceRange();
-    if (visibleRange) {
-      // Create line data spanning full visible price range
-      const lineData = [
-        { time, value: visibleRange.minValue },
-        { time, value: visibleRange.maxValue }
-      ];
-      vLineSeries.setData(lineData);
+    // Simple approach - use createTimeLine if available, otherwise use histogram
+    try {
+      // Try the simple histogram approach with full range
+      const vLineSeries = chart.addHistogramSeries({
+        color: '#FFFFFF',
+        priceScaleId: '',  // No price scale to make it span full height
+        lastValueVisible: false,
+        priceLineVisible: false,
+      });
+      
+      // Add data point to create the vertical line
+      vLineSeries.setData([{ time, value: 1000000 }]); // Large value to span height
+      
+      this.verticalLines.push({ series: vLineSeries, time });
+      console.log(`✅ Added vertical line at time: ${time}`);
+      return vLineSeries;
+    } catch (e) {
+      console.error('Failed to create vertical line:', e);
+      return null;
     }
-    
-    this.verticalLines.push({ series: vLineSeries, time });
-    console.log(`✅ Added full-height vertical line at ${new Date(time * 1000).toISOString()}`);
-    return vLineSeries;
   }
 
   startMeasuring(startPrice, startTime) {
@@ -1491,70 +1486,21 @@ class TimeframeManager {
     const pricePercent = ((priceDiff / this.measureStart.price) * 100);
     const bars = Math.abs(Math.floor(timeDiff / 60)); // Convert to minutes/bars
     
-    // Create TradingView-style measurement rectangle
-    const rectSeries = chart.addAreaSeries({
-      topColor: 'rgba(41, 98, 255, 0.1)',
-      bottomColor: 'rgba(41, 98, 255, 0.05)',
-      lineColor: '#2962ff',
-      lineWidth: 1,
-      priceScaleId: 'right',
-      lastValueVisible: false,
-      priceLineVisible: false,
-    });
+    // Show measurement result clearly
+    const result = `MEASUREMENT RESULT:\n` +
+                  `Price Change: ${priceDiff.toFixed(4)}\n` +
+                  `Percentage: ${pricePercent.toFixed(2)}%\n` +
+                  `Time: ${bars} bars (${Math.floor(bars/60)}h ${bars%60}m)\n` +
+                  `From: ${this.measureStart.price.toFixed(4)}\n` +
+                  `To: ${endPrice.toFixed(4)}`;
     
-    // Create rectangle data
-    const minPrice = Math.min(this.measureStart.price, endPrice);
-    const maxPrice = Math.max(this.measureStart.price, endPrice);
-    const minTime = Math.min(this.measureStart.time, endTime);
-    const maxTime = Math.max(this.measureStart.time, endTime);
-    
-    const rectData = [
-      { time: minTime, value: maxPrice },
-      { time: maxTime, value: maxPrice },
-      { time: maxTime, value: minPrice },
-      { time: minTime, value: minPrice },
-      { time: minTime, value: maxPrice } // Close the rectangle
-    ];
-    rectSeries.setData(rectData);
-    
-    // Store for deletion
-    this.measureLines.push({ series: rectSeries });
-    
-    // Show TradingView-style measurement result
-    const result = `📏 ${Math.abs(priceDiff).toFixed(3)} (${Math.abs(pricePercent).toFixed(2)}%) | ${bars} bars`;
-    console.log(`MEASUREMENT: ${result}`);
-    
-    // Create measurement label overlay
-    this.showMeasurementLabel(result, endPrice, endTime);
+    console.log(result);
+    alert(result);
     
     this.measureStart = null;
     this.setActiveTool(null);
   }
 
-  showMeasurementLabel(text, price, time) {
-    // Create temporary measurement label like TradingView
-    const label = document.createElement('div');
-    label.style.cssText = `
-      position: absolute;
-      background: rgba(41, 98, 255, 0.9);
-      color: white;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 11px;
-      font-weight: 600;
-      z-index: 1000;
-      pointer-events: none;
-      white-space: nowrap;
-    `;
-    label.textContent = text;
-    
-    // Position near the measurement end point
-    const chartContainer = document.getElementById('main-chart');
-    chartContainer.appendChild(label);
-    
-    // Remove after 5 seconds
-    setTimeout(() => label.remove(), 5000);
-  }
 
   clearAllLines() {
     console.log(`🗑️ Clearing ${this.horizontalLines.length} horizontal and ${this.verticalLines.length} vertical lines`);
