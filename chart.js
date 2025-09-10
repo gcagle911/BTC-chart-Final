@@ -1934,6 +1934,18 @@ class TimeframeManager {
     // Signal system buttons
     document.getElementById('btn-backtest-skulls')?.addEventListener('click', () => {
       if (this.signalSystemEnabled) {
+        console.log(`🔍 Starting backtest with ${this.rawData?.length || 0} data points`);
+        
+        // Debug: Check data structure
+        if (this.rawData && this.rawData.length > 0) {
+          console.log('🔍 Sample data point:', this.rawData[0]);
+          console.log('🔍 Sample spread values:', {
+            L5: this.rawData[0].spread_L5_pct_avg,
+            L50: this.rawData[0].spread_L50_pct_avg,
+            L100: this.rawData[0].spread_L100_pct_avg
+          });
+        }
+        
         this.backtestSkullSignals();
         console.log('🔄 Skull backtesting initiated');
       } else {
@@ -3118,6 +3130,15 @@ manager.initializeChart().then(() => {
   
   // Setup trading tools
   manager.setupTradingTools();
+  
+  // Auto-calculate thresholds when data is loaded
+  setTimeout(() => {
+    if (manager.rawData && manager.rawData.length > 0) {
+      console.log('🔄 Auto-calculating skull thresholds from loaded data');
+      manager.calculateSpreadThresholds();
+      manager.calculateSlopeThresholds();
+    }
+  }, 2000);
   
   // Start update cycle
   manager.startUpdateCycle();
