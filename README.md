@@ -108,3 +108,10 @@ Start a new branch from baseline:
 git fetch --all --tags
 git checkout -b feature/experiment baseline/multicrypto-v1
 ```
+
+## Latest Updates - v2.1
+
+- Added sophisticated skull trigger system with dual conditions
+- Enhanced trading tools (horizontal/vertical lines, measuring)
+- Implemented timeframe-aware signal backtesting
+- Added intelligent indicator layout management
