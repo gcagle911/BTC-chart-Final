@@ -286,8 +286,9 @@ let volumeBidsSeries = null;
 let volumeAsksSeries = null;
 let volumeIndicatorEnabled = false;
 
-// Indicator 2 series (ready for your data)
-let indicator2Series = null;
+// Indicator 2 series (timeframe-averaged volume)
+let indicator2BidsSeries = null;
+let indicator2AsksSeries = null;
 let indicator2Enabled = false;
 
 // Indicator 3 series (ready for your data)  
@@ -361,23 +362,39 @@ function destroyVolumeSeries() {
   }
 }
 
-// Create Indicator 2 series on main chart
+// Create Indicator 2 series on main chart (Timeframe-Averaged Volume)
 function createIndicator2Series() {
   if (indicator2Series) {
     console.log('📊 Indicator 2 series already exists');
     return true;
   }
 
-  console.log('📊 Creating Indicator 2 series on main chart');
+  console.log('📊 Creating Indicator 2 series (Timeframe-Averaged Volume)');
   
   try {
-    indicator2Series = chart.addLineSeries({
+    // Create two series for bids and asks like volume but averaged by timeframe
+    indicator2BidsSeries = chart.addAreaSeries({
+      topColor: 'rgba(255, 215, 0, 0.3)', // Gold for bids with less opacity
+      bottomColor: 'rgba(255, 215, 0, 0.05)',
+      lineColor: '#FFD700',
+      lineWidth: 1.0,
       priceScaleId: 'indicator2',
-      color: '#FFD700', // Gold color
-      lineWidth: 1.2,
-      title: 'Indicator 2',
+      priceFormat: { type: 'volume' },
+      title: 'Averaged Bids',
       lastValueVisible: true,
-      priceLineVisible: false,
+      crosshairMarkerVisible: true,
+      visible: false,
+    });
+
+    indicator2AsksSeries = chart.addAreaSeries({
+      topColor: 'rgba(255, 255, 255, 0.3)', // White for asks with less opacity
+      bottomColor: 'rgba(255, 255, 255, 0.05)',
+      lineColor: '#FFFFFF',
+      lineWidth: 1.0,
+      priceScaleId: 'indicator2',
+      priceFormat: { type: 'volume' },
+      title: 'Averaged Asks',
+      lastValueVisible: true,
       crosshairMarkerVisible: true,
       visible: false,
     });
@@ -390,7 +407,7 @@ function createIndicator2Series() {
       autoScale: true,
     });
 
-    console.log('✅ Indicator 2 series created');
+    console.log('✅ Indicator 2 series (Timeframe-Averaged Volume) created');
     return true;
   } catch (error) {
     console.error('❌ Error creating Indicator 2 series:', error);
@@ -436,14 +453,18 @@ function createIndicator3Series() {
 }
 
 function destroyIndicator2Series() {
-  if (indicator2Series) {
-    try {
-      chart.removeSeries(indicator2Series);
-      indicator2Series = null;
-      console.log('✅ Indicator 2 series destroyed');
-    } catch (e) {
-      console.warn('Warning destroying Indicator 2 series:', e);
+  try {
+    if (indicator2BidsSeries) {
+      chart.removeSeries(indicator2BidsSeries);
+      indicator2BidsSeries = null;
     }
+    if (indicator2AsksSeries) {
+      chart.removeSeries(indicator2AsksSeries);
+      indicator2AsksSeries = null;
+    }
+    console.log('✅ Indicator 2 series destroyed');
+  } catch (e) {
+    console.warn('Warning destroying Indicator 2 series:', e);
   }
 }
 
@@ -858,10 +879,17 @@ class TimeframeManager {
       }
     }
 
-    // CRITICAL: Update volume chart with SAME data as candlesticks
-    if (this.volumeIndicatorEnabled && !isUpdate) {
-      // Use the raw data since volume series are on the same chart now
-      setTimeout(() => this.updateVolumeChart(rawMinuteData), 50);
+    // CRITICAL: Update indicators with processed data
+    if (!isUpdate) {
+      // Update volume chart (raw data)
+      if (this.volumeIndicatorEnabled) {
+        setTimeout(() => this.updateVolumeChart(rawMinuteData), 50);
+      }
+      
+      // Update indicator 2 (timeframe-averaged data)
+      if (this.indicator2Enabled) {
+        setTimeout(() => this.updateIndicator2Chart(), 50);
+      }
     }
 
     if (isUpdate) {
@@ -1153,7 +1181,10 @@ class TimeframeManager {
     // Only auto-scale right axis on timeframe change
     this.applyAutoScale();
     
-    // Volume automatically syncs since it's on the same chart
+    // Update indicators after timeframe change
+    if (this.indicator2Enabled) {
+      setTimeout(() => this.updateIndicator2Chart(), 100);
+    }
     
     console.log(`✅ Switched to ${this.timeframes[timeframe].label}`);
   }
@@ -1276,7 +1307,7 @@ class TimeframeManager {
   }
 
   toggleIndicator2(enabled) {
-    console.log(`🔄 TRADINGVIEW-STYLE Indicator 2: ${enabled ? 'ENABLED' : 'DISABLED'}`);
+    console.log(`🔄 TRADINGVIEW-STYLE Indicator 2 (Timeframe-Averaged Volume): ${enabled ? 'ENABLED' : 'DISABLED'}`);
     
     this.indicator2Enabled = enabled;
     
@@ -1284,13 +1315,19 @@ class TimeframeManager {
       const success = createIndicator2Series();
       if (success) {
         chart.priceScale('indicator2').applyOptions({ visible: true });
-        indicator2Series.applyOptions({ visible: true });
+        indicator2BidsSeries.applyOptions({ visible: true });
+        indicator2AsksSeries.applyOptions({ visible: true });
         
-        console.log('✅ TRADINGVIEW-STYLE: Indicator 2 enabled on main chart');
-        // Ready for your data processing
+        // Process existing data for timeframe-averaged volume
+        if (this.rawData && this.rawData.length > 0) {
+          this.updateIndicator2Chart();
+        }
+        
+        console.log('✅ TRADINGVIEW-STYLE: Indicator 2 (Timeframe-Averaged Volume) enabled');
       }
     } else {
-      if (indicator2Series) indicator2Series.applyOptions({ visible: false });
+      if (indicator2BidsSeries) indicator2BidsSeries.applyOptions({ visible: false });
+      if (indicator2AsksSeries) indicator2AsksSeries.applyOptions({ visible: false });
       chart.priceScale('indicator2').applyOptions({ visible: false });
       console.log('✅ TRADINGVIEW-STYLE: Indicator 2 disabled');
     }
@@ -1314,6 +1351,62 @@ class TimeframeManager {
       if (indicator3Series) indicator3Series.applyOptions({ visible: false });
       chart.priceScale('indicator3').applyOptions({ visible: false });
       console.log('✅ TRADINGVIEW-STYLE: Indicator 3 disabled');
+    }
+  }
+
+  updateIndicator2Chart() {
+    if (!this.indicator2Enabled || !indicator2BidsSeries || !indicator2AsksSeries) {
+      return;
+    }
+
+    console.log(`📊 Updating Indicator 2 (Timeframe-Averaged Volume) for ${this.currentTimeframe}`);
+    
+    // Use the same bucketing logic as candlesticks for timeframe averaging
+    const timeframeConfig = this.timeframes[this.currentTimeframe];
+    const timeframeSeconds = timeframeConfig.seconds;
+    const buckets = new Map();
+
+    // Sort data by timestamp
+    const sortedData = [...this.rawData].sort((a, b) => new Date(a.time) - new Date(b.time));
+
+    // Group volume data into timeframe buckets
+    sortedData.forEach(item => {
+      if (item.vol_L50_bids && item.vol_L50_asks) {
+        const timestamp = this.toUnixTimestamp(item.time);
+        const bucketTime = Math.floor(timestamp / timeframeSeconds) * timeframeSeconds;
+        
+        if (!buckets.has(bucketTime)) {
+          buckets.set(bucketTime, {
+            bidsValues: [],
+            asksValues: []
+          });
+        }
+
+        buckets.get(bucketTime).bidsValues.push(parseFloat(item.vol_L50_bids));
+        buckets.get(bucketTime).asksValues.push(parseFloat(item.vol_L50_asks));
+      }
+    });
+
+    // Calculate averages for each bucket
+    const bidsData = [];
+    const asksData = [];
+    
+    for (const [bucketTime, bucket] of buckets) {
+      if (bucket.bidsValues.length > 0 && bucket.asksValues.length > 0) {
+        const avgBids = bucket.bidsValues.reduce((a, b) => a + b, 0) / bucket.bidsValues.length;
+        const avgAsks = bucket.asksValues.reduce((a, b) => a + b, 0) / bucket.asksValues.length;
+        
+        bidsData.push({ time: bucketTime, value: avgBids });
+        asksData.push({ time: bucketTime, value: avgAsks });
+      }
+    }
+
+    console.log(`📊 Indicator 2: ${bidsData.length} averaged ${this.currentTimeframe} volume points`);
+
+    if (bidsData.length > 0) {
+      indicator2BidsSeries.setData(bidsData);
+      indicator2AsksSeries.setData(asksData);
+      console.log('✅ Indicator 2 (Timeframe-Averaged Volume) updated');
     }
   }
 
