@@ -30,23 +30,36 @@
       flex-direction: column;
       background: radial-gradient(
         circle at center,
-        rgba(10, 13, 24, 0) 35%,
-        rgba(10, 13, 24, 0.85) 90%
+        rgba(10, 13, 24, 0.0) 30%,
+        rgba(10, 13, 24, 0.9) 95%
       ),
-      url('./images/bluedata-logo-dark.png') center center no-repeat;
-      background-size: 500px;
-      background-color: #0a0d18;
+      #0a0d18;
+    }
+
+    #background-logo {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 600px;
+      max-width: 80vw;
+      transform: translate(-50%, -50%);
+      opacity: 0.035;
+      filter: blur(0.5px) saturate(70%);
+      pointer-events: none;
+      z-index: 0;
     }
 
     @media (max-width: 768px) {
-      #chart-container {
-        background-size: 300px;
+      #background-logo {
+        width: 300px;
+        opacity: 0.04;
       }
     }
 
     @media (max-width: 480px) {
-      #chart-container {
-        background-size: 220px;
+      #background-logo {
+        width: 220px;
+        opacity: 0.05;
       }
     }
 
@@ -55,6 +68,7 @@
       height: 100%;
       touch-action: pan-x pan-y pinch-zoom;
       background: transparent;
+      z-index: 1;
     }
 
     #timeframe-controls, #tools-controls {
@@ -124,6 +138,9 @@
 </head>
 <body>
   <div id="chart-container">
+    <!-- Background Logo Image -->
+    <img id="background-logo" src="./images/bluedata-logo-dark.png" alt="Bluedata Logo" />
+
     <div id="timeframe-controls">
       <label class="timeframe-label" for="exchange-dropdown">Exchange:</label>
       <select id="exchange-dropdown" onchange="setExchange(this.value)">
@@ -149,7 +166,7 @@
     </div>
 
     <div id="tools-controls">
-      <!-- Toolbox UI goes here -->
+      <!-- Toolbox goes here -->
     </div>
 
     <div id="main-chart"></div>
