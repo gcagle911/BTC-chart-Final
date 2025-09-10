@@ -246,7 +246,7 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
     secondsVisible: false,
     borderVisible: false,
     rightOffset: 15,
-    barSpacing: 6, // Tighter by default to show more data
+    barSpacing: 8, // Slightly wider candlestick bodies
     minBarSpacing: 0.02, // Allow much more data when zoomed out
     fixLeftEdge: false,
     fixRightEdge: false,
