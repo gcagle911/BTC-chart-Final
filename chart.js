@@ -1452,34 +1452,33 @@ class TimeframeManager {
 
   addVerticalLine(time) {
     try {
-      // SIMPLE CSS OVERLAY APPROACH - No chart series involved
-      const chartContainer = document.getElementById('main-chart');
+      // Use a dedicated invisible price scale that won't affect main chart
+      const vLineSeries = chart.addLineSeries({
+        color: '#FFFFFF',
+        lineWidth: 2,
+        lineStyle: LightweightCharts.LineStyle.Dashed,
+        priceScaleId: 'vline', // Separate price scale
+        lastValueVisible: false,
+        priceLineVisible: false,
+        crosshairMarkerVisible: false,
+      });
       
-      // Convert time to pixel position
-      const timeScale = chart.timeScale();
-      const coordinate = timeScale.timeToCoordinate(time);
+      // Configure invisible price scale for vertical lines
+      chart.priceScale('vline').applyOptions({
+        visible: false,
+        autoScale: false,
+        scaleMargins: { top: 0, bottom: 0 },
+      });
       
-      if (coordinate === null) return null;
+      // Simple line data - just 2 points at same time
+      vLineSeries.setData([
+        { time, value: 1 },
+        { time, value: 2 }
+      ]);
       
-      // Create simple CSS line overlay
-      const line = document.createElement('div');
-      line.style.cssText = `
-        position: absolute;
-        left: ${coordinate}px;
-        top: 0;
-        bottom: 0;
-        width: 1px;
-        background: #FFFFFF;
-        opacity: 0.8;
-        z-index: 10;
-        pointer-events: none;
-      `;
-      
-      chartContainer.appendChild(line);
-      
-      this.verticalLines.push({ element: line, time });
-      console.log(`✅ Added CSS vertical line at pixel ${coordinate}`);
-      return line;
+      this.verticalLines.push({ series: vLineSeries, time });
+      console.log(`✅ Added vertical line with invisible scale`);
+      return vLineSeries;
     } catch (e) {
       console.error('Failed to create vertical line:', e);
       return null;
@@ -1529,13 +1528,11 @@ class TimeframeManager {
     });
     this.horizontalLines = [];
     
-    // Clear vertical lines (CSS elements)
-    this.verticalLines.forEach(({ element }) => {
+    // Clear vertical lines (chart series)
+    this.verticalLines.forEach(({ series }) => {
       try { 
-        if (element && element.parentNode) {
-          element.parentNode.removeChild(element);
-          console.log('✅ Removed vertical line');
-        }
+        chart.removeSeries(series);
+        console.log('✅ Removed vertical line');
       } catch (e) {
         console.warn('Failed to remove vertical line:', e);
       }
