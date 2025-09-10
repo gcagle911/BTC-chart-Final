@@ -1906,6 +1906,22 @@ class TimeframeManager {
     
     console.log(`📊 Candle conditions: Spread sustained ${sustainedSpreadCount}/${candleData.length} (${spreadSustained}), Slope sustained ${sustainedSlopeCount}/${candleData.length} (${slopeSustained}), Both=${bothSustained}`);
     
+    // DEBUG: If skull triggered, show detailed breakdown
+    if (bothSustained) {
+      console.log(`🔍 SKULL TRIGGERED - Detailed breakdown:`);
+      console.log(`🔍 Threshold: ${spreadThreshold.top5Percent.toFixed(6)}`);
+      console.log(`🔍 Candle spread values:`);
+      
+      candleData.forEach((minuteData, idx) => {
+        const layers = ['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg'];
+        const spreadValues = layers.map(layer => minuteData[layer]?.toFixed(6) || 'null');
+        const maxSpread = Math.max(...layers.map(layer => minuteData[layer] || 0));
+        const meetsThreshold = maxSpread >= spreadThreshold.top5Percent;
+        
+        console.log(`🔍 Minute ${idx}: [${spreadValues.join(', ')}] max=${maxSpread.toFixed(6)} >= threshold=${meetsThreshold}`);
+      });
+    }
+    
     return bothSustained;
   }
 
