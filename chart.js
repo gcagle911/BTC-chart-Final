@@ -659,7 +659,7 @@ class TimeframeManager {
     this.spreadThresholds = new Map(); // asset_exchange -> {top5Percent: value}
     this.slopeThresholds = new Map(); // asset_exchange -> {top5Percent: value}
     this.lastSkullTrigger = 0; // Timestamp of last skull trigger for cooloff
-    this.cooloffPeriod = 20 * 60 * 1000; // 20 minutes in milliseconds
+    this.cooloffPeriod = 60 * 60 * 1000; // 1 hour in milliseconds
     this.pendingSkullSignals = new Map(); // time -> {conditions: [], startTime}
     this.spreadHistory = []; // For slope calculation
     this.scaleRecomputeTimeout = null;
@@ -1600,12 +1600,21 @@ class TimeframeManager {
       return false;
     }
     
-    // Condition 1: Check if ANY spread value is in top 5%
+    // Condition 1: Check if ANY spread value is in top 2.5%
     const layers = ['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg'];
     let spreadConditionMet = false;
     
+    // Debug: Show ALL spread values for this data point
+    console.log(`🔍 Checking spread values:`, {
+      L5: currentData.spread_L5_pct_avg,
+      L50: currentData.spread_L50_pct_avg,
+      L100: currentData.spread_L100_pct_avg,
+      threshold: spreadThreshold.top5Percent.toFixed(6)
+    });
+    
     for (const layer of layers) {
       const value = currentData[layer];
+      console.log(`🔍 ${layer}: ${value?.toFixed(6) || 'null'} >= ${spreadThreshold.top5Percent.toFixed(6)} = ${value !== null && value >= spreadThreshold.top5Percent}`);
       if (value !== null && value >= spreadThreshold.top5Percent) {
         spreadConditionMet = true;
         console.log(`📊 Spread condition MET: ${layer} = ${value.toFixed(6)} >= ${spreadThreshold.top5Percent.toFixed(6)}`);
@@ -1775,8 +1784,8 @@ class TimeframeManager {
       const currentData = this.rawData[i];
       const currentTime = this.toUnixTimestamp(currentData.time);
       
-      // Check cooloff (20 minutes = 1200 seconds)
-      if (currentTime - lastSkullTime < 1200) continue;
+      // Check cooloff (1 hour = 3600 seconds)
+      if (currentTime - lastSkullTime < 3600) continue;
       
       // Temporarily set current data for slope calculation
       const tempHistory = this.rawData.slice(i-10, i+1);
