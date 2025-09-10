@@ -1410,11 +1410,81 @@ class TimeframeManager {
     
     console.log(`🔄 Normalization: ${enabled ? 'ENABLED' : 'DISABLED'}`);
     
+    if (enabled) {
+      // Calculate scaling factors for each layer
+      this.calculateScalingFactors();
+    } else {
+      // Clear scaling factors
+      this.scaleFactorsByKey.clear();
+      this.emaScaleFactorsByKey.clear();
+    }
+    
     // Reprocess data to apply/remove normalization
     if (this.rawData && this.rawData.length > 0) {
       this.lastTimestamp = 0;
       this.processAndSetData(this.rawData, false);
     }
+  }
+
+  calculateScalingFactors() {
+    console.log('📊 Calculating scaling factors for spread layers');
+    
+    if (!this.rawData || this.rawData.length === 0) return;
+    
+    // Calculate median values for each layer from recent data
+    const layerMedians = new Map();
+    const layers = ['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg'];
+    
+    for (const layerKey of layers) {
+      const values = this.rawData
+        .map(item => item[layerKey])
+        .filter(val => val !== null && val !== undefined && isFinite(val))
+        .slice(-500); // Use recent 500 points for median calculation
+      
+      if (values.length > 0) {
+        values.sort((a, b) => a - b);
+        const median = values[Math.floor(values.length / 2)];
+        layerMedians.set(layerKey, median);
+        console.log(`📊 ${layerKey} median: ${median.toFixed(6)}`);
+      }
+    }
+    
+    // Use L50 as reference layer (middle layer)
+    const referenceMedian = layerMedians.get('spread_L50_pct_avg');
+    if (!referenceMedian) {
+      console.warn('⚠️  No reference median found for L50');
+      return;
+    }
+    
+    console.log(`📊 Using L50 median ${referenceMedian.toFixed(6)} as reference`);
+    
+    // Calculate scaling factors for each layer and duration combination
+    for (const layerKey of this.selectedLayers) {
+      const layerMedian = layerMedians.get(layerKey);
+      if (!layerMedian) continue;
+      
+      // Calculate scaling factor to match L50 range
+      const scaleFactor = referenceMedian / layerMedian;
+      
+      console.log(`📊 ${layerKey}: median ${layerMedian.toFixed(6)} → scale factor ${scaleFactor.toFixed(3)}`);
+      
+      // Apply scaling factor to all durations for this layer
+      for (const duration of this.selectedDurations) {
+        const key = `${layerKey}|${duration}`;
+        this.scaleFactorsByKey.set(key, scaleFactor);
+      }
+      
+      // Apply scaling factor to EMAs
+      for (const duration of this.selectedEMADurations) {
+        const key = `${layerKey}|EMA${duration}`;
+        this.emaScaleFactorsByKey.set(key, scaleFactor);
+      }
+      
+      // Apply to cumulative averages
+      this.scaleFactorsByKey.set(`avg|${layerKey}`, scaleFactor);
+    }
+    
+    console.log('✅ Scaling factors calculated for all layers');
   }
 
   recomputeScaleFactorsAndRefresh() {
