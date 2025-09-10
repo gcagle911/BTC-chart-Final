@@ -5,17 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, minimum-scale=0.5, user-scalable=yes, viewport-fit=cover" />
   <title>BTC Chart - Clean</title>
   <style>
-    /* === Configure your logo path here if you change the file name/location ===
-       Default: /images/bluedata-logo.png  (put it under your project's public/ folder)
-    */
-    :root {
+    /* === Configure logo + watermark feel here === */
+    :root{
+      /* If you changed the file name/path, update this URL */
       --brand-logo-url: url('/images/bluedata-logo.png');
+
+      /* Watermark tuning */
+      --wm-size: clamp(180px, 26vw, 520px);
+      --wm-opacity: 0.08;               /* overall strength */
+      --wm-y: 56%;                       /* vertical position (lower a bit than center) */
+      --wm-mask-softness: 38%;           /* how soft the edges fade */
     }
 
-    * {
-      box-sizing: border-box;
-      -webkit-tap-highlight-color: transparent;
-    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
     html, body {
       margin: 0;
@@ -29,208 +31,142 @@
       touch-action: manipulation;
     }
 
-    #chart-container {
+    #chart-container{
       width: 100vw;
       height: 100vh;
       position: relative;
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      /* Gradient stays as your base background */
       background: linear-gradient(135deg, #4a90e2 0%, #7b68ee 50%, #9932cc 100%);
-      /* new stacking context to keep pseudo-elements under controls/chart */
       z-index: 0;
     }
 
-    /* --- Brand watermark layer (subtle) --- */
-    #chart-container::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      /* Centered watermark */
-      background: var(--brand-logo-url) no-repeat center center;
-      /* Responsive sizing: min 180px, scales with viewport, caps at 520px */
-      background-size: clamp(180px, 26vw, 520px);
-      /* Subtle + blends with dark theme */
-      opacity: 0.05;
-      filter: grayscale(1) contrast(1.05) brightness(1.1);
-      z-index: 0; /* stays behind chart & controls */
+    /* ------- Watermark (fixed + blended + soft edges) ------- */
+    #chart-container::after{
+      content:"";
+      position:absolute;
+      inset:0;
+      pointer-events:none;
+      background: var(--brand-logo-url) no-repeat center var(--wm-y);
+      background-size: var(--wm-size);
+
+      /* Blend the white paper away and keep the ink lines */
+      mix-blend-mode: multiply;
+      opacity: var(--wm-opacity);
+
+      /* Tone + crispness */
+      filter: grayscale(1) contrast(1.15);
+
+      /* Soft edge vignette mask so it melts into the chart */
+      -webkit-mask-image: radial-gradient(
+        circle at 50% 50%,
+        rgba(0,0,0,1) calc(100% - var(--wm-mask-softness)),
+        rgba(0,0,0,0) 100%
+      );
+      mask-image: radial-gradient(
+        circle at 50% 50%,
+        rgba(0,0,0,1) calc(100% - var(--wm-mask-softness)),
+        rgba(0,0,0,0) 100%
+      );
+
+      z-index:0;
     }
 
-    /* If you ever want a tiled pattern instead of a single centered logo:
-    #chart-container::after { background-size: 280px auto; background-repeat: repeat; opacity: 0.03; }
-    */
-
-    #main-chart {
-      width: 100%;
-      height: 100%;
+    #main-chart{
+      width:100%;
+      height:100%;
       touch-action: pan-x pan-y pinch-zoom;
-      background: transparent; /* Allow gradient + watermark to show through */
-      position: relative;
-      z-index: 1; /* above the watermark */
+      background: transparent; /* show gradient + watermark */
+      position:relative;
+      z-index:1; /* above watermark */
     }
 
-    #timeframe-controls {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      z-index: 100;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      background: rgba(0, 0, 0, 0.8);
-      padding: 8px 12px;
-      border-radius: 8px;
+    #timeframe-controls{
+      position:absolute; top:10px; left:10px; z-index:100;
+      display:flex; align-items:center; gap:8px;
+      background:rgba(0,0,0,.8);
+      padding:8px 12px; border-radius:8px;
       backdrop-filter: blur(15px);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+      border:1px solid rgba(255,255,255,.2);
+      box-shadow:0 4px 15px rgba(0,0,0,.3);
     }
 
-    #tools-controls {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      z-index: 100;
-      display: block;
-    }
+    #tools-controls{ position:absolute; top:10px; right:10px; z-index:100; display:block; }
 
-    #ma-tools-dropdown {
-      background: rgba(0, 0, 0, 0.8);
-      border-radius: 8px;
+    #ma-tools-dropdown{
+      background:rgba(0,0,0,.8);
+      border-radius:8px;
       backdrop-filter: blur(15px);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+      border:1px solid rgba(255,255,255,.2);
+      box-shadow:0 4px 15px rgba(0,0,0,.3);
     }
 
-    #timeframe-dropdown, #symbol-dropdown {
-      background: #2a2e39;
-      border: 1px solid #4a4e59;
-      color: #d1d4dc;
-      padding: 6px 10px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 12px;
-      font-weight: 500;
-      min-width: 80px;
+    #timeframe-dropdown, #symbol-dropdown{
+      background:#2a2e39; border:1px solid #4a4e59; color:#d1d4dc;
+      padding:6px 10px; border-radius:6px; cursor:pointer; font-size:12px; font-weight:500; min-width:80px;
+    }
+    #ma-source-dropdown{
+      background:#2a2e39; border:1px solid #4a4e59; color:#d1d4dc;
+      padding:6px 10px; border-radius:6px; cursor:pointer; font-size:12px; font-weight:500; min-width:120px;
     }
 
-    #ma-source-dropdown {
-      background: #2a2e39;
-      border: 1px solid #4a4e59;
-      color: #d1d4dc;
-      padding: 6px 10px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 12px;
-      font-weight: 500;
-      min-width: 120px;
+    #ma-tools-button{
+      background:rgba(25,28,35,.9); border:1px solid rgba(255,255,255,.1); color:#d1d4dc;
+      padding:8px 12px; border-radius:8px; cursor:pointer; font-size:12px; font-weight:600;
     }
+    #ma-tools-button:hover{ background:#363a45; }
+    #ma-tools-button:focus{ outline:none; border-color:#2962ff; box-shadow:0 0 0 2px rgba(41,98,255,.2); }
 
-    /* Tools dropdown button */
-    #ma-tools-button {
-      background: rgba(25, 28, 35, 0.9);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      color: #d1d4dc;
-      padding: 8px 12px;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 12px;
-      font-weight: 600;
-    }
-    #ma-tools-button:hover { background: #363a45; }
-    #ma-tools-button:focus { outline: none; border-color: #2962ff; box-shadow: 0 0 0 2px rgba(41, 98, 255, 0.2); }
-
-    /* Dropdown menu */
-    #ma-tools-dropdown { position: relative; display: inline-block; }
-    #ma-tools-dropdown .dropdown-menu {
-      display: none;
-      position: absolute;
-      top: calc(100% + 6px);
-      right: 0;
-      background: rgba(25, 28, 35, 0.98);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 8px;
-      padding: 10px;
-      min-width: 230px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    #ma-tools-dropdown{ position:relative; display:inline-block; }
+    #ma-tools-dropdown .dropdown-menu{
+      display:none; position:absolute; top:calc(100% + 6px); right:0;
+      background:rgba(25,28,35,.98);
+      border:1px solid rgba(255,255,255,.1);
+      border-radius:8px; padding:10px; min-width:230px;
+      box-shadow:0 8px 24px rgba(0,0,0,.4);
       backdrop-filter: blur(10px);
     }
-    #ma-tools-dropdown.open .dropdown-menu { display: block; }
-    .ma-toggle-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; margin-top: 8px; }
-    .ma-toggle-list label { display: flex; align-items: center; gap: 6px; color: #d1d4dc; font-size: 12px; }
+    #ma-tools-dropdown.open .dropdown-menu{ display:block; }
+    .ma-toggle-list{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px 12px; margin-top:8px; }
+    .ma-toggle-list label{ display:flex; align-items:center; gap:6px; color:#d1d4dc; font-size:12px; }
 
-    /* Left axis interaction overlay */
-    #left-axis-overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 80px;
-      height: 100%;
-      z-index: 200;
-      display: none;
-      pointer-events: auto;
-      background: transparent;
-      cursor: ns-resize;
-      touch-action: none;
+    #left-axis-overlay{
+      position:absolute; top:0; left:0; width:80px; height:100%;
+      z-index:200; display:none; pointer-events:auto; background:transparent;
+      cursor: ns-resize; touch-action:none;
     }
 
-    #timeframe-dropdown:hover, #symbol-dropdown:hover, #ma-source-dropdown:hover {
-      background: #363a45;
-      border-color: #5a5e69;
+    #timeframe-dropdown:hover, #symbol-dropdown:hover, #ma-source-dropdown:hover{ background:#363a45; border-color:#5a5e69; }
+    #timeframe-dropdown:focus, #symbol-dropdown:focus, #ma-source-dropdown:focus{
+      outline:none; border-color:#2962ff; box-shadow:0 0 0 2px rgba(41,98,255,.2);
     }
 
-    #timeframe-dropdown:focus, #symbol-dropdown:focus, #ma-source-dropdown:focus {
-      outline: none;
-      border-color: #2962ff;
-      box-shadow: 0 0 0 2px rgba(41, 98, 255, 0.2);
-    }
+    .timeframe-label{ color:#d1d4dc; font-size:12px; font-weight:500; }
 
-    .timeframe-label {
-      color: #d1d4dc;
-      font-size: 12px;
-      font-weight: 500;
-    }
-
-    /* Mobile optimizations */
-    @media (max-width: 768px) {
-      #timeframe-controls {
-        top: 5px;
-        left: 5px;
-        padding: 6px 10px;
+    /* Mobile */
+    @media (max-width:768px){
+      #timeframe-controls{ top:5px; left:5px; padding:6px 10px; }
+      #timeframe-dropdown, #symbol-dropdown, #ma-source-dropdown, #ma-tools-button{
+        font-size:11px; padding:4px 8px; min-width:70px;
       }
+      .timeframe-label{ font-size:11px; }
 
-      #timeframe-dropdown, #symbol-dropdown, #ma-source-dropdown, #ma-tools-button {
-        font-size: 11px;
-        padding: 4px 8px;
-        min-width: 70px;
-      }
-
-      .timeframe-label {
-        font-size: 11px;
-      }
-
-      /* Slightly smaller logo on small screens */
-      #chart-container::after {
-        background-size: clamp(150px, 34vw, 420px);
-        opacity: 0.06; /* small bump helps visibility on phones */
+      /* Slight adjustments so it reads on phones */
+      :root{
+        --wm-size: clamp(150px, 34vw, 420px);
+        --wm-opacity: 0.10;
+        --wm-y: 58%;
+        --wm-mask-softness: 42%;
       }
     }
 
-    @media (max-width: 480px) {
-      #timeframe-controls {
-        padding: 4px 8px;
+    @media (max-width:480px){
+      #timeframe-controls{ padding:4px 8px; }
+      #timeframe-dropdown, #symbol-dropdown, #ma-source-dropdown, #ma-tools-button{
+        font-size:10px; padding:3px 6px; min-width:60px;
       }
-
-      #timeframe-dropdown, #symbol-dropdown, #ma-source-dropdown, #ma-tools-button {
-        font-size: 10px;
-        padding: 3px 6px;
-        min-width: 60px;
-      }
-
-      .timeframe-label {
-        font-size: 10px;
-      }
+      .timeframe-label{ font-size:10px; }
     }
   </style>
 </head>
