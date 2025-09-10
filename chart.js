@@ -1452,35 +1452,26 @@ class TimeframeManager {
 
   addVerticalLine(time) {
     try {
-      // Get current visible price range to avoid auto-scale issues
-      const currentRange = chart.priceScale('right').getPriceRange();
-      if (!currentRange) return null;
-      
-      // Use current visible range + some padding (don't use extreme values)
-      const padding = (currentRange.maxValue - currentRange.minValue) * 0.1;
-      const minValue = currentRange.minValue - padding;
-      const maxValue = currentRange.maxValue + padding;
-      
-      const vLineSeries = chart.addLineSeries({
+      // Simple histogram approach - just one tall bar
+      const vLineSeries = chart.addHistogramSeries({
         color: '#FFFFFF',
-        lineWidth: 1.5,
-        lineStyle: LightweightCharts.LineStyle.Dashed,
         priceScaleId: 'right',
         lastValueVisible: false,
         priceLineVisible: false,
-        crosshairMarkerVisible: false,
-        autoscaleInfoProvider: () => null, // CRITICAL: Don't affect auto-scaling
+        visible: true,
       });
       
-      // Create vertical line spanning visible range
-      const lineData = [
-        { time, value: minValue },
-        { time, value: maxValue }
-      ];
-      vLineSeries.setData(lineData);
+      // Get a reasonable price value from current data
+      let priceValue = 100; // Default fallback
+      if (this.rawData && this.rawData.length > 0) {
+        priceValue = this.rawData[this.rawData.length - 1].price || 100;
+      }
+      
+      // Add single histogram bar at the clicked time
+      vLineSeries.setData([{ time, value: priceValue }]);
       
       this.verticalLines.push({ series: vLineSeries, time });
-      console.log(`✅ Added vertical line without affecting zoom`);
+      console.log(`✅ Added vertical line (histogram) at time: ${time}`);
       return vLineSeries;
     } catch (e) {
       console.error('Failed to create vertical line:', e);
