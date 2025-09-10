@@ -652,7 +652,7 @@ class TimeframeManager {
     
     // Interactive Signal System
     this.signalSystemEnabled = false;
-    this.activeSignals = new Map(); // time -> {type, price, active}
+    this.activeSignals = new Map(); // time -> {type, price, active, asset, exchange}
     this.currentCandleTime = null;
     
     // Skull Trigger System
@@ -1482,7 +1482,34 @@ class TimeframeManager {
       this.updateIndicatorLayout();
       
       console.log('✅ All indicators refreshed');
+    
+    // CRITICAL: Clear signals when switching asset/exchange
+    this.clearSignalsForAssetSwitch();
+    
     }, 500); // Wait for data to be processed
+  }
+
+  // Clear signals when switching assets or exchanges
+  clearSignalsForAssetSwitch() {
+    console.log(`🧹 Clearing signals for asset/exchange switch to ${this.currentSymbol}_${API_EXCHANGE}`);
+    
+    // Clear all signals - they're specific to the previous asset/exchange
+    this.activeSignals.clear();
+    
+    // Reset cooloff for new asset/exchange
+    this.lastSkullTrigger = 0;
+    
+    // Clear signal markers from chart
+    if (priceSeries) {
+      try {
+        priceSeries.setMarkers([]);
+        console.log('✅ Cleared signal markers from chart');
+      } catch (e) {
+        console.warn('Failed to clear signal markers:', e);
+      }
+    }
+    
+    console.log('✅ Signals cleared for new asset/exchange');
   }
 
   // SKULL TRIGGER SYSTEM IMPLEMENTATION
@@ -1799,13 +1826,15 @@ class TimeframeManager {
       
       // Check conditions with proper slope calculation
       if (this.checkSkullConditionsWithIndex(currentData, i)) {
-        // Add historical skull signal
+        // Add historical skull signal with asset/exchange info
         this.activeSignals.set(currentTime, {
           type: 'skull',
           price: currentData.price * 1.02,
           active: true,
           permanent: true, // Historical signals are permanent
-          backtested: true
+          backtested: true,
+          asset: this.currentSymbol,
+          exchange: API_EXCHANGE
         });
         
         skullCount++;
