@@ -281,10 +281,18 @@ chart.priceScale('right').applyOptions({
 });
 priceSeries.applyOptions({ priceFormat: { type: 'price', precision: 3, minMove: 0.001 } });
 
-// TRADINGVIEW-STYLE: Volume indicator as part of main chart system
+// TRADINGVIEW-STYLE: Multiple indicators as part of main chart system
 let volumeBidsSeries = null;
 let volumeAsksSeries = null;
 let volumeIndicatorEnabled = false;
+
+// Indicator 2 series (ready for your data)
+let indicator2Series = null;
+let indicator2Enabled = false;
+
+// Indicator 3 series (ready for your data)  
+let indicator3Series = null;
+let indicator3Enabled = false;
 
 // Create volume series on the main chart with separate price scale
 function createVolumeSeries() {
@@ -350,6 +358,104 @@ function destroyVolumeSeries() {
     console.log('✅ Volume series destroyed');
   } catch (e) {
     console.warn('Warning destroying volume series:', e);
+  }
+}
+
+// Create Indicator 2 series on main chart
+function createIndicator2Series() {
+  if (indicator2Series) {
+    console.log('📊 Indicator 2 series already exists');
+    return true;
+  }
+
+  console.log('📊 Creating Indicator 2 series on main chart');
+  
+  try {
+    indicator2Series = chart.addLineSeries({
+      priceScaleId: 'indicator2',
+      color: '#FFD700', // Gold color
+      lineWidth: 1.2,
+      title: 'Indicator 2',
+      lastValueVisible: true,
+      priceLineVisible: false,
+      crosshairMarkerVisible: true,
+      visible: false,
+    });
+
+    // Configure indicator 2 price scale (middle section)
+    chart.priceScale('indicator2').applyOptions({
+      visible: false,
+      scaleMargins: { top: 0.4, bottom: 0.4 }, // Middle 20% of chart
+      mode: LightweightCharts.PriceScaleMode.Normal,
+      autoScale: true,
+    });
+
+    console.log('✅ Indicator 2 series created');
+    return true;
+  } catch (error) {
+    console.error('❌ Error creating Indicator 2 series:', error);
+    return false;
+  }
+}
+
+// Create Indicator 3 series on main chart  
+function createIndicator3Series() {
+  if (indicator3Series) {
+    console.log('📊 Indicator 3 series already exists');
+    return true;
+  }
+
+  console.log('📊 Creating Indicator 3 series on main chart');
+  
+  try {
+    indicator3Series = chart.addLineSeries({
+      priceScaleId: 'indicator3',
+      color: '#FFFFFF', // White color
+      lineWidth: 1.2,
+      title: 'Indicator 3',
+      lastValueVisible: true,
+      priceLineVisible: false,
+      crosshairMarkerVisible: true,
+      visible: false,
+    });
+
+    // Configure indicator 3 price scale (top section)
+    chart.priceScale('indicator3').applyOptions({
+      visible: false,
+      scaleMargins: { top: 0.05, bottom: 0.8 }, // Top 15% of chart
+      mode: LightweightCharts.PriceScaleMode.Normal,
+      autoScale: true,
+    });
+
+    console.log('✅ Indicator 3 series created');
+    return true;
+  } catch (error) {
+    console.error('❌ Error creating Indicator 3 series:', error);
+    return false;
+  }
+}
+
+function destroyIndicator2Series() {
+  if (indicator2Series) {
+    try {
+      chart.removeSeries(indicator2Series);
+      indicator2Series = null;
+      console.log('✅ Indicator 2 series destroyed');
+    } catch (e) {
+      console.warn('Warning destroying Indicator 2 series:', e);
+    }
+  }
+}
+
+function destroyIndicator3Series() {
+  if (indicator3Series) {
+    try {
+      chart.removeSeries(indicator3Series);
+      indicator3Series = null;
+      console.log('✅ Indicator 3 series destroyed');
+    } catch (e) {
+      console.warn('Warning destroying Indicator 3 series:', e);
+    }
   }
 }
 
@@ -465,8 +571,10 @@ class TimeframeManager {
     this.scaleFactorsByKey = new Map(); // key -> factor number
     this.emaScaleFactorsByKey = new Map(); // key -> EMA factor number
     this.normalizeEnabled = false;
-    // Volume indicator
+    // Multiple indicators
     this.volumeIndicatorEnabled = false;
+    this.indicator2Enabled = false;
+    this.indicator3Enabled = false;
     this.scaleRecomputeTimeout = null;
     this.autoRefitPending = false;
     
@@ -1167,6 +1275,48 @@ class TimeframeManager {
     }
   }
 
+  toggleIndicator2(enabled) {
+    console.log(`🔄 TRADINGVIEW-STYLE Indicator 2: ${enabled ? 'ENABLED' : 'DISABLED'}`);
+    
+    this.indicator2Enabled = enabled;
+    
+    if (enabled) {
+      const success = createIndicator2Series();
+      if (success) {
+        chart.priceScale('indicator2').applyOptions({ visible: true });
+        indicator2Series.applyOptions({ visible: true });
+        
+        console.log('✅ TRADINGVIEW-STYLE: Indicator 2 enabled on main chart');
+        // Ready for your data processing
+      }
+    } else {
+      if (indicator2Series) indicator2Series.applyOptions({ visible: false });
+      chart.priceScale('indicator2').applyOptions({ visible: false });
+      console.log('✅ TRADINGVIEW-STYLE: Indicator 2 disabled');
+    }
+  }
+
+  toggleIndicator3(enabled) {
+    console.log(`🔄 TRADINGVIEW-STYLE Indicator 3: ${enabled ? 'ENABLED' : 'DISABLED'}`);
+    
+    this.indicator3Enabled = enabled;
+    
+    if (enabled) {
+      const success = createIndicator3Series();
+      if (success) {
+        chart.priceScale('indicator3').applyOptions({ visible: true });
+        indicator3Series.applyOptions({ visible: true });
+        
+        console.log('✅ TRADINGVIEW-STYLE: Indicator 3 enabled on main chart');
+        // Ready for your data processing
+      }
+    } else {
+      if (indicator3Series) indicator3Series.applyOptions({ visible: false });
+      chart.priceScale('indicator3').applyOptions({ visible: false });
+      console.log('✅ TRADINGVIEW-STYLE: Indicator 3 disabled');
+    }
+  }
+
   updateVolumeChart(rawData = null) {
     if (!this.volumeIndicatorEnabled || !volumeBidsSeries || !volumeAsksSeries) {
       return;
@@ -1242,8 +1392,10 @@ class TimeframeManager {
       }
       this.avgSeriesByLayer.clear();
       
-      // Clear volume series
+      // Clear all indicator series
       destroyVolumeSeries();
+      destroyIndicator2Series();
+      destroyIndicator3Series();
     } catch (e) { 
       console.error('❌ Failed clearing series during symbol switch:', e); 
     }
@@ -1816,6 +1968,14 @@ function toggleVolumeIndicator(enabled) {
   manager.toggleVolumeIndicator(enabled);
 }
 
+function toggleIndicator2(enabled) {
+  manager.toggleIndicator2(enabled);
+}
+
+function toggleIndicator3(enabled) {
+  manager.toggleIndicator3(enabled);
+}
+
 // Enhanced zoom functions with MASSIVE zoom range like TradingView
 function zoomIn() {
   if (window.chart) {
@@ -2002,8 +2162,10 @@ function handlePinchZoom(scaleChange) {
 manager.initializeChart().then(() => {
   console.log('🎯 Chart ready with bid spread data and dual y-axis!');
   
-  // CRITICAL: Initialize volume series for TradingView-style indicators
+  // CRITICAL: Initialize all indicator series for TradingView-style indicators
   createVolumeSeries();
+  createIndicator2Series();
+  createIndicator3Series();
   
   // Start update cycle
   manager.startUpdateCycle();
