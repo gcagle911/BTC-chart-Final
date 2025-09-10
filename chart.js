@@ -221,6 +221,54 @@ class TimeframeManager {
     };
   }
 
+  // Robust time parsing returning milliseconds since epoch, or NaN
+  parseTimeMs(value) {
+    if (!value) return NaN;
+    const ms = new Date(value).getTime();
+    return Number.isFinite(ms) ? ms : NaN;
+  }
+
+  // Fetch JSON with cache-busting to avoid stale CDN responses
+  async fetchJsonNoCache(url) {
+    const bust = `v=${Date.now()}`;
+    const sep = url.includes('?') ? '&' : '?';
+    const fullUrl = `${url}${sep}${bust}`;
+    const res = await fetch(fullUrl, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.status}`);
+    return res.json();
+  }
+
+  // Merge recent and historical safely: sort, dedupe by timestamp, prefer recent on overlap
+  mergeRecentAndHistorical(recentData, historicalData) {
+    const recent = Array.isArray(recentData) ? recentData.filter(d => this.parseTimeMs(d.time)) : [];
+    const historical = Array.isArray(historicalData) ? historicalData.filter(d => this.parseTimeMs(d.time)) : [];
+
+    // Determine the earliest recent time across ALL recent points (not just index 0)
+    const minRecentMs = recent.length > 0 ? Math.min(...recent.map(d => this.parseTimeMs(d.time))) : NaN;
+
+    // Keep only truly older historical points if recent exists; otherwise keep all historical
+    const filteredHistorical = Number.isFinite(minRecentMs)
+      ? historical.filter(d => this.parseTimeMs(d.time) < minRecentMs)
+      : historical;
+
+    // Combine and sort by time ascending
+    const combined = [...filteredHistorical, ...recent].sort((a, b) => this.parseTimeMs(a.time) - this.parseTimeMs(b.time));
+
+    // Deduplicate by second-level timestamp, preferring later occurrence (recent overwrites historical)
+    const bySecond = new Map();
+    for (const d of combined) {
+      const tSec = Math.floor(this.parseTimeMs(d.time) / 1000);
+      if (!Number.isFinite(tSec)) continue;
+      bySecond.set(tSec, d);
+    }
+
+    const deduped = Array.from(bySecond.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([, d]) => d);
+
+    return deduped;
+  }
+
   toUnixTimestamp(dateStr) {
     return Math.floor(new Date(dateStr).getTime() / 1000);
   }
@@ -533,40 +581,21 @@ class TimeframeManager {
 
   async initializeChart() {
     try {
-      // 1. Fetch recent data
-      const recentRes = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/recent.json');
-      const recentData = await recentRes.json();
+      // Fetch both datasets in parallel with cache-busting
+      const [recentData, historicalData] = await Promise.all([
+        this.fetchJsonNoCache('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/recent.json'),
+        this.fetchJsonNoCache('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/historical.json')
+      ]);
 
-      // 2. Fetch historical data
-      const historicalRes = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/historical.json');
-      const historicalData = await historicalRes.json();
+      // Merge, sort and dedupe robustly
+      const merged = this.mergeRecentAndHistorical(recentData, historicalData);
 
-      // 3. Find earliest timestamp in recent.json
-      const recentStart = new Date(recentData[0].time).getTime();
-
-      // 4. Filter historical data to only include data older than recentStart
-      const filteredHistorical = historicalData.filter(d => new Date(d.time).getTime() < recentStart);
-
-      // 5. Combine and sort
-      const combined = [...filteredHistorical, ...recentData]
-        .sort((a, b) => new Date(a.time) - new Date(b.time));
-
-      // 6. Deduplicate by timestamp
-      const deduped = [];
-      const seen = new Set();
-      for (const d of combined) {
-        const t = d.time;
-        if (!seen.has(t)) {
-          deduped.push(d);
-          seen.add(t);
-        }
-      }
-
-      // 7. Set and process
-      this.rawData = deduped;
-      this.processAndSetData(deduped);
+      // Set and process
+      this.rawData = merged;
+      this.lastTimestamp = 0;
+      this.processAndSetData(merged);
       this.isFullDataLoaded = true;
-      console.log(`✅ Chart loaded with ${deduped.length} points`);
+      console.log(`✅ Chart loaded with ${merged.length} points`);
     } catch (err) {
       console.error('❌ Loading error:', err);
     }
@@ -607,14 +636,15 @@ class TimeframeManager {
 
   async fetchAndUpdate() {
     try {
-      const res = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/recent.json');
-      const data = await res.json();
+      const data = await this.fetchJsonNoCache('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/recent.json');
 
-      // Find new data points
-      const newData = data.filter(d => {
-        const t = this.toUnixTimestamp(d.time);
-        return t > this.lastTimestamp;
-      });
+      // Filter strictly newer than lastTimestamp and sort ascending
+      const newData = (Array.isArray(data) ? data : [])
+        .filter(d => {
+          const t = this.toUnixTimestamp(d.time);
+          return Number.isFinite(t) && t > this.lastTimestamp;
+        })
+        .sort((a, b) => this.parseTimeMs(a.time) - this.parseTimeMs(b.time));
 
       if (newData.length > 0) {
         // Add new data to our raw data store
@@ -636,12 +666,16 @@ class TimeframeManager {
     if (!this.isFullDataLoaded) return;
     
     try {
-      console.log('🔄 Refreshing historical data...');
-      const res = await fetch('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/historical.json');
-      const data = await res.json();
-      this.rawData = data;
-      this.processAndSetData(data);
-      console.log(`✅ Historical data refreshed: ${data.length} total points`);
+      console.log('🔄 Refreshing historical + recent data...');
+      const [recentData, historicalData] = await Promise.all([
+        this.fetchJsonNoCache('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/recent.json'),
+        this.fetchJsonNoCache('https://storage.googleapis.com/garrettc-btc-bidspreadl20-data/historical.json')
+      ]);
+      const merged = this.mergeRecentAndHistorical(recentData, historicalData);
+      this.rawData = merged;
+      this.lastTimestamp = 0;
+      this.processAndSetData(merged);
+      console.log(`✅ Data refreshed: ${merged.length} total points`);
     } catch (err) {
       console.error('❌ Historical refresh failed:', err);
     }
