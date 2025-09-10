@@ -1668,9 +1668,9 @@ class TimeframeManager {
       }
     }
     
-    // ALL layers must be in their top 2.5%
+    // ALL layers must be high relative to their own ranges
     const spreadConditionMet = layersMet === layers.length;
-    console.log(`📊 Spread condition: ${layersMet}/${layers.length} layers in top 2.5% = ${spreadConditionMet}`);
+    console.log(`📊 Spread condition: ${layersMet}/${layers.length} layers high in their own ranges = ${spreadConditionMet}`);
     
     if (!spreadConditionMet) {
       return false;
