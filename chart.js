@@ -246,9 +246,8 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
     visible: true,
     scaleMargins: { top: 0.15, bottom: 0.15 },
     borderVisible: true,
-    autoScale: false, // CRITICAL: Never auto-scale left axis
+    autoScale: false, // Keep manual control but allow scaling
     mode: LightweightCharts.PriceScaleMode.Normal,
-    lockScale: true, // Prevent accidental scaling
   },
   timeScale: { 
     timeVisible: true, 
@@ -270,7 +269,7 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
     vertTouchDrag: true,
   },
   handleScale: { 
-    axisPressedMouseMove: { time: true, price: false }, // Disable price axis scaling via drag
+    axisPressedMouseMove: { time: true, price: true }, // Restore price axis scaling
     mouseWheel: true, 
     pinch: true 
   },
@@ -701,15 +700,13 @@ class TimeframeManager {
     try {
       // Only auto-scale right axis (price data)
       chart.priceScale('right').applyOptions({ 
-        autoScale: true,
-        lockScale: false // Allow price scaling
+        autoScale: true
       });
-      // CRITICAL: Never auto-scale left axis to prevent MA visibility issues
+      // Keep left axis manual but allow user scaling
       chart.priceScale('left').applyOptions({ 
-        autoScale: false,
-        lockScale: true // Prevent accidental left axis scaling
+        autoScale: false // Manual control, but scaling allowed
       });
-      console.log('✅ Auto-scale applied: right=enabled, left=locked');
+      console.log('✅ Auto-scale applied: right=enabled, left=manual');
     } catch (e) {
       console.error('Failed to apply auto-scale:', e);
     }
@@ -3588,63 +3585,30 @@ manager.initializeChart().then(() => {
   // Start update cycle
   manager.startUpdateCycle();
   
-  // Add mobile optimizations and scale protection after chart is ready
+  // Add mobile optimizations after chart is ready
   setTimeout(() => {
     addMobileOptimizations();
-    setupScaleProtection();
+    addScaleResetButton();
   }, 1000);
 });
 
-// Prevent accidental price scale zooming and protect left axis
-function setupScaleProtection() {
-  console.log('🔒 Setting up scale protection');
-  
-  // Regularly enforce left axis lock to prevent accidental scaling
-  setInterval(() => {
-    try {
-      chart.priceScale('left').applyOptions({ 
-        autoScale: false,
-        lockScale: true 
-      });
-    } catch (e) {
-      // Silently handle any errors
-    }
-  }, 5000);
-  
-  // Add touch event protection for mobile
-  const chartElement = document.getElementById('main-chart');
-  if (chartElement) {
-    let touchStartY = null;
-    let touchStartX = null;
-    
-    chartElement.addEventListener('touchstart', (e) => {
-      if (e.touches.length === 1) {
-        touchStartY = e.touches[0].clientY;
-        touchStartX = e.touches[0].clientX;
-      }
-    }, { passive: true });
-    
-    chartElement.addEventListener('touchmove', (e) => {
-      if (e.touches.length === 1 && touchStartY !== null) {
-        const touchY = e.touches[0].clientY;
-        const touchX = e.touches[0].clientX;
-        const deltaY = Math.abs(touchY - touchStartY);
-        const deltaX = Math.abs(touchX - touchStartX);
-        
-        // If primarily vertical movement on left side (price scale area), prevent
-        const chartRect = chartElement.getBoundingClientRect();
-        const leftEdge = chartRect.left + 60; // Approximate left axis width
-        
-        if (touchStartX < leftEdge && deltaY > deltaX * 2) {
-          e.preventDefault(); // Prevent vertical scaling on left axis
-        }
-      }
-    }, { passive: false });
-    
-    chartElement.addEventListener('touchend', () => {
-      touchStartY = null;
-      touchStartX = null;
-    }, { passive: true });
+// Better approach: Add a "Reset Scales" button instead of blocking scaling
+function addScaleResetButton() {
+  // Add a reset scales button to the tools menu if it doesn't exist
+  const toolsMenu = document.querySelector('.ma-toggle-list');
+  if (toolsMenu && !document.getElementById('btn-reset-scales')) {
+    const resetButton = document.createElement('button');
+    resetButton.id = 'btn-reset-scales';
+    resetButton.className = 'tool-btn';
+    resetButton.style.cssText = 'background: #2962ff; color: #fff; margin-top: 8px;';
+    resetButton.textContent = '🔄 Reset Y-Scales';
+    resetButton.onclick = () => {
+      // Reset both axes to sensible defaults
+      chart.priceScale('right').applyOptions({ autoScale: true });
+      chart.priceScale('left').applyOptions({ autoScale: false });
+      console.log('✅ Y-axis scales reset');
+    };
+    toolsMenu.appendChild(resetButton);
   }
 }
 
