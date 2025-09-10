@@ -1440,7 +1440,7 @@ class TimeframeManager {
   addHorizontalLine(price) {
     const line = priceSeries.createPriceLine({
       price: price,
-      color: '#FFD700',
+      color: '#FFFFFF', // White horizontal line
       lineWidth: 1.5,
       lineStyle: LightweightCharts.LineStyle.Solid,
       axisLabelVisible: true,
@@ -1456,7 +1456,7 @@ class TimeframeManager {
       const vLineSeries = chart.addLineSeries({
         color: '#FFFFFF',
         lineWidth: 2,
-        lineStyle: LightweightCharts.LineStyle.Dashed,
+        lineStyle: LightweightCharts.LineStyle.Solid, // Solid white line
         priceScaleId: 'vline', // Separate price scale
         lastValueVisible: false,
         priceLineVisible: false,
