@@ -117,3 +117,4 @@ git checkout -b feature/experiment baseline/multicrypto-v1
 - Added intelligent indicator layout management
 
 <!-- Deployment chant: 🚀 Mystical deployment spirits, awaken! Let the code flow through the digital realms! 🌟 -->
+<!-- Force deployment: Lenient thresholds update - skull 15%, gold X 25% - catch more signals! ⚡ -->
