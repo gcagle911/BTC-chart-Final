@@ -1,4 +1,4 @@
-// Simplified Bitcoin Chart - Clean Interface  
+// Simplified Bitcoin Chart - Clean Interface   
 // Main price chart with Bid Spread MAs on LEFT y-axis and enhanced zoom capability
 
 // Data sources mapped by symbol
