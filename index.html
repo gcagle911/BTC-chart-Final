@@ -119,6 +119,8 @@
       background: rgba(25,28,35,0.98);
       border: 1px solid rgba(255,255,255,0.12);
       border-radius: 8px; padding: 10px; min-width: 240px;
+      max-height: 80vh; /* Prevent going off-screen */
+      overflow-y: auto; /* Scrollable if too tall */
       box-shadow: 0 8px 24px rgba(0,0,0,0.40);
       backdrop-filter: blur(10px);
       z-index: 250;

@@ -1451,26 +1451,19 @@ class TimeframeManager {
   }
 
   addVerticalLine(time) {
-    const vLineSeries = chart.addLineSeries({
+    // Use histogram series for proper vertical line
+    const vLineSeries = chart.addHistogramSeries({
       color: '#FFFFFF',
-      lineWidth: 1.5,
-      lineStyle: LightweightCharts.LineStyle.Dashed,
       priceScaleId: 'right',
       lastValueVisible: false,
       priceLineVisible: false,
-      crosshairMarkerVisible: false,
     });
     
-    // Draw vertical line across price range
-    const priceRange = chart.priceScale('right').getPriceRange();
-    if (priceRange) {
-      vLineSeries.setData([
-        { time, value: priceRange.minValue },
-        { time, value: priceRange.maxValue }
-      ]);
-    }
+    // Add single point at the clicked time
+    vLineSeries.setData([{ time, value: 1 }]);
     
     this.verticalLines.push({ series: vLineSeries, time });
+    console.log(`✅ Added vertical line at ${new Date(time * 1000).toISOString()}`);
     return vLineSeries;
   }
 
@@ -1485,36 +1478,46 @@ class TimeframeManager {
     const timeDiff = endTime - this.measureStart.time;
     const pricePercent = ((priceDiff / this.measureStart.price) * 100);
     
-    // Add measurement lines
-    const startLine = this.addHorizontalLine(this.measureStart.price);
-    const endLine = this.addHorizontalLine(endPrice);
-    
-    this.measureLines.push({ startLine, endLine });
-    
-    // Show result
-    const result = `📏 Δ${priceDiff.toFixed(3)} (${pricePercent.toFixed(2)}%) | ${Math.floor(timeDiff/60)}min`;
+    // Show temporary measurement result
+    const result = `📏 MEASUREMENT: Δ${priceDiff.toFixed(3)} (${pricePercent.toFixed(2)}%) | ${Math.floor(timeDiff/60)}min`;
     console.log(result);
+    
+    // Show temporary visual feedback
+    alert(result);
     
     this.measureStart = null;
     this.setActiveTool(null);
   }
 
   clearAllLines() {
+    console.log(`🗑️ Clearing ${this.horizontalLines.length} horizontal and ${this.verticalLines.length} vertical lines`);
+    
+    // Clear horizontal lines
     this.horizontalLines.forEach(({ line }) => {
-      try { priceSeries.removePriceLine(line); } catch (e) {}
+      try { 
+        priceSeries.removePriceLine(line); 
+        console.log('✅ Removed horizontal line');
+      } catch (e) {
+        console.warn('Failed to remove horizontal line:', e);
+      }
     });
     this.horizontalLines = [];
     
+    // Clear vertical lines
     this.verticalLines.forEach(({ series }) => {
-      try { chart.removeSeries(series); } catch (e) {}
+      try { 
+        chart.removeSeries(series); 
+        console.log('✅ Removed vertical line');
+      } catch (e) {
+        console.warn('Failed to remove vertical line:', e);
+      }
     });
     this.verticalLines = [];
     
-    this.measureLines.forEach(({ startLine, endLine }) => {
-      try { priceSeries.removePriceLine(startLine); } catch (e) {}
-      try { priceSeries.removePriceLine(endLine); } catch (e) {}
-    });
+    // Clear any remaining measure lines
     this.measureLines = [];
+    
+    console.log('✅ All lines cleared successfully');
   }
 
   setupTradingTools() {
