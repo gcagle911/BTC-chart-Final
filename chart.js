@@ -1809,19 +1809,19 @@ class TimeframeManager {
           marker = {
             time: time,
             position: 'aboveBar',
-            color: '#FFFFFF', // White color for skull
+            color: 'transparent', // No background shape
             shape: 'circle',
-            text: '💀', // Skull emoji
-            size: 3,
+            text: '💀', // Just the skull emoji, no circle
+            size: 1, // Smaller size to avoid background
           };
         } else if (signal.type === 'goldX') {
           marker = {
             time: time,
             position: 'aboveBar',
             color: '#FFD700', // Gold color
-            shape: 'cross', // X shape
-            text: '✖️', // Gold X
-            size: 3,
+            shape: 'circle', // Use circle with gold background
+            text: '✖', // Simple X character
+            size: 2, // Medium size
           };
         } else {
           // Default fallback
