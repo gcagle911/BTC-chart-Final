@@ -364,8 +364,8 @@ function destroyVolumeSeries() {
 
 // Create Indicator 2 series on main chart (Timeframe-Averaged Volume)
 function createIndicator2Series() {
-  if (indicator2Series) {
-    console.log('📊 Indicator 2 series already exists');
+  if (indicator2BidsSeries && indicator2AsksSeries) {
+    console.log('📊 Indicator 2 series already exist');
     return true;
   }
 
