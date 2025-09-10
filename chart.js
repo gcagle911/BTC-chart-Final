@@ -1452,7 +1452,15 @@ class TimeframeManager {
 
   addVerticalLine(time) {
     try {
-      // Create line series for infinite vertical line
+      // Get current visible price range to avoid auto-scale issues
+      const currentRange = chart.priceScale('right').getPriceRange();
+      if (!currentRange) return null;
+      
+      // Use current visible range + some padding (don't use extreme values)
+      const padding = (currentRange.maxValue - currentRange.minValue) * 0.1;
+      const minValue = currentRange.minValue - padding;
+      const maxValue = currentRange.maxValue + padding;
+      
       const vLineSeries = chart.addLineSeries({
         color: '#FFFFFF',
         lineWidth: 1.5,
@@ -1461,17 +1469,18 @@ class TimeframeManager {
         lastValueVisible: false,
         priceLineVisible: false,
         crosshairMarkerVisible: false,
+        autoscaleInfoProvider: () => null, // CRITICAL: Don't affect auto-scaling
       });
       
-      // Create infinite vertical line with extreme high and low values
+      // Create vertical line spanning visible range
       const lineData = [
-        { time, value: 999999999 }, // Very high value
-        { time, value: -999999999 } // Very low value
+        { time, value: minValue },
+        { time, value: maxValue }
       ];
       vLineSeries.setData(lineData);
       
       this.verticalLines.push({ series: vLineSeries, time });
-      console.log(`✅ Added infinite vertical line at time: ${time}`);
+      console.log(`✅ Added vertical line without affecting zoom`);
       return vLineSeries;
     } catch (e) {
       console.error('Failed to create vertical line:', e);
