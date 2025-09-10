@@ -138,6 +138,43 @@ const ma200 = chart.addLineSeries({
   priceLineVisible: false,
 });
 
+// Exponential Moving Averages on LEFT y-axis (separate scale!)
+const ema20 = chart.addLineSeries({
+  priceScaleId: 'left', // LEFT y-axis for EMAs
+  color: '#1E90FF',
+  lineWidth: 0.5,
+  title: 'EMA20',
+  lastValueVisible: false,
+  priceLineVisible: false,
+});
+
+const ema50 = chart.addLineSeries({
+  priceScaleId: 'left', // LEFT y-axis for EMAs
+  color: '#FFA500',
+  lineWidth: 0.5,
+  title: 'EMA50',
+  lastValueVisible: false,
+  priceLineVisible: false,
+});
+
+const ema100 = chart.addLineSeries({
+  priceScaleId: 'left', // LEFT y-axis for EMAs
+  color: '#8A2BE2',
+  lineWidth: 0.5,
+  title: 'EMA100',
+  lastValueVisible: false,
+  priceLineVisible: false,
+});
+
+const ema200 = chart.addLineSeries({
+  priceScaleId: 'left', // LEFT y-axis for EMAs
+  color: '#FF1493',
+  lineWidth: 0.5,
+  title: 'EMA200',
+  lastValueVisible: false,
+  priceLineVisible: false,
+});
+
 // Cumulative Average of ALL L20 spread data
 const cumulativeMA = chart.addLineSeries({
   priceScaleId: 'left', // LEFT y-axis for MAs
@@ -157,6 +194,10 @@ ma50.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } })
 ma100.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
 ma200.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
 cumulativeMA.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
+ema20.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
+ema50.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
+ema100.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
+ema200.applyOptions({ priceFormat: { type: 'custom', formatter: formatPercent } });
 
 // Real-time L20 spread line (MA1 - raw data) - REMOVED
 
@@ -284,6 +325,10 @@ class TimeframeManager {
     const ma50Data = [];
     const ma100Data = [];
     const ma200Data = [];
+    const ema20Data = [];
+    const ema50Data = [];
+    const ema100Data = [];
+    const ema200Data = [];
     const cumulativeData = [];
 
     // Process aggregated price data for price series
@@ -309,9 +354,21 @@ class TimeframeManager {
       if (t > this.lastTimestamp) this.lastTimestamp = t;
     }
 
-    // Process RAW MINUTE DATA for MAs - NEVER CHANGES regardless of timeframe
+    // Process RAW MINUTE DATA for MAs and EMAs - NEVER CHANGES regardless of timeframe
     let cumulativeSum = 0;
     let cumulativeCount = 0;
+    
+    // EMA state variables
+    let ema20Value = null;
+    let ema50Value = null;
+    let ema100Value = null;
+    let ema200Value = null;
+    
+    // EMA smoothing factors
+    const alpha20 = 2 / (20 + 1);
+    const alpha50 = 2 / (50 + 1);
+    const alpha100 = 2 / (100 + 1);
+    const alpha200 = 2 / (200 + 1);
     
     for (let i = 0; i < rawMinuteData.length; i++) {
       const d = rawMinuteData[i];
@@ -367,6 +424,44 @@ class TimeframeManager {
             ma200Data.push({ time: sharedTime, value: sum / 200 });
           }
         }
+        
+        // Client-side EMA calculations based on spread_avg_L20_pct
+        if (d.spread_avg_L20_pct !== null && d.spread_avg_L20_pct !== undefined) {
+          const currentValue = parseFloat(d.spread_avg_L20_pct);
+          
+          // EMA20 calculation
+          if (ema20Value === null) {
+            // Initialize with first value
+            ema20Value = currentValue;
+          } else {
+            ema20Value = alpha20 * currentValue + (1 - alpha20) * ema20Value;
+          }
+          ema20Data.push({ time: sharedTime, value: ema20Value });
+          
+          // EMA50 calculation
+          if (ema50Value === null) {
+            ema50Value = currentValue;
+          } else {
+            ema50Value = alpha50 * currentValue + (1 - alpha50) * ema50Value;
+          }
+          ema50Data.push({ time: sharedTime, value: ema50Value });
+          
+          // EMA100 calculation
+          if (ema100Value === null) {
+            ema100Value = currentValue;
+          } else {
+            ema100Value = alpha100 * currentValue + (1 - alpha100) * ema100Value;
+          }
+          ema100Data.push({ time: sharedTime, value: ema100Value });
+          
+          // EMA200 calculation
+          if (ema200Value === null) {
+            ema200Value = currentValue;
+          } else {
+            ema200Value = alpha200 * currentValue + (1 - alpha200) * ema200Value;
+          }
+          ema200Data.push({ time: sharedTime, value: ema200Value });
+        }
       } else {
         // Fallback to server-provided MAs
         if (d.ma_50 !== null && d.ma_50 !== undefined) {
@@ -398,6 +493,7 @@ class TimeframeManager {
       console.log(`🕐 ${this.currentTimeframe} Data Processing:`);
       console.log(`   Candlestick Data: ${priceData.length} points (RIGHT y-axis)`);
       console.log(`   Bid Spread L20 MA Data: MA20(${ma20Data.length}), MA50(${ma50Data.length}), MA100(${ma100Data.length}), MA200(${ma200Data.length}) points (LEFT y-axis)`);
+      console.log(`   Bid Spread L20 EMA Data: EMA20(${ema20Data.length}), EMA50(${ema50Data.length}), EMA100(${ema100Data.length}), EMA200(${ema200Data.length}) points (LEFT y-axis)`);
       console.log(`   Cumulative L20 Avg: ${cumulativeData.length} points (LEFT y-axis)`);
     }
 
@@ -410,6 +506,10 @@ class TimeframeManager {
       ma50Data.forEach(p => ma50.update(p));
       ma100Data.forEach(p => ma100.update(p));
       ma200Data.forEach(p => ma200.update(p));
+      ema20Data.forEach(p => ema20.update(p));
+      ema50Data.forEach(p => ema50.update(p));
+      ema100Data.forEach(p => ema100.update(p));
+      ema200Data.forEach(p => ema200.update(p));
       cumulativeData.forEach(p => cumulativeMA.update(p));
     } else {
       // Set complete dataset
@@ -418,6 +518,10 @@ class TimeframeManager {
       ma50.setData(ma50Data);
       ma100.setData(ma100Data);
       ma200.setData(ma200Data);
+      ema20.setData(ema20Data);
+      ema50.setData(ema50Data);
+      ema100.setData(ema100Data);
+      ema200.setData(ema200Data);
       cumulativeMA.setData(cumulativeData);
       
       // Fit content to show all data
@@ -775,6 +879,10 @@ function setupMAToggles() {
     { id: 'toggle-ma50', series: ma50 },
     { id: 'toggle-ma100', series: ma100 },
     { id: 'toggle-ma200', series: ma200 },
+    { id: 'toggle-ema20', series: ema20 },
+    { id: 'toggle-ema50', series: ema50 },
+    { id: 'toggle-ema100', series: ema100 },
+    { id: 'toggle-ema200', series: ema200 },
   ];
 
   bindings.forEach(({ id, series }) => {
