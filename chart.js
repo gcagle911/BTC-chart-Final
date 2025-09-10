@@ -246,8 +246,9 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
     visible: true,
     scaleMargins: { top: 0.15, bottom: 0.15 },
     borderVisible: true,
-    autoScale: false,
+    autoScale: false, // CRITICAL: Never auto-scale left axis
     mode: LightweightCharts.PriceScaleMode.Normal,
+    lockScale: true, // Prevent accidental scaling
   },
   timeScale: { 
     timeVisible: true, 
@@ -268,7 +269,11 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
     horzTouchDrag: true,
     vertTouchDrag: true,
   },
-  handleScale: { axisPressedMouseMove: { time: true, price: true }, mouseWheel: true, pinch: true },
+  handleScale: { 
+    axisPressedMouseMove: { time: true, price: false }, // Disable price axis scaling via drag
+    mouseWheel: true, 
+    pinch: true 
+  },
 });
 
 // Price series on RIGHT y-axis
@@ -695,9 +700,16 @@ class TimeframeManager {
   applyAutoScale() {
     try {
       // Only auto-scale right axis (price data)
-      chart.priceScale('right').applyOptions({ autoScale: true });
-      // Never auto-scale left axis to prevent MA visibility issues
-      // Left axis is manually controlled via Y-axis drag overlay
+      chart.priceScale('right').applyOptions({ 
+        autoScale: true,
+        lockScale: false // Allow price scaling
+      });
+      // CRITICAL: Never auto-scale left axis to prevent MA visibility issues
+      chart.priceScale('left').applyOptions({ 
+        autoScale: false,
+        lockScale: true // Prevent accidental left axis scaling
+      });
+      console.log('✅ Auto-scale applied: right=enabled, left=locked');
     } catch (e) {
       console.error('Failed to apply auto-scale:', e);
     }
@@ -1715,18 +1727,24 @@ class TimeframeManager {
     
     if (!spreadThreshold || !slopeThreshold) return false;
     
-    // Condition 1: Spread check (same as before)
+    // Condition 1: Check if ALL spread layers are in their respective top 2.5%
     const layers = ['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg'];
-    let spreadConditionMet = false;
+    let layersMet = 0;
     
     for (const layer of layers) {
       const value = currentData[layer];
-      if (value !== null && value >= spreadThreshold.top5Percent) {
-        spreadConditionMet = true;
-        break;
+      const layerThreshold = spreadThreshold[layer];
+      
+      if (!layerThreshold) continue;
+      
+      const layerConditionMet = value !== null && value >= layerThreshold;
+      if (layerConditionMet) {
+        layersMet++;
       }
     }
     
+    // ALL layers must be in their respective top 2.5%
+    const spreadConditionMet = layersMet === layers.length;
     if (!spreadConditionMet) return false;
     
     // Condition 2: Slope check with proper index
@@ -3570,7 +3588,63 @@ manager.initializeChart().then(() => {
   // Start update cycle
   manager.startUpdateCycle();
   
-  // Add mobile optimizations after chart is ready
-  setTimeout(addMobileOptimizations, 1000);
+  // Add mobile optimizations and scale protection after chart is ready
+  setTimeout(() => {
+    addMobileOptimizations();
+    setupScaleProtection();
+  }, 1000);
 });
+
+// Prevent accidental price scale zooming and protect left axis
+function setupScaleProtection() {
+  console.log('🔒 Setting up scale protection');
+  
+  // Regularly enforce left axis lock to prevent accidental scaling
+  setInterval(() => {
+    try {
+      chart.priceScale('left').applyOptions({ 
+        autoScale: false,
+        lockScale: true 
+      });
+    } catch (e) {
+      // Silently handle any errors
+    }
+  }, 5000);
+  
+  // Add touch event protection for mobile
+  const chartElement = document.getElementById('main-chart');
+  if (chartElement) {
+    let touchStartY = null;
+    let touchStartX = null;
+    
+    chartElement.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) {
+        touchStartY = e.touches[0].clientY;
+        touchStartX = e.touches[0].clientX;
+      }
+    }, { passive: true });
+    
+    chartElement.addEventListener('touchmove', (e) => {
+      if (e.touches.length === 1 && touchStartY !== null) {
+        const touchY = e.touches[0].clientY;
+        const touchX = e.touches[0].clientX;
+        const deltaY = Math.abs(touchY - touchStartY);
+        const deltaX = Math.abs(touchX - touchStartX);
+        
+        // If primarily vertical movement on left side (price scale area), prevent
+        const chartRect = chartElement.getBoundingClientRect();
+        const leftEdge = chartRect.left + 60; // Approximate left axis width
+        
+        if (touchStartX < leftEdge && deltaY > deltaX * 2) {
+          e.preventDefault(); // Prevent vertical scaling on left axis
+        }
+      }
+    }, { passive: false });
+    
+    chartElement.addEventListener('touchend', () => {
+      touchStartY = null;
+      touchStartX = null;
+    }, { passive: true });
+  }
+}
 

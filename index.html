@@ -56,16 +56,18 @@
 
     #timeframe-controls {
       top: 10px; left: 10px;
-      display: flex; align-items: center; gap: 8px;
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
       background: rgba(0,0,0,0.80);
       padding: 8px 12px; border-radius: 8px;
       backdrop-filter: blur(15px);
       border: 1px solid rgba(255,255,255,0.18);
       box-shadow: 0 4px 15px rgba(0,0,0,0.30);
+      max-width: calc(100vw - 140px); /* Leave space for tools button */
     }
 
     #tools-controls {
       top: 10px; right: 10px;
+      z-index: 250; /* Higher than timeframe controls */
     }
 
     select {
@@ -131,11 +133,24 @@
     .ma-toggle-list label { display: flex; align-items: center; gap: 6px; color: #d1d4dc; font-size: 12px; }
 
     @media (max-width: 768px){
-      #timeframe-controls { top: 5px; left: 5px; padding: 6px 10px; }
-      select, .timeframe-label, #ma-tools-button { font-size: 11px; padding: 4px 8px; min-width: 70px; }
+      #timeframe-controls { 
+        top: 5px; left: 5px; padding: 6px 8px; gap: 6px;
+        max-width: calc(100vw - 120px); /* More space for tools button */
+        flex-wrap: wrap; /* Allow wrapping on small screens */
+      }
+      #tools-controls { top: 5px; right: 5px; }
+      select, .timeframe-label, #ma-tools-button { font-size: 11px; padding: 4px 6px; min-width: 65px; }
+      .timeframe-label { white-space: nowrap; }
     }
     @media (max-width: 480px){
-      select, .timeframe-label, #ma-tools-button { font-size: 10px; padding: 3px 6px; min-width: 60px; }
+      #timeframe-controls { 
+        padding: 4px 6px; gap: 4px;
+        max-width: calc(100vw - 100px);
+        flex-direction: column; /* Stack vertically on very small screens */
+        align-items: flex-start;
+      }
+      select, .timeframe-label, #ma-tools-button { font-size: 10px; padding: 2px 4px; min-width: 55px; }
+      .dropdown-menu { min-width: 200px; max-height: 60vh; right: -10px; }
     }
   </style>
 </head>
@@ -248,6 +263,7 @@
             <button id="btn-backtest-goldx" class="tool-btn" style="background: #FF9800; color: #fff;">🔄 Backtest Gold X</button>
             <button id="btn-test-skull" class="tool-btn" style="background: #666; color: #fff;">💀 Test Skull</button>
             <button id="btn-test-goldx" class="tool-btn" style="background: #FFD700; color: #000;">✖️ Test Gold X</button>
+            <div id="trigger-status" style="font-size: 10px; color: #888; margin-top: 4px; text-align: center;"></div>
           </div>
         </div>
       </div>
