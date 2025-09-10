@@ -1320,7 +1320,10 @@ class TimeframeManager {
         
         // Process existing data for timeframe-averaged volume
         if (this.rawData && this.rawData.length > 0) {
+          console.log(`📊 Processing ${this.rawData.length} data points for Indicator 2`);
           this.updateIndicator2Chart();
+        } else {
+          console.warn('⚠️  No raw data available for Indicator 2');
         }
         
         console.log('✅ TRADINGVIEW-STYLE: Indicator 2 (Timeframe-Averaged Volume) enabled');
@@ -1404,9 +1407,16 @@ class TimeframeManager {
     console.log(`📊 Indicator 2: ${bidsData.length} averaged ${this.currentTimeframe} volume points`);
 
     if (bidsData.length > 0) {
+      console.log('📊 Sample Indicator 2 data:', {
+        first: { time: new Date(bidsData[0].time * 1000).toISOString(), bids: bidsData[0].value, asks: asksData[0].value },
+        last: { time: new Date(bidsData[bidsData.length-1].time * 1000).toISOString(), bids: bidsData[bidsData.length-1].value, asks: asksData[asksData.length-1].value }
+      });
+      
       indicator2BidsSeries.setData(bidsData);
       indicator2AsksSeries.setData(asksData);
-      console.log('✅ Indicator 2 (Timeframe-Averaged Volume) updated');
+      console.log('✅ Indicator 2 (Timeframe-Averaged Volume) data set successfully');
+    } else {
+      console.warn('⚠️  No averaged volume data generated for Indicator 2');
     }
   }
 
