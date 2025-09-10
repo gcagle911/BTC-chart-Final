@@ -211,13 +211,16 @@ function normalizeApiData(items) {
 // Chart configuration with LEFT/RIGHT dual y-axis and massive zoom range
 window.chart = LightweightCharts.createChart(document.getElementById('main-chart'), {
   layout: {
-    background: { color: '#131722' },
-    textColor: '#D1D4DC',
+    background: { 
+      type: LightweightCharts.ColorType.Solid,
+      color: 'transparent',
+    },
+    textColor: '#ffffff',
     fontSize: 9,
   },
   grid: {
-    vertLines: { color: '#2B2B43' },
-    horzLines: { color: '#2B2B43' },
+    vertLines: { color: 'rgba(255, 255, 255, 0.1)' },
+    horzLines: { color: 'rgba(255, 255, 255, 0.1)' },
   },
   rightPriceScale: { 
     visible: true,
