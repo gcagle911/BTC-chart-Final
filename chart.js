@@ -1269,92 +1269,151 @@ class TimeframeManager {
 
 
   toggleVolumeIndicator(enabled) {
-    console.log(`🔄 TRADINGVIEW-STYLE Volume Indicator: ${enabled ? 'ENABLED' : 'DISABLED'}`);
+    console.log(`🔄 Volume Indicator: ${enabled ? 'ENABLED' : 'DISABLED'}`);
     
     this.volumeIndicatorEnabled = enabled;
     
     if (enabled) {
-      // CRITICAL: Create volume series on main chart (TradingView style)
       const success = createVolumeSeries();
       if (success) {
-        // Show volume price scale
-        chart.priceScale('volume').applyOptions({ visible: true });
-        
-        // Show volume series
         volumeBidsSeries.applyOptions({ visible: true });
         volumeAsksSeries.applyOptions({ visible: true });
         
-        // Process existing data if available
         if (this.rawData && this.rawData.length > 0) {
-          console.log(`📊 Processing existing data for TradingView-style volume`);
-          // Reprocess data to include volume in bucketing
           this.processAndSetData(this.rawData, false);
         }
-        
-        console.log('✅ TRADINGVIEW-STYLE: Volume indicator enabled on main chart');
-      } else {
-        console.error('❌ Failed to create volume series');
       }
-      
     } else {
-      // Hide volume series and price scale
       if (volumeBidsSeries) volumeBidsSeries.applyOptions({ visible: false });
       if (volumeAsksSeries) volumeAsksSeries.applyOptions({ visible: false });
-      chart.priceScale('volume').applyOptions({ visible: false });
-      
-      console.log('✅ TRADINGVIEW-STYLE: Volume indicator disabled');
     }
+    
+    // CRITICAL: Recalculate layout for all indicators
+    this.updateIndicatorLayout();
   }
 
   toggleIndicator2(enabled) {
-    console.log(`🔄 TRADINGVIEW-STYLE Indicator 2 (Timeframe-Averaged Volume): ${enabled ? 'ENABLED' : 'DISABLED'}`);
+    console.log(`🔄 Indicator 2 (Timeframe-Averaged Volume): ${enabled ? 'ENABLED' : 'DISABLED'}`);
     
     this.indicator2Enabled = enabled;
     
     if (enabled) {
       const success = createIndicator2Series();
       if (success) {
-        chart.priceScale('indicator2').applyOptions({ visible: true });
         indicator2BidsSeries.applyOptions({ visible: true });
         indicator2AsksSeries.applyOptions({ visible: true });
         
-        // Process existing data for timeframe-averaged volume
         if (this.rawData && this.rawData.length > 0) {
-          console.log(`📊 Processing ${this.rawData.length} data points for Indicator 2`);
           this.updateIndicator2Chart();
-        } else {
-          console.warn('⚠️  No raw data available for Indicator 2');
         }
-        
-        console.log('✅ TRADINGVIEW-STYLE: Indicator 2 (Timeframe-Averaged Volume) enabled');
       }
     } else {
       if (indicator2BidsSeries) indicator2BidsSeries.applyOptions({ visible: false });
       if (indicator2AsksSeries) indicator2AsksSeries.applyOptions({ visible: false });
-      chart.priceScale('indicator2').applyOptions({ visible: false });
-      console.log('✅ TRADINGVIEW-STYLE: Indicator 2 disabled');
     }
+    
+    // CRITICAL: Recalculate layout for all indicators
+    this.updateIndicatorLayout();
   }
 
   toggleIndicator3(enabled) {
-    console.log(`🔄 TRADINGVIEW-STYLE Indicator 3: ${enabled ? 'ENABLED' : 'DISABLED'}`);
+    console.log(`🔄 Indicator 3: ${enabled ? 'ENABLED' : 'DISABLED'}`);
     
     this.indicator3Enabled = enabled;
     
     if (enabled) {
       const success = createIndicator3Series();
       if (success) {
-        chart.priceScale('indicator3').applyOptions({ visible: true });
         indicator3Series.applyOptions({ visible: true });
-        
-        console.log('✅ TRADINGVIEW-STYLE: Indicator 3 enabled on main chart');
-        // Ready for your data processing
       }
     } else {
       if (indicator3Series) indicator3Series.applyOptions({ visible: false });
-      chart.priceScale('indicator3').applyOptions({ visible: false });
-      console.log('✅ TRADINGVIEW-STYLE: Indicator 3 disabled');
     }
+    
+    // CRITICAL: Recalculate layout for all indicators
+    this.updateIndicatorLayout();
+  }
+
+  // CRITICAL: Intelligent indicator layout management
+  updateIndicatorLayout() {
+    const activeIndicators = [];
+    if (this.volumeIndicatorEnabled) activeIndicators.push('volume');
+    if (this.indicator2Enabled) activeIndicators.push('indicator2');
+    if (this.indicator3Enabled) activeIndicators.push('indicator3');
+    
+    const indicatorCount = activeIndicators.length;
+    console.log(`📊 Layout update: ${indicatorCount} indicators active:`, activeIndicators);
+    
+    if (indicatorCount === 0) {
+      // No indicators - main chart uses full space
+      this.setMainChartMargins({ top: 0.02, bottom: 0.02 });
+      this.hideAllIndicatorScales();
+      
+    } else if (indicatorCount === 1) {
+      // 1 indicator - main chart 75%, indicator 25% at bottom
+      this.setMainChartMargins({ top: 0.02, bottom: 0.27 });
+      this.positionIndicators([
+        { id: activeIndicators[0], top: 0.75, bottom: 0.02 }
+      ]);
+      
+    } else if (indicatorCount === 2) {
+      // 2 indicators - main chart 60%, indicators 20% each stacked
+      this.setMainChartMargins({ top: 0.02, bottom: 0.42 });
+      this.positionIndicators([
+        { id: activeIndicators[0], top: 0.58, bottom: 0.22 },
+        { id: activeIndicators[1], top: 0.78, bottom: 0.02 }
+      ]);
+      
+    } else if (indicatorCount === 3) {
+      // 3 indicators - main chart 50%, indicators ~16% each stacked
+      this.setMainChartMargins({ top: 0.02, bottom: 0.52 });
+      this.positionIndicators([
+        { id: activeIndicators[0], top: 0.48, bottom: 0.35 },
+        { id: activeIndicators[1], top: 0.65, bottom: 0.18 },
+        { id: activeIndicators[2], top: 0.82, bottom: 0.02 }
+      ]);
+    }
+    
+    console.log(`✅ Layout updated for ${indicatorCount} indicators`);
+  }
+
+  setMainChartMargins(margins) {
+    // Adjust price scale margins to make room for indicators
+    chart.priceScale('right').applyOptions({ scaleMargins: margins });
+    chart.priceScale('left').applyOptions({ 
+      scaleMargins: { top: margins.top + 0.13, bottom: margins.bottom + 0.13 } 
+    });
+  }
+
+  hideAllIndicatorScales() {
+    chart.priceScale('volume').applyOptions({ visible: false });
+    chart.priceScale('indicator2').applyOptions({ visible: false });
+    chart.priceScale('indicator3').applyOptions({ visible: false });
+  }
+
+  positionIndicators(positions) {
+    this.hideAllIndicatorScales(); // Hide all first
+    
+    positions.forEach(pos => {
+      const scaleMargins = { top: pos.top, bottom: pos.bottom };
+      
+      if (pos.id === 'volume' && this.volumeIndicatorEnabled) {
+        chart.priceScale('volume').applyOptions({ 
+          visible: true, 
+          scaleMargins 
+        });
+      } else if (pos.id === 'indicator2' && this.indicator2Enabled) {
+        chart.priceScale('indicator2').applyOptions({ 
+          visible: true, 
+          scaleMargins 
+        });
+      } else if (pos.id === 'indicator3' && this.indicator3Enabled) {
+        chart.priceScale('indicator3').applyOptions({ 
+          visible: true, 
+          scaleMargins 
+        });
+      }
+    });
   }
 
   updateIndicator2Chart() {
