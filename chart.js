@@ -1717,28 +1717,53 @@ class TimeframeManager {
 
   // External trigger function - call this when your condition is met
   triggerSignal(signalType = 'goldX', active = true) {
-    if (!this.signalSystemEnabled || !signalMarkerSeries) return;
+    console.log(`🔍 triggerSignal called: type=${signalType}, active=${active}`);
+    console.log(`🔍 signalSystemEnabled: ${this.signalSystemEnabled}`);
+    console.log(`🔍 signalMarkerSeries exists: ${!!signalMarkerSeries}`);
+    
+    if (!this.signalSystemEnabled) {
+      console.error('❌ Signal system not enabled');
+      return;
+    }
+    
+    if (!signalMarkerSeries) {
+      console.error('❌ Signal marker series not available');
+      return;
+    }
     
     // Get current candle time
     const currentTime = this.getCurrentCandleTime();
-    if (!currentTime) return;
+    console.log(`🔍 Current candle time: ${currentTime} (${new Date(currentTime * 1000).toISOString()})`);
+    
+    if (!currentTime) {
+      console.error('❌ No current candle time available');
+      return;
+    }
     
     console.log(`📍 Signal trigger: ${signalType} ${active ? 'ACTIVE' : 'INACTIVE'} at ${new Date(currentTime * 1000).toISOString()}`);
     
     if (active) {
       // Get current price for marker positioning
       const currentPrice = this.getCurrentPrice();
-      if (!currentPrice) return;
+      console.log(`🔍 Current price: ${currentPrice}`);
+      
+      if (!currentPrice) {
+        console.error('❌ No current price available');
+        return;
+      }
       
       // Add signal marker above current candlestick
       const markerPrice = currentPrice * 1.02; // 2% above current price
       
-      this.activeSignals.set(currentTime, {
+      const signalData = {
         type: signalType,
         price: markerPrice,
         active: true,
         triggered: Date.now()
-      });
+      };
+      
+      this.activeSignals.set(currentTime, signalData);
+      console.log(`📍 Signal stored:`, signalData);
       
       // Update marker display
       this.updateSignalMarkers();
@@ -1763,25 +1788,38 @@ class TimeframeManager {
   }
 
   updateSignalMarkers() {
-    if (!signalMarkerSeries) return;
+    if (!signalMarkerSeries) {
+      console.error('❌ No signal marker series available');
+      return;
+    }
+    
+    console.log(`🔍 Updating signal markers, activeSignals size: ${this.activeSignals.size}`);
     
     const markers = [];
     
     for (const [time, signal] of this.activeSignals) {
+      console.log(`🔍 Processing signal:`, { time, signal });
       if (signal.active) {
-        markers.push({
+        const marker = {
           time: time,
           position: 'aboveBar',
           color: '#FFD700', // Gold color
           shape: 'cross', // X shape
           text: 'X',
-          size: 2,
-        });
+          size: 3, // Larger size for visibility
+        };
+        markers.push(marker);
+        console.log(`📍 Added marker:`, marker);
       }
     }
     
-    signalMarkerSeries.setMarkers(markers);
-    console.log(`📍 Updated ${markers.length} signal markers`);
+    console.log(`📍 Setting ${markers.length} markers on series`);
+    try {
+      signalMarkerSeries.setMarkers(markers);
+      console.log(`✅ Successfully set ${markers.length} signal markers`);
+    } catch (error) {
+      console.error('❌ Error setting markers:', error);
+    }
   }
 
   // Check for candle closes and make signals permanent
