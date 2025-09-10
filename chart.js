@@ -1818,10 +1818,10 @@ class TimeframeManager {
           marker = {
             time: time,
             position: 'aboveBar',
-            color: '#FFD700', // Gold for the X itself
+            color: '#FFD700', // Gold background
             shape: 'circle', 
-            text: '✖️', // Gold X emoji
-            size: 0, // No background shape
+            text: 'X', // Simple X character that will be gold
+            size: 2, // Small gold circle with X
           };
         } else {
           // Default fallback
