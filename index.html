@@ -17,15 +17,11 @@
 
     /* --- LAYOUT --- */
     #chart-container {
-  width: 100vw;
-  height: 100vh;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  background:
-    radial-gradient(circle at center, rgba(10,13,24,1.0) 0%, rgba(255,215,0,0.12) 100%),
-    #0a0d18;
-}
+      width: 100vw; height: 100vh; position: relative; display: flex; flex-direction: column;
+      /* very subtle blue-black edge vignette */
+      background:
+        radial-gradient(circle at center, rgba(10,13,24,0.00) 30%, rgba(10,13,24,0.92) 95%),
+        #0a0d18;
     }
 
     /* watermark logo: visible but not intrusive */
