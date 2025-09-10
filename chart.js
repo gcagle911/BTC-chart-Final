@@ -662,10 +662,12 @@ class TimeframeManager {
     this.measureStart = null;
     this.yAxisControl = 'Right'; // Default to right axis for horizontal lines
     
-    // Interactive Signal System
-    this.signalSystemEnabled = false;
-    this.activeSignals = new Map(); // time -> {type, price, active, asset, exchange}
-    this.currentCandleTime = null;
+    // Signal Indicator System
+    this.skullIndicatorEnabled = false;
+    this.goldXIndicatorEnabled = false;
+    this.skullSignals = new Map(); // time -> signal data
+    this.goldXSignals = new Map(); // time -> signal data
+    this.signalsCalculated = false;
     
     // Skull Trigger System
     this.spreadThresholds = new Map(); // asset_exchange -> {top5Percent: value}
@@ -1519,7 +1521,9 @@ class TimeframeManager {
     console.log(`🧹 Clearing signals for asset/exchange switch to ${this.currentSymbol}_${API_EXCHANGE}`);
     
     // Clear all signals - they're specific to the previous asset/exchange
-    this.activeSignals.clear();
+    this.skullSignals.clear();
+    this.goldXSignals.clear();
+    this.signalsCalculated = false;
     
     // Reset cooloff for new asset/exchange
     this.lastSkullTrigger = 0;
@@ -1534,6 +1538,12 @@ class TimeframeManager {
       }
     }
     
+    // Update status
+    const statusEl = document.getElementById('signal-status');
+    if (statusEl) {
+      statusEl.textContent = 'Toggle indicators to show historical signals';
+    }
+    
     console.log('✅ Signals cleared for new asset/exchange');
   }
 
@@ -1542,7 +1552,9 @@ class TimeframeManager {
     console.log(`🧹 Clearing signals for timeframe change to ${this.currentTimeframe}`);
     
     // Clear all signals - they're specific to the previous timeframe
-    this.activeSignals.clear();
+    this.skullSignals.clear();
+    this.goldXSignals.clear();
+    this.signalsCalculated = false;
     
     // Clear signal markers from chart
     if (priceSeries) {
@@ -1552,6 +1564,12 @@ class TimeframeManager {
       } catch (e) {
         console.warn('Failed to clear signal markers:', e);
       }
+    }
+    
+    // Update status
+    const statusEl = document.getElementById('signal-status');
+    if (statusEl) {
+      statusEl.textContent = 'Toggle indicators to show historical signals';
     }
     
     console.log('✅ Signals cleared for new timeframe');
@@ -1841,14 +1859,18 @@ class TimeframeManager {
     }
   }
 
-  // Backtest all historical data for skull triggers (candle-duration based)
-  backtestSkullSignals() {
-    console.log(`🔄 Backtesting skull signals for ${this.currentTimeframe} timeframe...`);
+  // Calculate all skull signals for current asset/exchange
+  calculateSkullSignals() {
+    const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
+    console.log(`💀 Calculating skull signals for ${assetExchangeKey} (${this.currentTimeframe})...`);
     
     if (!this.rawData || this.rawData.length === 0) {
-      console.warn('⚠️ No data available for backtesting');
+      console.warn('⚠️ No data available for skull calculation');
       return;
     }
+    
+    // Clear existing skull signals for this asset/exchange
+    this.skullSignals.clear();
     
     // Calculate thresholds first
     this.calculateSpreadThresholds();
@@ -1884,12 +1906,10 @@ class TimeframeManager {
         // Add skull signal for this candle
         const candlePrice = candleData[candleData.length - 1]?.price || 50000;
         
-        this.activeSignals.set(candleTime, {
+        this.skullSignals.set(candleTime, {
           type: 'skull',
           price: candlePrice * 1.02,
           active: true,
-          permanent: true,
-          backtested: true,
           asset: this.currentSymbol,
           exchange: API_EXCHANGE,
           timeframe: this.currentTimeframe,
@@ -1902,9 +1922,8 @@ class TimeframeManager {
       }
     }
     
-    console.log(`✅ Backtesting complete: Found ${skullCount} skull candles for ${this.currentTimeframe}`);
-    console.log(`📊 Total signals in map: ${this.activeSignals.size}`);
-    this.updateSignalMarkers();
+    console.log(`✅ Skull calculation complete: Found ${skullCount} skull candles for ${this.currentTimeframe}`);
+    console.log(`📊 Total skull signals: ${this.skullSignals.size}`);
   }
 
   // GOLD X TRIGGER SYSTEM IMPLEMENTATION
@@ -2033,14 +2052,18 @@ class TimeframeManager {
     return changeMet;
   }
 
-  // Backtest Gold X signals
-  backtestGoldXSignals() {
-    console.log('🔄 Backtesting Gold X signals...');
+  // Calculate all Gold X signals for current asset/exchange
+  calculateGoldXSignals() {
+    const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
+    console.log(`✖️ Calculating Gold X signals for ${assetExchangeKey}...`);
     
     if (!this.rawData || this.rawData.length < 200) {
-      console.warn('⚠️ Insufficient data for Gold X backtesting');
+      console.warn('⚠️ Insufficient data for Gold X calculation');
       return;
     }
+    
+    // Clear existing Gold X signals for this asset/exchange
+    this.goldXSignals.clear();
     
     // Calculate thresholds first
     this.calculateGoldXThresholds();
@@ -2055,12 +2078,10 @@ class TimeframeManager {
       // Check Gold X conditions
       if (this.checkGoldXConditions(currentData, i)) {
         // Add Gold X signal
-        this.activeSignals.set(currentTime, {
+        this.goldXSignals.set(currentTime, {
           type: 'goldX',
           price: currentData.price * 1.02,
           active: true,
-          permanent: true,
-          backtested: true,
           asset: this.currentSymbol,
           exchange: API_EXCHANGE,
           timeframe: this.currentTimeframe
@@ -2071,8 +2092,8 @@ class TimeframeManager {
       }
     }
     
-    console.log(`✅ Gold X backtesting complete: Found ${goldXCount} signals`);
-    this.updateSignalMarkers();
+    console.log(`✅ Gold X calculation complete: Found ${goldXCount} signals`);
+    console.log(`📊 Total Gold X signals: ${this.goldXSignals.size}`);
   }
 
   // Check if skull conditions are sustained throughout entire candle
@@ -2395,22 +2416,14 @@ class TimeframeManager {
       }
     });
     
-    // Signal system test buttons
-    document.getElementById('btn-test-skull')?.addEventListener('click', () => {
-      if (this.signalSystemEnabled) {
-        this.triggerSignal('skull', true);
-        console.log('🧪 Test skull signal triggered');
-      } else {
-        console.warn('⚠️ Signal system not enabled');
-      }
-    });
-    
-    document.getElementById('btn-test-goldx')?.addEventListener('click', () => {
-      if (this.signalSystemEnabled) {
-        this.triggerSignal('goldX', true);
-        console.log('🧪 Test gold X signal triggered');
-      } else {
-        console.warn('⚠️ Signal system not enabled');
+    // Calculate all signals button
+    document.getElementById('btn-calculate-signals')?.addEventListener('click', () => {
+      this.calculateAllSignals();
+      console.log('🔄 Manual signal calculation triggered');
+      
+      // Update display if any indicators are enabled
+      if (this.skullIndicatorEnabled || this.goldXIndicatorEnabled) {
+        this.updateSignalDisplay();
       }
     });
     
@@ -2439,19 +2452,48 @@ class TimeframeManager {
     });
   }
 
-  // INTERACTIVE SIGNAL SYSTEM
+  // SIGNAL INDICATOR SYSTEM
   
-  enableSignalSystem(enabled) {
-    this.signalSystemEnabled = enabled;
+  toggleSkullIndicator(enabled) {
+    this.skullIndicatorEnabled = enabled;
+    console.log(`💀 Skull indicator ${enabled ? 'enabled' : 'disabled'}`);
     
     if (enabled) {
+      // Calculate signals if not already done
+      if (!this.signalsCalculated) {
+        this.calculateAllSignals();
+      }
+      // Create signal series if needed
       createSignalMarkerSeries();
-      console.log('✅ Signal system enabled');
-    } else {
-      destroySignalMarkerSeries();
-      this.activeSignals.clear();
-      console.log('✅ Signal system disabled');
     }
+    
+    // Update display
+    this.updateSignalDisplay();
+  }
+  
+  toggleGoldXIndicator(enabled) {
+    this.goldXIndicatorEnabled = enabled;
+    console.log(`✖️ Gold X indicator ${enabled ? 'enabled' : 'disabled'}`);
+    
+    if (enabled) {
+      // Calculate signals if not already done
+      if (!this.signalsCalculated) {
+        this.calculateAllSignals();
+      }
+      // Create signal series if needed
+      createSignalMarkerSeries();
+    }
+    
+    // Update display
+    this.updateSignalDisplay();
+  }
+  
+  calculateAllSignals() {
+    console.log('🔄 Calculating all historical signals...');
+    this.calculateSkullSignals();
+    this.calculateGoldXSignals();
+    this.signalsCalculated = true;
+    console.log(`✅ Signal calculation complete: ${this.skullSignals.size} skulls, ${this.goldXSignals.size} gold X`);
   }
 
   // External trigger function - call this when your condition is met
@@ -2505,12 +2547,12 @@ class TimeframeManager {
       console.log(`📍 Signal stored:`, signalData);
       
       // Update marker display
-      this.updateSignalMarkers();
+      this.updateSignalDisplay();
       
     } else {
       // Remove signal if it exists
       this.activeSignals.delete(currentTime);
-      this.updateSignalMarkers();
+      this.updateSignalDisplay();
     }
   }
 
@@ -2526,56 +2568,60 @@ class TimeframeManager {
     return this.rawData[this.rawData.length - 1].price;
   }
 
-  updateSignalMarkers() {
-    console.log(`🔍 Updating signal markers, activeSignals size: ${this.activeSignals.size}`);
+  updateSignalDisplay() {
+    console.log(`🔍 Updating signal display: skull=${this.skullIndicatorEnabled}, goldX=${this.goldXIndicatorEnabled}`);
     
     const markers = [];
     
-    for (const [time, signal] of this.activeSignals) {
-      console.log(`🔍 Processing signal:`, { time, signal });
-      if (signal.active) {
-        let marker;
-        if (signal.type === 'skull') {
-          marker = {
-            time: time,
-            position: 'aboveBar',
-            color: '#000000',
-            shape: 'circle',
-            text: '💀',
-            size: 2,
-          };
-        } else if (signal.type === 'goldX') {
-          marker = {
-            time: time,
-            position: 'aboveBar',
-            color: '#FFD700',
-            shape: 'circle',
-            text: 'X',
-            size: 2,
-          };
-        } else {
-          // Default fallback
-          marker = {
-            time: time,
-            position: 'aboveBar',
-            color: '#FFD700',
-            shape: 'cross',
-            text: '?',
-            size: 3,
-          };
-        }
-        markers.push(marker);
-        console.log(`📍 Added marker:`, marker);
+    // Add skull markers if enabled
+    if (this.skullIndicatorEnabled) {
+      for (const [time, signal] of this.skullSignals) {
+        markers.push({
+          time: time,
+          position: 'aboveBar',
+          color: '#FF0000',
+          shape: 'circle',
+          text: '💀',
+          size: 2,
+        });
       }
+      console.log(`💀 Added ${this.skullSignals.size} skull markers`);
     }
     
-    console.log(`📍 Setting ${markers.length} markers on PRICE series`);
+    // Add Gold X markers if enabled
+    if (this.goldXIndicatorEnabled) {
+      for (const [time, signal] of this.goldXSignals) {
+        markers.push({
+          time: time,
+          position: 'belowBar',
+          color: '#FFD700',
+          shape: 'circle',
+          text: '✖',
+          size: 2,
+        });
+      }
+      console.log(`✖️ Added ${this.goldXSignals.size} Gold X markers`);
+    }
+    
+    console.log(`📍 Setting ${markers.length} total markers on chart`);
+    
     try {
-      // Use price series for markers instead of invisible series
-      priceSeries.setMarkers(markers);
-      console.log(`✅ Successfully set ${markers.length} signal markers on price series`);
+      if (priceSeries) {
+        priceSeries.setMarkers(markers);
+        console.log(`✅ Signal display updated successfully`);
+        
+        // Update status
+        const statusEl = document.getElementById('signal-status');
+        if (statusEl) {
+          const skullCount = this.skullIndicatorEnabled ? this.skullSignals.size : 0;
+          const goldXCount = this.goldXIndicatorEnabled ? this.goldXSignals.size : 0;
+          statusEl.textContent = `Showing: ${skullCount} skulls, ${goldXCount} gold X`;
+        }
+      } else {
+        console.warn('⚠️ Price series not available');
+      }
     } catch (error) {
-      console.error('❌ Error setting markers on price series:', error);
+      console.error('❌ Error updating signal display:', error);
     }
   }
 
@@ -3365,17 +3411,21 @@ function setYAxisControl(mode) {
   manager.setYAxisControl(mode);
 }
 
-function toggleSignalSystem(enabled) {
-  manager.enableSignalSystem(enabled);
+// Signal Indicator Toggle Functions
+function toggleSkullIndicator(enabled) {
+  manager.toggleSkullIndicator(enabled);
 }
 
-// External functions to trigger signals from your conditions
-function triggerSkullSignal(active = true) {
-  manager.triggerSignal('skull', active);
+function toggleGoldXIndicator(enabled) {
+  manager.toggleGoldXIndicator(enabled);
 }
 
-function triggerGoldXSignal(active = true) {
-  manager.triggerSignal('goldX', active);
+function calculateAllSignals() {
+  manager.calculateAllSignals();
+  // Update display if any indicators are enabled
+  if (manager.skullIndicatorEnabled || manager.goldXIndicatorEnabled) {
+    manager.updateSignalDisplay();
+  }
 }
 
 // Enhanced zoom functions with MASSIVE zoom range like TradingView

@@ -257,13 +257,11 @@
           <hr style="border-color: rgba(255,255,255,0.1); margin: 10px 0;">
           
           <div class="ma-toggle-list" style="margin-top:8px;">
-            <label style="color: #d1d4dc; font-size: 11px; margin-bottom: 4px; display: block;">Signal System:</label>
-            <label><input type="checkbox" onchange="toggleSignalSystem(this.checked)"> Enable Signal Markers</label>
-            <button id="btn-backtest-skulls" class="tool-btn" style="background: #4CAF50; color: #fff;">🔄 Backtest Skulls</button>
-            <button id="btn-backtest-goldx" class="tool-btn" style="background: #FF9800; color: #fff;">🔄 Backtest Gold X</button>
-            <button id="btn-test-skull" class="tool-btn" style="background: #666; color: #fff;">💀 Test Skull</button>
-            <button id="btn-test-goldx" class="tool-btn" style="background: #FFD700; color: #000;">✖️ Test Gold X</button>
-            <div id="trigger-status" style="font-size: 10px; color: #888; margin-top: 4px; text-align: center;"></div>
+            <label style="color: #d1d4dc; font-size: 11px; margin-bottom: 4px; display: block;">Signal Indicators:</label>
+            <label><input type="checkbox" id="skull-indicator-toggle" onchange="toggleSkullIndicator(this.checked)"> 💀 Skull Signals</label>
+            <label><input type="checkbox" id="goldx-indicator-toggle" onchange="toggleGoldXIndicator(this.checked)"> ✖️ Gold X Signals</label>
+            <button id="btn-calculate-signals" class="tool-btn" style="background: #2962ff; color: #fff;">🔄 Calculate All Signals</button>
+            <div id="signal-status" style="font-size: 10px; color: #888; margin-top: 4px; text-align: center;">Toggle indicators to show historical signals</div>
           </div>
         </div>
       </div>
