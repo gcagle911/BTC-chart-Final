@@ -266,13 +266,13 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
 // Price series on RIGHT y-axis
 const priceSeries = chart.addCandlestickSeries({
   priceScaleId: 'right', // RIGHT y-axis for price
-  upColor: '#00ff66', // Bright vibrant green
-  downColor: '#ff3366', // Bright vibrant red
+  upColor: '#26a69a', // Professional green
+  downColor: '#ef5350', // Professional red
   borderVisible: true,
-  borderUpColor: '#00ff66', // Bright green borders
-  borderDownColor: '#ff3366', // Bright red borders
-  wickUpColor: '#00ff66', // Bright green wicks
-  wickDownColor: '#ff3366', // Bright red wicks
+  borderUpColor: '#26a69a', // Green borders
+  borderDownColor: '#ef5350', // Red borders
+  wickUpColor: '#26a69a', // Green wicks
+  wickDownColor: '#ef5350', // Red wicks
   wickVisible: true,
 });
 chart.priceScale('right').applyOptions({
@@ -298,10 +298,10 @@ function createVolumeSeries() {
   try {
     // CRITICAL: Use main chart but with separate 'volume' price scale
     volumeBidsSeries = chart.addAreaSeries({
-      topColor: 'rgba(0, 255, 102, 0.7)', // Bright green for bids with more opacity
-      bottomColor: 'rgba(0, 255, 102, 0.2)',
-      lineColor: '#00ff66',
-      lineWidth: 3, // Thicker line for better visibility
+      topColor: 'rgba(255, 215, 0, 0.4)', // Gold for bids with subtle opacity
+      bottomColor: 'rgba(255, 215, 0, 0.1)',
+      lineColor: '#FFD700', // Gold line
+      lineWidth: 1.0, // Thin, elegant lines
       priceScaleId: 'volume', // CRITICAL: Separate price scale for volume
       priceFormat: { type: 'volume' },
       title: 'Bids Volume',
@@ -309,10 +309,10 @@ function createVolumeSeries() {
     });
 
     volumeAsksSeries = chart.addAreaSeries({
-      topColor: 'rgba(255, 51, 102, 0.7)', // Bright red for asks with more opacity
-      bottomColor: 'rgba(255, 51, 102, 0.2)', 
-      lineColor: '#ff3366',
-      lineWidth: 3, // Thicker line for better visibility
+      topColor: 'rgba(255, 255, 255, 0.4)', // White for asks with subtle opacity
+      bottomColor: 'rgba(255, 255, 255, 0.1)', 
+      lineColor: '#FFFFFF', // White line
+      lineWidth: 1.0, // Thin, elegant lines
       priceScaleId: 'volume', // CRITICAL: Same volume price scale
       priceFormat: { type: 'volume' },
       title: 'Asks Volume',
@@ -358,7 +358,7 @@ function createMASeries(color, title) {
   return chart.addLineSeries({
     priceScaleId: 'left',
     color,
-    lineWidth: 2.5, // Thicker lines for better visibility
+    lineWidth: 1.2, // Sleek, elegant line width
     title,
     lastValueVisible: false,
     priceLineVisible: false,
@@ -371,7 +371,7 @@ function createEMASeries(color, title) {
   return chart.addLineSeries({
     priceScaleId: 'left',
     color,
-    lineWidth: 2.5, // Thicker lines for better visibility
+    lineWidth: 1.2, // Sleek, elegant line width
     lineStyle: LightweightCharts.LineStyle.Dashed, // Distinguish EMAs with dashed lines
     title,
     lastValueVisible: false,
@@ -412,7 +412,7 @@ function createAvgSeries(title) {
   return chart.addLineSeries({
     priceScaleId: 'left',
     color: '#FFFFFF',
-    lineWidth: 2.0, // Thicker white lines for better visibility
+    lineWidth: 1.0, // Elegant thin white lines
     title,
     lastValueVisible: false,
     priceLineVisible: false,
@@ -431,10 +431,10 @@ function formatLayerShort(layerKey) {
 const LAYER_ORDER = ['spread_L5_pct_avg','spread_L50_pct_avg','spread_L100_pct_avg'];
 const DURATION_ORDER = [20, 50, 100, 200];
 const BRIGHT_PALETTE = [
-  '#ff0066', '#00ff66', '#ffff00', '#0066ff',
-  '#ff6600', '#cc00ff', '#00ffff', '#ff00ff',
-  '#66ff00', '#ff6699', '#00cccc', '#9966ff',
-  '#ffcc00', '#ff9900', '#6600ff', '#00ff99'
+  '#FFD700', '#FFFFFF', '#FFA500', '#F5F5DC',
+  '#DAA520', '#FFFACD', '#B8860B', '#FFEFD5',
+  '#FFDF00', '#FAF0E6', '#F0E68C', '#FFF8DC',
+  '#EEE8AA', '#FAFAD2', '#DDD700', '#FFFFF0'
 ];
 function colorFor(layerKey, duration) {
   const li = Math.max(0, LAYER_ORDER.indexOf(layerKey));
