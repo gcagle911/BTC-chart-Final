@@ -360,9 +360,9 @@ function createMASeries(color, title) {
     color,
     lineWidth: 1.2, // Sleek, elegant line width
     title,
-    lastValueVisible: false,
+    lastValueVisible: true, // Show value on hover
     priceLineVisible: false,
-    crosshairMarkerVisible: false,
+    crosshairMarkerVisible: true, // Show crosshair marker for identification
   });
 }
 
@@ -374,9 +374,9 @@ function createEMASeries(color, title) {
     lineWidth: 1.2, // Sleek, elegant line width
     lineStyle: LightweightCharts.LineStyle.Dashed, // Distinguish EMAs with dashed lines
     title,
-    lastValueVisible: false,
+    lastValueVisible: true, // Show value on hover
     priceLineVisible: false,
-    crosshairMarkerVisible: false,
+    crosshairMarkerVisible: true, // Show crosshair marker for identification
   });
 }
 
@@ -414,9 +414,9 @@ function createAvgSeries(title) {
     color: '#FFFFFF',
     lineWidth: 1.0, // Elegant thin white lines
     title,
-    lastValueVisible: false,
+    lastValueVisible: true, // Show value on hover
     priceLineVisible: false,
-    crosshairMarkerVisible: false,
+    crosshairMarkerVisible: true, // Show crosshair marker for identification
   });
 }
 
