@@ -75,6 +75,30 @@
     select:hover { background: #363a45; border-color: #5a5e69; }
     select:focus { outline: none; border-color: #2962ff; box-shadow: 0 0 0 2px rgba(41,98,255,0.2); }
     .timeframe-label { color: #d1d4dc; font-size: 12px; font-weight: 500; }
+    
+    .tool-btn {
+      background: #2a2e39;
+      border: 1px solid #4a4e59;
+      color: #d1d4dc;
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      margin: 2px 0;
+      width: 100%;
+      transition: all 0.2s ease;
+    }
+    
+    .tool-btn:hover {
+      background: #363a45;
+      border-color: #5a5e69;
+    }
+    
+    .tool-btn.active {
+      background: #2962ff;
+      border-color: #4285f4;
+      color: #ffffff;
+    }
 
     /* --- MA tools dropdown --- */
     #ma-tools-button {
@@ -198,6 +222,16 @@
             <label><input type="checkbox" onchange="toggleVolumeIndicator(this.checked)"> Volume L50 (Bids/Asks)</label>
             <label><input type="checkbox" onchange="toggleIndicator2(this.checked)"> Volume L50 (Timeframe-Averaged)</label>
             <label><input type="checkbox" onchange="toggleIndicator3(this.checked)"> Indicator 3 (Ready)</label>
+          </div>
+          
+          <hr style="border-color: rgba(255,255,255,0.1); margin: 10px 0;">
+          
+          <div class="ma-toggle-list" style="margin-top:8px;">
+            <label style="color: #d1d4dc; font-size: 11px; margin-bottom: 4px; display: block;">Trading Tools:</label>
+            <button id="btn-horizontal-line" class="tool-btn">📏 Horizontal Line</button>
+            <button id="btn-vertical-line" class="tool-btn">📐 Vertical Line</button>
+            <button id="btn-measure" class="tool-btn">📊 Measure Tool</button>
+            <button id="btn-clear-lines" class="tool-btn" style="background: #d32f2f;">🗑️ Clear Lines</button>
           </div>
         </div>
       </div>

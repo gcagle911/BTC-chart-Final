@@ -246,7 +246,7 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
     secondsVisible: false,
     borderVisible: false,
     rightOffset: 15,
-    barSpacing: 8, // Slightly wider candlestick bodies
+    barSpacing: 10, // Wider candlestick bodies with less space between
     minBarSpacing: 0.02, // Allow much more data when zoomed out
     fixLeftEdge: false,
     fixRightEdge: false,
@@ -596,6 +596,13 @@ class TimeframeManager {
     this.volumeIndicatorEnabled = false;
     this.indicator2Enabled = false;
     this.indicator3Enabled = false;
+    
+    // Trading tools
+    this.horizontalLines = [];
+    this.verticalLines = [];
+    this.measureLines = [];
+    this.activeTool = null;
+    this.measureStart = null;
     this.scaleRecomputeTimeout = null;
     this.autoRefitPending = false;
     
@@ -1417,6 +1424,140 @@ class TimeframeManager {
       
       console.log('✅ All indicators refreshed');
     }, 500); // Wait for data to be processed
+  }
+
+  // TRADING TOOLS
+  setActiveTool(tool) {
+    this.activeTool = tool;
+    // Update button visual states
+    document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+    if (tool) {
+      const btnId = `btn-${tool.replace('_', '-')}`;
+      document.getElementById(btnId)?.classList.add('active');
+    }
+  }
+
+  addHorizontalLine(price) {
+    const line = priceSeries.createPriceLine({
+      price: price,
+      color: '#FFD700',
+      lineWidth: 1.5,
+      lineStyle: LightweightCharts.LineStyle.Solid,
+      axisLabelVisible: true,
+      title: `${price.toFixed(3)}`,
+    });
+    this.horizontalLines.push({ line, price });
+    return line;
+  }
+
+  addVerticalLine(time) {
+    const vLineSeries = chart.addLineSeries({
+      color: '#FFFFFF',
+      lineWidth: 1.5,
+      lineStyle: LightweightCharts.LineStyle.Dashed,
+      priceScaleId: 'right',
+      lastValueVisible: false,
+      priceLineVisible: false,
+      crosshairMarkerVisible: false,
+    });
+    
+    // Draw vertical line across price range
+    const priceRange = chart.priceScale('right').getPriceRange();
+    if (priceRange) {
+      vLineSeries.setData([
+        { time, value: priceRange.minValue },
+        { time, value: priceRange.maxValue }
+      ]);
+    }
+    
+    this.verticalLines.push({ series: vLineSeries, time });
+    return vLineSeries;
+  }
+
+  startMeasuring(startPrice, startTime) {
+    this.measureStart = { price: startPrice, time: startTime };
+  }
+
+  completeMeasuring(endPrice, endTime) {
+    if (!this.measureStart) return;
+    
+    const priceDiff = endPrice - this.measureStart.price;
+    const timeDiff = endTime - this.measureStart.time;
+    const pricePercent = ((priceDiff / this.measureStart.price) * 100);
+    
+    // Add measurement lines
+    const startLine = this.addHorizontalLine(this.measureStart.price);
+    const endLine = this.addHorizontalLine(endPrice);
+    
+    this.measureLines.push({ startLine, endLine });
+    
+    // Show result
+    const result = `📏 Δ${priceDiff.toFixed(3)} (${pricePercent.toFixed(2)}%) | ${Math.floor(timeDiff/60)}min`;
+    console.log(result);
+    
+    this.measureStart = null;
+    this.setActiveTool(null);
+  }
+
+  clearAllLines() {
+    this.horizontalLines.forEach(({ line }) => {
+      try { priceSeries.removePriceLine(line); } catch (e) {}
+    });
+    this.horizontalLines = [];
+    
+    this.verticalLines.forEach(({ series }) => {
+      try { chart.removeSeries(series); } catch (e) {}
+    });
+    this.verticalLines = [];
+    
+    this.measureLines.forEach(({ startLine, endLine }) => {
+      try { priceSeries.removePriceLine(startLine); } catch (e) {}
+      try { priceSeries.removePriceLine(endLine); } catch (e) {}
+    });
+    this.measureLines = [];
+  }
+
+  setupTradingTools() {
+    // Button event listeners
+    document.getElementById('btn-horizontal-line')?.addEventListener('click', () => {
+      this.setActiveTool(this.activeTool === 'horizontal' ? null : 'horizontal');
+    });
+    
+    document.getElementById('btn-vertical-line')?.addEventListener('click', () => {
+      this.setActiveTool(this.activeTool === 'vertical' ? null : 'vertical');
+    });
+    
+    document.getElementById('btn-measure')?.addEventListener('click', () => {
+      this.setActiveTool(this.activeTool === 'measure' ? null : 'measure');
+    });
+    
+    document.getElementById('btn-clear-lines')?.addEventListener('click', () => {
+      this.clearAllLines();
+    });
+    
+    // Chart click handling
+    chart.subscribeClick((param) => {
+      if (!param?.point || !this.activeTool) return;
+      
+      const price = priceSeries.coordinateToPrice(param.point.y);
+      const time = param.time;
+      
+      if (price === null || time === null) return;
+      
+      if (this.activeTool === 'horizontal') {
+        this.addHorizontalLine(price);
+        this.setActiveTool(null);
+      } else if (this.activeTool === 'vertical') {
+        this.addVerticalLine(time);
+        this.setActiveTool(null);
+      } else if (this.activeTool === 'measure') {
+        if (!this.measureStart) {
+          this.startMeasuring(price, time);
+        } else {
+          this.completeMeasuring(price, time);
+        }
+      }
+    });
   }
 
   setMainChartMargins(margins) {
@@ -2372,6 +2513,9 @@ manager.initializeChart().then(() => {
   createVolumeSeries();
   createIndicator2Series();
   createIndicator3Series();
+  
+  // Setup trading tools
+  manager.setupTradingTools();
   
   // Start update cycle
   manager.startUpdateCycle();
