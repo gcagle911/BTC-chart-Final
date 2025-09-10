@@ -23,7 +23,15 @@ function getDateStringWithOffset(offsetDays = 0) {
 }
 
 function buildDailyUrl(asset, day) {
-  return `${API_BASE}/${API_EXCHANGE}/${asset}/1min/${day}.jsonl`;
+  // Handle futures exchanges with different URL structure
+  if (API_EXCHANGE === 'coinbase_F') {
+    return `${API_BASE}/futures/coinbase/${asset}/1min/${day}.jsonl`;
+  } else if (API_EXCHANGE === 'okx' || API_EXCHANGE === 'upbit') {
+    return `${API_BASE}/futures/${API_EXCHANGE}/${asset}/1min/${day}.jsonl`;
+  } else {
+    // Standard spot exchanges (coinbase, kraken)
+    return `${API_BASE}/${API_EXCHANGE}/${asset}/1min/${day}.jsonl`;
+  }
 }
 
 // Parse JSONL (JSON Lines) format
@@ -662,6 +670,11 @@ class TimeframeManager {
     this.cooloffPeriod = 60 * 60 * 1000; // 1 hour in milliseconds
     this.pendingSkullSignals = new Map(); // time -> {conditions: [], startTime}
     this.spreadHistory = []; // For slope calculation
+    
+    // Gold X Trigger System
+    this.priceHistory = []; // For 3-hour price drop calculation
+    this.maChangeThresholds = new Map(); // asset_exchange -> {top10Percent: value}
+    this.cumulativeAverages = new Map(); // asset_exchange -> {L50_avg: value}
     this.scaleRecomputeTimeout = null;
     this.autoRefitPending = false;
     
@@ -1879,6 +1892,174 @@ class TimeframeManager {
     this.updateSignalMarkers();
   }
 
+  // GOLD X TRIGGER SYSTEM IMPLEMENTATION
+  
+  calculateGoldXThresholds() {
+    const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
+    console.log(`📊 Calculating Gold X thresholds for ${assetExchangeKey}`);
+    
+    if (!this.rawData || this.rawData.length < 200) {
+      console.warn('⚠️ Insufficient data for Gold X threshold calculation');
+      return;
+    }
+    
+    // Calculate L50 MA change rates (for top 10% threshold)
+    const maChangeRates = [];
+    const l50Values = this.rawData
+      .map(item => ({ time: new Date(item.time).getTime(), value: item.spread_L50_pct_avg }))
+      .filter(item => item.value !== null && isFinite(item.value))
+      .sort((a, b) => a.time - b.time);
+    
+    // Calculate MA change rates over 3-hour windows
+    const threeHours = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
+    
+    for (let i = 1; i < l50Values.length; i++) {
+      const current = l50Values[i];
+      const previous = l50Values[i - 1];
+      
+      const timeDiff = current.time - previous.time;
+      const valueDiff = Math.abs(current.value - previous.value);
+      
+      if (timeDiff > 0 && timeDiff <= threeHours) {
+        const changeRate = valueDiff / timeDiff;
+        maChangeRates.push(changeRate);
+      }
+    }
+    
+    if (maChangeRates.length === 0) {
+      console.warn('⚠️ No valid MA change rates calculated');
+      return;
+    }
+    
+    // Find top 10% MA change rate threshold
+    maChangeRates.sort((a, b) => a - b);
+    const top10PercentIndex = Math.floor(maChangeRates.length * 0.9);
+    const top10PercentChangeRate = maChangeRates[top10PercentIndex];
+    
+    // Calculate L50 cumulative average
+    const l50CumulativeAvg = l50Values.reduce((sum, item) => sum + item.value, 0) / l50Values.length;
+    
+    this.maChangeThresholds.set(assetExchangeKey, {
+      top10Percent: top10PercentChangeRate,
+      totalRates: maChangeRates.length
+    });
+    
+    this.cumulativeAverages.set(assetExchangeKey, {
+      L50_avg: l50CumulativeAvg
+    });
+    
+    console.log(`📊 Gold X thresholds for ${assetExchangeKey}:`, {
+      maChangeTop10: top10PercentChangeRate.toExponential(3),
+      l50CumAvg: l50CumulativeAvg.toFixed(6)
+    });
+  }
+
+  // Check Gold X trigger conditions
+  checkGoldXConditions(currentData, dataIndex) {
+    const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
+    const maChangeThreshold = this.maChangeThresholds.get(assetExchangeKey);
+    const cumulativeAvg = this.cumulativeAverages.get(assetExchangeKey);
+    
+    if (!maChangeThreshold || !cumulativeAvg) {
+      console.warn(`⚠️ Missing Gold X thresholds for ${assetExchangeKey}`);
+      return false;
+    }
+    
+    // Condition 1: Price dropped >= 1.8% in last 3 hours
+    const priceDropMet = this.checkPriceDrop3Hour(currentData, dataIndex);
+    
+    // Condition 2: L50 MA changed by top 10% rate in 3-hour window
+    const maChangeMet = this.checkL50MAChange3Hour(currentData, dataIndex, maChangeThreshold.top10Percent);
+    
+    // Condition 3: Current L50 spread within 20% of cumulative average
+    const currentL50 = currentData.spread_L50_pct_avg;
+    const avgL50 = cumulativeAvg.L50_avg;
+    const twentyPercentRange = avgL50 * 0.2;
+    const nearAvgMet = currentL50 !== null && 
+                       Math.abs(currentL50 - avgL50) <= twentyPercentRange;
+    
+    console.log(`📊 Gold X conditions: PriceDrop=${priceDropMet}, MAChange=${maChangeMet}, NearAvg=${nearAvgMet}`);
+    
+    return priceDropMet && maChangeMet && nearAvgMet;
+  }
+
+  checkPriceDrop3Hour(currentData, dataIndex) {
+    if (!this.rawData || dataIndex < 180) return false; // Need 3 hours of data (180 minutes)
+    
+    const currentPrice = currentData.price;
+    const threeHoursAgo = this.rawData[dataIndex - 180];
+    
+    if (!threeHoursAgo || !currentPrice) return false;
+    
+    const priceChange = ((currentPrice - threeHoursAgo.price) / threeHoursAgo.price) * 100;
+    const dropMet = priceChange <= -1.8; // 1.8% or more drop
+    
+    console.log(`📊 3h price check: ${threeHoursAgo.price.toFixed(2)} → ${currentPrice.toFixed(2)} = ${priceChange.toFixed(2)}% (drop >= 1.8% = ${dropMet})`);
+    
+    return dropMet;
+  }
+
+  checkL50MAChange3Hour(currentData, dataIndex, changeThreshold) {
+    if (!this.rawData || dataIndex < 180) return false;
+    
+    const currentL50 = currentData.spread_L50_pct_avg;
+    const threeHoursAgoL50 = this.rawData[dataIndex - 180].spread_L50_pct_avg;
+    
+    if (!currentL50 || !threeHoursAgoL50) return false;
+    
+    const timeDiff = 3 * 60 * 60 * 1000; // 3 hours in ms
+    const valueDiff = Math.abs(currentL50 - threeHoursAgoL50);
+    const changeRate = valueDiff / timeDiff;
+    
+    const changeMet = changeRate >= changeThreshold;
+    
+    console.log(`📊 L50 MA change: ${threeHoursAgoL50.toFixed(6)} → ${currentL50.toFixed(6)}, rate=${changeRate.toExponential(3)}, threshold=${changeThreshold.toExponential(3)}, met=${changeMet}`);
+    
+    return changeMet;
+  }
+
+  // Backtest Gold X signals
+  backtestGoldXSignals() {
+    console.log('🔄 Backtesting Gold X signals...');
+    
+    if (!this.rawData || this.rawData.length < 200) {
+      console.warn('⚠️ Insufficient data for Gold X backtesting');
+      return;
+    }
+    
+    // Calculate thresholds first
+    this.calculateGoldXThresholds();
+    
+    let goldXCount = 0;
+    
+    // Process data points (start at 180 for 3-hour lookback)
+    for (let i = 180; i < this.rawData.length; i++) {
+      const currentData = this.rawData[i];
+      const currentTime = this.toUnixTimestamp(currentData.time);
+      
+      // Check Gold X conditions
+      if (this.checkGoldXConditions(currentData, i)) {
+        // Add Gold X signal
+        this.activeSignals.set(currentTime, {
+          type: 'goldX',
+          price: currentData.price * 1.02,
+          active: true,
+          permanent: true,
+          backtested: true,
+          asset: this.currentSymbol,
+          exchange: API_EXCHANGE,
+          timeframe: this.currentTimeframe
+        });
+        
+        goldXCount++;
+        console.log(`✖️ Historical Gold X found at ${new Date(currentTime * 1000).toISOString()}`);
+      }
+    }
+    
+    console.log(`✅ Gold X backtesting complete: Found ${goldXCount} signals`);
+    this.updateSignalMarkers();
+  }
+
   // Check if skull conditions are sustained throughout entire candle
   checkCandleDurationConditions(candleData, candleTime) {
     if (!candleData || candleData.length === 0) return false;
@@ -2185,6 +2366,15 @@ class TimeframeManager {
         
         this.backtestSkullSignals();
         console.log('🔄 Skull backtesting initiated');
+      } else {
+        console.warn('⚠️ Enable signal system first');
+      }
+    });
+    
+    document.getElementById('btn-backtest-goldx')?.addEventListener('click', () => {
+      if (this.signalSystemEnabled) {
+        this.backtestGoldXSignals();
+        console.log('🔄 Gold X backtesting initiated');
       } else {
         console.warn('⚠️ Enable signal system first');
       }
