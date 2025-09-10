@@ -1517,19 +1517,19 @@ class TimeframeManager {
     // Sort to find percentiles
     allSpreadValues.sort((a, b) => a - b);
     
-    // Calculate top 5% threshold
-    const top5PercentIndex = Math.floor(allSpreadValues.length * 0.95);
-    const top5PercentThreshold = allSpreadValues[top5PercentIndex];
+    // Calculate top 2.5% threshold (more restrictive)
+    const top2_5PercentIndex = Math.floor(allSpreadValues.length * 0.975);
+    const top2_5PercentThreshold = allSpreadValues[top2_5PercentIndex];
     
     this.spreadThresholds.set(assetExchangeKey, {
-      top5Percent: top5PercentThreshold,
+      top5Percent: top2_5PercentThreshold, // Keep same key name for compatibility
       totalValues: allSpreadValues.length,
       min: allSpreadValues[0],
       max: allSpreadValues[allSpreadValues.length - 1]
     });
     
     console.log(`📊 Spread thresholds for ${assetExchangeKey}:`, {
-      top5Percent: top5PercentThreshold.toFixed(6),
+      top2_5Percent: top2_5PercentThreshold.toFixed(6),
       totalValues: allSpreadValues.length,
       range: `${allSpreadValues[0].toFixed(6)} - ${allSpreadValues[allSpreadValues.length - 1].toFixed(6)}`
     });
@@ -1571,20 +1571,20 @@ class TimeframeManager {
       return;
     }
     
-    // Sort to find top 5% acceleration
+    // Sort to find top 2.5% acceleration (more restrictive)
     slopeValues.sort((a, b) => a - b);
-    const top5PercentIndex = Math.floor(slopeValues.length * 0.95);
-    const top5PercentSlope = slopeValues[top5PercentIndex];
+    const top2_5PercentIndex = Math.floor(slopeValues.length * 0.975);
+    const top2_5PercentSlope = slopeValues[top2_5PercentIndex];
     
     this.slopeThresholds.set(assetExchangeKey, {
-      top5Percent: top5PercentSlope,
+      top5Percent: top2_5PercentSlope, // Keep same key name for compatibility
       totalSlopes: slopeValues.length,
       min: slopeValues[0],
       max: slopeValues[slopeValues.length - 1]
     });
     
     console.log(`📊 Slope thresholds for ${assetExchangeKey}:`, {
-      top5Percent: top5PercentSlope.toExponential(3),
+      top2_5Percent: top2_5PercentSlope.toExponential(3),
       totalSlopes: slopeValues.length
     });
   }
@@ -1627,9 +1627,8 @@ class TimeframeManager {
       console.log(`📊 Slope condition MET: ${currentSlope.toExponential(3)} >= ${slopeThreshold.top5Percent.toExponential(3)}`);
     }
     
-    // TEMPORARILY: Test with EITHER condition to debug
-    // TODO: Change back to && for production
-    const bothConditionsMet = spreadConditionMet || slopeConditionMet;
+    // BOTH conditions must be true (top 2.5% for each)
+    const bothConditionsMet = spreadConditionMet && slopeConditionMet;
     
     console.log(`📊 Skull conditions: Spread=${spreadConditionMet}, Slope=${slopeConditionMet}, Both=${bothConditionsMet}`);
     
@@ -1662,8 +1661,8 @@ class TimeframeManager {
     const currentSlope = this.calculateCurrentSlope(currentData, dataIndex);
     const slopeConditionMet = currentSlope >= slopeThreshold.top5Percent;
     
-    // TEMPORARILY: Use OR for debugging
-    return spreadConditionMet || slopeConditionMet;
+    // BOTH conditions must be true (top 2.5% for each)
+    return spreadConditionMet && slopeConditionMet;
   }
 
   calculateCurrentSlope(currentData, dataIndex = null) {
