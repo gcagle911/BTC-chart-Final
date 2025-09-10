@@ -1442,25 +1442,34 @@ class TimeframeManager {
     let line;
     
     if (this.yAxisControl === 'Left') {
-      // Add line to left axis (MA axis) - need to use a MA series for this
-      const leftSeries = Array.from(this.maSeriesByKey.values())[0] || 
-                         Array.from(this.emaSeriesByKey.values())[0] ||
-                         Array.from(this.avgSeriesByLayer.values())[0];
+      // Create a dedicated series for left axis horizontal lines
+      const leftLineSeries = chart.addLineSeries({
+        color: 'transparent', // Invisible line series, just for price lines
+        lineWidth: 0,
+        priceScaleId: 'left',
+        lastValueVisible: false,
+        priceLineVisible: false,
+        crosshairMarkerVisible: false,
+        visible: false, // Invisible series
+      });
       
-      if (leftSeries) {
-        line = leftSeries.createPriceLine({
-          price: price,
-          color: '#FFFFFF', // White horizontal line
-          lineWidth: 1.5,
-          lineStyle: LightweightCharts.LineStyle.Solid,
-          axisLabelVisible: true,
-          title: `L: ${price.toFixed(6)}`, // L for Left axis
-        });
-        console.log(`✅ Added horizontal line to LEFT axis at ${price.toFixed(6)}`);
-      } else {
-        console.warn('⚠️  No left axis series available for horizontal line');
-        return null;
-      }
+      // Add empty data to the series
+      leftLineSeries.setData([]);
+      
+      // Create price line on this left-axis series
+      line = leftLineSeries.createPriceLine({
+        price: price,
+        color: '#FFFFFF', // White horizontal line
+        lineWidth: 1.5,
+        lineStyle: LightweightCharts.LineStyle.Solid,
+        axisLabelVisible: true,
+        title: `L: ${price.toFixed(6)}`, // L for Left axis
+      });
+      
+      // Store both the line and the series for cleanup
+      this.horizontalLines.push({ line, price, axis: this.yAxisControl, series: leftLineSeries });
+      console.log(`✅ Added horizontal line to LEFT axis at ${price.toFixed(6)}`);
+      return line;
     } else {
       // Add line to right axis (price axis)
       line = priceSeries.createPriceLine({
@@ -1546,14 +1555,12 @@ class TimeframeManager {
     console.log(`🗑️ Clearing ${this.horizontalLines.length} horizontal and ${this.verticalLines.length} vertical lines`);
     
     // Clear horizontal lines (from both axes)
-    this.horizontalLines.forEach(({ line, axis }) => {
+    this.horizontalLines.forEach(({ line, axis, series }) => {
       try { 
-        if (axis === 'Left') {
-          // Remove from left axis series
-          const leftSeries = Array.from(this.maSeriesByKey.values())[0] || 
-                             Array.from(this.emaSeriesByKey.values())[0] ||
-                             Array.from(this.avgSeriesByLayer.values())[0];
-          if (leftSeries) leftSeries.removePriceLine(line);
+        if (axis === 'Left' && series) {
+          // Remove price line and the invisible series
+          series.removePriceLine(line);
+          chart.removeSeries(series);
         } else {
           // Remove from right axis (price series)
           priceSeries.removePriceLine(line);
