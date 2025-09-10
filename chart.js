@@ -1393,14 +1393,28 @@ class TimeframeManager {
 
   toggleCumulativeAvg(enabled) {
     this.cumulativeAvgVisible = !!enabled;
-    this.recomputeScaleFactorsAndRefresh();
+    
+    console.log(`🔄 Cumulative Avg: ${enabled ? 'ENABLED' : 'DISABLED'}`);
+    
+    // Reprocess data to show/hide cumulative averages
+    if (this.rawData && this.rawData.length > 0) {
+      this.lastTimestamp = 0;
+      this.processAndSetData(this.rawData, false);
+    }
   }
 
   setNormalize(enabled) {
     this.normalizeEnabled = !!enabled;
     const badge = document.getElementById('scaled-badge');
     if (badge) badge.style.display = this.normalizeEnabled ? 'inline-block' : 'none';
-    this.recomputeScaleFactorsAndRefresh();
+    
+    console.log(`🔄 Normalization: ${enabled ? 'ENABLED' : 'DISABLED'}`);
+    
+    // Reprocess data to apply/remove normalization
+    if (this.rawData && this.rawData.length > 0) {
+      this.lastTimestamp = 0;
+      this.processAndSetData(this.rawData, false);
+    }
   }
 
   recomputeScaleFactorsAndRefresh() {

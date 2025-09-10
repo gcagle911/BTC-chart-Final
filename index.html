@@ -171,6 +171,10 @@
           <div class="ma-toggle-list" style="margin-top:8px;">
             <label><input type="checkbox" onchange="toggleCumulativeAvg(this.checked)"> Cumulative Avg</label>
           </div>
+          <div style="display:flex;align-items:center;gap:8px;justify-content:space-between;margin-top:8px;border-top: 1px solid rgba(255,255,255,0.1);padding-top:8px;">
+            <label class="timeframe-label"><input type="checkbox" id="normalize-toggle" onchange="toggleNormalize(this.checked)"> Normalize → Scaled (match medians)</label>
+            <span id="scaled-badge" style="display:none;color:#fff;background:#555;padding:2px 6px;border-radius:6px;font-size:10px;">Scaled</span>
+          </div>
 
           <hr style="border-color: rgba(255,255,255,0.1); margin: 10px 0;">
 
