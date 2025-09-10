@@ -5,53 +5,39 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, minimum-scale=0.5, user-scalable=yes, viewport-fit=cover" />
   <title>BTC Chart - Clean</title>
   <style>
-    :root {
+    /* === Watermark config === */
+    :root{
       --brand-logo-url: url('/images/bluedata-logo.png');
-      --wm-size: clamp(180px, 28vw, 500px);
-      --wm-opacity: 0.08;
-      --wm-y: 58%;
-      --wm-mask-softness: 38%;
+
+      /* TUNING: bigger + more visible */
+      --wm-size: clamp(360px, 46vw, 820px); /* ⬅️ size */
+      --wm-opacity: 0.14;                  /* ⬅️ visibility (0.06–0.18 is typical) */
+      --wm-y: 58%;                         /* ⬅️ vertical position */
+      --wm-mask-softness: 36%;             /* ⬅️ soft edge fade */
     }
 
-    * {
-      box-sizing: border-box;
-      -webkit-tap-highlight-color: transparent;
+    *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    html,body{
+      margin:0; padding:0; width:100%; height:100%;
+      background:#131722; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+      overflow:hidden; position:fixed; touch-action:manipulation;
     }
 
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      background: black;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      overflow: hidden;
-      position: fixed;
-      touch-action: manipulation;
+    #chart-container{
+      width:100vw; height:100vh; position:relative; display:flex; flex-direction:column; overflow:hidden;
+      background:linear-gradient(135deg, #4a90e2 0%, #7b68ee 50%, #9932cc 100%);
+      z-index:0;
     }
 
-    #chart-container {
-      width: 100vw;
-      height: 100vh;
-      position: relative;
-      display: flex;
-      flex-direction: column;
-      background: linear-gradient(to bottom right, #000000, #111111, #000000);
-      z-index: 0;
-    }
-
-    /* Watermark logo styling */
-    #chart-container::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
+    /* ------------- WATERMARK ------------- */
+    #chart-container::after{
+      content:"";
+      position:absolute; inset:0; pointer-events:none;
       background: var(--brand-logo-url) no-repeat center var(--wm-y);
       background-size: var(--wm-size);
-      mix-blend-mode: soft-light;
-      opacity: 0;
-      animation: fadeIn 3s ease 0.5s forwards;
-      filter: grayscale(1) contrast(1.1);
+      mix-blend-mode: multiply;            /* melt white bg into chart */
+      opacity: var(--wm-opacity);
+      filter: grayscale(1) contrast(1.18);
 
       -webkit-mask-image: radial-gradient(
         circle at 50% 50%,
@@ -63,148 +49,76 @@
         rgba(0,0,0,1) calc(100% - var(--wm-mask-softness)),
         rgba(0,0,0,0) 100%
       );
+      z-index:0;
     }
 
-    @keyframes fadeIn {
-      to { opacity: var(--wm-opacity); }
-    }
-
-    #main-chart {
-      width: 100%;
-      height: 100%;
+    #main-chart{
+      width:100%; height:100%;
       touch-action: pan-x pan-y pinch-zoom;
-      background: transparent;
-      position: relative;
-      z-index: 1;
+      background:transparent;
+      position:relative; z-index:1;
     }
 
-    /* Control Panels */
-    #timeframe-controls {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      z-index: 100;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      background: rgba(0, 0, 0, 0.8);
-      padding: 8px 12px;
-      border-radius: 8px;
-      backdrop-filter: blur(15px);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    #timeframe-controls{
+      position:absolute; top:10px; left:10px; z-index:100;
+      display:flex; align-items:center; gap:8px;
+      background:rgba(0,0,0,.8); padding:8px 12px; border-radius:8px;
+      backdrop-filter:blur(15px);
+      border:1px solid rgba(255,255,255,.2);
+      box-shadow:0 4px 15px rgba(0,0,0,.3);
+    }
+    #tools-controls{ position:absolute; top:10px; right:10px; z-index:100; display:block; }
+
+    #ma-tools-dropdown{
+      background:rgba(0,0,0,.8); border-radius:8px; backdrop-filter:blur(15px);
+      border:1px solid rgba(255,255,255,.2); box-shadow:0 4px 15px rgba(0,0,0,.3);
     }
 
-    #tools-controls {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      z-index: 100;
-      display: block;
+    #timeframe-dropdown,#symbol-dropdown,#ma-source-dropdown{
+      background:#2a2e39; border:1px solid #4a4e59; color:#d1d4dc;
+      padding:6px 10px; border-radius:6px; cursor:pointer; font-size:12px; font-weight:500; min-width:80px;
     }
 
-    #ma-tools-dropdown {
-      background: rgba(0, 0, 0, 0.8);
-      border-radius: 8px;
-      backdrop-filter: blur(15px);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    #ma-tools-button{
+      background:rgba(25,28,35,.9); border:1px solid rgba(255,255,255,.1); color:#d1d4dc;
+      padding:8px 12px; border-radius:8px; cursor:pointer; font-size:12px; font-weight:600;
     }
+    #ma-tools-button:hover{ background:#363a45; }
+    #ma-tools-button:focus{ outline:none; border-color:#2962ff; box-shadow:0 0 0 2px rgba(41,98,255,.2); }
 
-    #ma-tools-button {
-      background: rgba(25, 28, 35, 0.9);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      color: #d1d4dc;
-      padding: 8px 12px;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 12px;
-      font-weight: 600;
+    #ma-tools-dropdown{ position:relative; display:inline-block; }
+    #ma-tools-dropdown .dropdown-menu{
+      display:none; position:absolute; top:calc(100% + 6px); right:0;
+      background:rgba(25,28,35,.98); border:1px solid rgba(255,255,255,.1);
+      border-radius:8px; padding:10px; min-width:230px;
+      box-shadow:0 8px 24px rgba(0,0,0,.4); backdrop-filter:blur(10px);
     }
+    #ma-tools-dropdown.open .dropdown-menu{ display:block; }
+    .ma-toggle-list{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px 12px; margin-top:8px; }
+    .ma-toggle-list label{ display:flex; align-items:center; gap:6px; color:#d1d4dc; font-size:12px; }
 
-    #ma-tools-dropdown .dropdown-menu {
-      display: none;
-      position: absolute;
-      top: calc(100% + 6px);
-      right: 0;
-      background: rgba(25, 28, 35, 0.98);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 8px;
-      padding: 10px;
-      min-width: 230px;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-      backdrop-filter: blur(10px);
+    #left-axis-overlay{ position:absolute; top:0; left:0; width:80px; height:100%; z-index:200; display:none; background:transparent; cursor:ns-resize; touch-action:none; }
+
+    #timeframe-dropdown:hover,#symbol-dropdown:hover,#ma-source-dropdown:hover{ background:#363a45; border-color:#5a5e69; }
+    #timeframe-dropdown:focus,#symbol-dropdown:focus,#ma-source-dropdown:focus{ outline:none; border-color:#2962ff; box-shadow:0 0 0 2px rgba(41,98,255,.2); }
+    .timeframe-label{ color:#d1d4dc; font-size:12px; font-weight:500; }
+
+    @media (max-width:768px){
+      #timeframe-controls{ top:5px; left:5px; padding:6px 10px; }
+      #timeframe-dropdown,#symbol-dropdown,#ma-source-dropdown,#ma-tools-button{ font-size:11px; padding:4px 8px; min-width:70px; }
+      .timeframe-label{ font-size:11px; }
+      :root{ --wm-size: clamp(300px, 52vw, 680px); --wm-opacity: 0.16; --wm-y: 60%; }
     }
-
-    #ma-tools-dropdown.open .dropdown-menu {
-      display: block;
-    }
-
-    .ma-toggle-list {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 6px 12px;
-      margin-top: 8px;
-    }
-
-    .timeframe-label {
-      color: #d1d4dc;
-      font-size: 12px;
-      font-weight: 500;
-    }
-
-    select {
-      background: #2a2e39;
-      border: 1px solid #4a4e59;
-      color: #d1d4dc;
-      padding: 6px 10px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 12px;
-      font-weight: 500;
-      min-width: 80px;
-    }
-
-    /* Mobile */
-    @media (max-width: 768px) {
-      :root {
-        --wm-size: clamp(140px, 36vw, 380px);
-        --wm-opacity: 0.10;
-        --wm-y: 60%;
-      }
-
-      #timeframe-controls {
-        top: 5px;
-        left: 5px;
-        padding: 6px 10px;
-      }
-
-      select {
-        font-size: 11px;
-        padding: 4px 8px;
-        min-width: 70px;
-      }
-
-      .timeframe-label {
-        font-size: 11px;
-      }
-    }
-
-    @media (max-width: 480px) {
-      select {
-        font-size: 10px;
-        padding: 3px 6px;
-        min-width: 60px;
-      }
-
-      .timeframe-label {
-        font-size: 10px;
-      }
+    @media (max-width:480px){
+      #timeframe-controls{ padding:4px 8px; }
+      #timeframe-dropdown,#symbol-dropdown,#ma-source-dropdown,#ma-tools-button{ font-size:10px; padding:3px 6px; min-width:60px; }
+      .timeframe-label{ font-size:10px; }
     }
   </style>
 </head>
 <body>
   <div id="chart-container">
+    <div id="left-axis-overlay"></div>
     <div id="timeframe-controls">
       <label class="timeframe-label" for="exchange-dropdown">Exchange:</label>
       <select id="exchange-dropdown" onchange="setExchange(this.value)">
@@ -233,21 +147,31 @@
       <div id="ma-tools-dropdown">
         <button id="ma-tools-button" onclick="toggleMAToolsDropdown()">MAs ▾</button>
         <div class="dropdown-menu">
-          <div class="ma-toggle-list" style="grid-template-columns: 1fr;">
-            <label class="timeframe-label">Y‑Axis Control:</label>
-            <label><input type="radio" name="yaxis-control" value="right" checked onchange="setYAxisControl('Right')"> Right</label>
-            <label><input type="radio" name="yaxis-control" value="left" onchange="setYAxisControl('Left')"> Left</label>
+          <div class="ma-toggle-list" style="grid-template-columns: 1fr; gap: 6px; margin-top: 0;">
+            <label class="timeframe-label" style="display:flex;align-items:center;gap:8px;">
+              <span>Y‑Axis Control:</span>
+              <label style="display:flex;align-items:center;gap:4px;">
+                <input type="radio" name="yaxis-control" value="right" checked onchange="setYAxisControl('Right')"> Right
+              </label>
+              <label style="display:flex;align-items:center;gap:4px;">
+                <input type="radio" name="yaxis-control" value="left" onchange="setYAxisControl('Left')"> Left
+              </label>
+            </label>
           </div>
-          <hr style="border-color: rgba(255,255,255,0.1); margin: 10px 0;">
+          <div style="display:flex;align-items:center;gap:8px;justify-content:space-between;margin-bottom:8px;">
+            <label class="timeframe-label"><input type="checkbox" id="normalize-toggle" onchange="toggleNormalize(this.checked)"> Normalize → Scaled (match medians)</label>
+            <span id="scaled-badge" style="display:none;color:#fff;background:#555;padding:2px 6px;border-radius:6px;font-size:10px;">Scaled</span>
+          </div>
           <div class="ma-toggle-list">
             <label><input type="checkbox" onchange="toggleMALayer('spread_L5_pct_avg', this.checked)"> L5 Layer</label>
             <label><input type="checkbox" onchange="toggleMALayer('spread_L50_pct_avg', this.checked)" checked> L50 Layer</label>
             <label><input type="checkbox" onchange="toggleMALayer('spread_L100_pct_avg', this.checked)"> L100 Layer</label>
           </div>
-          <div class="ma-toggle-list" style="margin-top: 8px;">
+          <div class="ma-toggle-list" style="margin-top:8px;">
             <label><input type="checkbox" onchange="toggleCumulativeAvg(this.checked)"> Cumulative Avg</label>
           </div>
-          <div class="ma-toggle-list" style="margin-top: 8px;">
+          <div class="ma-toggle-list" style="margin-top:8px; border-top: 1px solid rgba(255,255,255,0.1); padding-top:8px;">
+            <label style="color: #d1d4dc; font-size: 11px; margin-bottom: 4px; display: block;">Volume Indicator:</label>
             <label><input type="checkbox" onchange="toggleVolumeIndicator(this.checked)"> Volume L50 (Bids/Asks)</label>
           </div>
           <hr style="border-color: rgba(255,255,255,0.1); margin: 10px 0;">
@@ -257,7 +181,8 @@
             <label><input type="checkbox" onchange="toggleMADuration(100, this.checked)"> MA100</label>
             <label><input type="checkbox" onchange="toggleMADuration(200, this.checked)" checked> MA200</label>
           </div>
-          <div class="ma-toggle-list" style="margin-top: 8px;">
+          <div class="ma-toggle-list" style="margin-top:8px; border-top: 1px solid rgba(255,255,255,0.1); padding-top:8px;">
+            <label style="color: #d1d4dc; font-size: 11px; margin-bottom: 4px; display: block;">EMAs (Dashed Lines):</label>
             <label><input type="checkbox" onchange="toggleEMADuration(20, this.checked)"> EMA20</label>
             <label><input type="checkbox" onchange="toggleEMADuration(50, this.checked)" checked> EMA50</label>
             <label><input type="checkbox" onchange="toggleEMADuration(100, this.checked)"> EMA100</label>
@@ -272,5 +197,7 @@
 
   <script src="https://unpkg.com/lightweight-charts@4.0.0/dist/lightweight-charts.standalone.production.js"></script>
   <script src="chart.js"></script>
+  <!-- optional: include the MA theme helper below and call applyMATheme() in chart.js -->
+  <script src="ma-theme.js"></script>
 </body>
 </html>
