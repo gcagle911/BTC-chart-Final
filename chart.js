@@ -1516,50 +1516,45 @@ class TimeframeManager {
   
   calculateSpreadThresholds() {
     const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
-    console.log(`📊 Calculating spread thresholds for ${assetExchangeKey}`);
+    console.log(`📊 Calculating SEPARATE spread thresholds for each layer - ${assetExchangeKey}`);
     
     if (!this.rawData || this.rawData.length < 100) {
       console.warn('⚠️ Insufficient data for threshold calculation');
       return;
     }
     
-    // Collect all spread values from all layers
-    const allSpreadValues = [];
     const layers = ['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg'];
+    const layerThresholds = {};
     
-    for (const item of this.rawData) {
-      for (const layer of layers) {
+    // Calculate separate thresholds for EACH layer
+    for (const layer of layers) {
+      const layerValues = [];
+      
+      // Collect values for THIS layer only
+      for (const item of this.rawData) {
         const value = item[layer];
         if (value !== null && value !== undefined && isFinite(value)) {
-          allSpreadValues.push(value);
+          layerValues.push(value);
         }
       }
+      
+      if (layerValues.length === 0) {
+        console.warn(`⚠️ No valid values for ${layer}`);
+        continue;
+      }
+      
+      // Sort to find top 2.5% for THIS layer
+      layerValues.sort((a, b) => a - b);
+      const top2_5Index = Math.floor(layerValues.length * 0.975);
+      const threshold = layerValues[top2_5Index];
+      
+      layerThresholds[layer] = threshold;
+      
+      console.log(`📊 ${layer} threshold: ${threshold.toFixed(6)} (from ${layerValues.length} values, range: ${layerValues[0].toFixed(6)} - ${layerValues[layerValues.length-1].toFixed(6)})`);
     }
     
-    if (allSpreadValues.length === 0) {
-      console.warn('⚠️ No valid spread values found');
-      return;
-    }
-    
-    // Sort to find percentiles
-    allSpreadValues.sort((a, b) => a - b);
-    
-    // Calculate top 2.5% threshold (more restrictive)
-    const top2_5PercentIndex = Math.floor(allSpreadValues.length * 0.975);
-    const top2_5PercentThreshold = allSpreadValues[top2_5PercentIndex];
-    
-    this.spreadThresholds.set(assetExchangeKey, {
-      top5Percent: top2_5PercentThreshold, // Keep same key name for compatibility
-      totalValues: allSpreadValues.length,
-      min: allSpreadValues[0],
-      max: allSpreadValues[allSpreadValues.length - 1]
-    });
-    
-    console.log(`📊 Spread thresholds for ${assetExchangeKey}:`, {
-      top2_5Percent: top2_5PercentThreshold.toFixed(6),
-      totalValues: allSpreadValues.length,
-      range: `${allSpreadValues[0].toFixed(6)} - ${allSpreadValues[allSpreadValues.length - 1].toFixed(6)}`
-    });
+    this.spreadThresholds.set(assetExchangeKey, layerThresholds);
+    console.log(`✅ Separate thresholds calculated for ${assetExchangeKey}:`, layerThresholds);
   }
 
   calculateSlopeThresholds() {
@@ -1627,27 +1622,32 @@ class TimeframeManager {
       return false;
     }
     
-    // Condition 1: Check if ANY spread value is in top 2.5%
+    // Condition 1: Check if ALL spread layers are in their respective top 2.5%
     const layers = ['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg'];
-    let spreadConditionMet = false;
+    let layersMet = 0;
     
-    // Debug: Show ALL spread values for this data point
-    console.log(`🔍 Checking spread values:`, {
-      L5: currentData.spread_L5_pct_avg,
-      L50: currentData.spread_L50_pct_avg,
-      L100: currentData.spread_L100_pct_avg,
-      threshold: spreadThreshold.top5Percent.toFixed(6)
-    });
+    console.log(`🔍 Checking ALL layers must be in top 2.5%:`);
     
     for (const layer of layers) {
       const value = currentData[layer];
-      console.log(`🔍 ${layer}: ${value?.toFixed(6) || 'null'} >= ${spreadThreshold.top5Percent.toFixed(6)} = ${value !== null && value >= spreadThreshold.top5Percent}`);
-      if (value !== null && value >= spreadThreshold.top5Percent) {
-        spreadConditionMet = true;
-        console.log(`📊 Spread condition MET: ${layer} = ${value.toFixed(6)} >= ${spreadThreshold.top5Percent.toFixed(6)}`);
-        break;
+      const layerThreshold = spreadThreshold[layer];
+      
+      if (!layerThreshold) {
+        console.warn(`⚠️ No threshold for ${layer}`);
+        continue;
+      }
+      
+      const layerConditionMet = value !== null && value >= layerThreshold;
+      console.log(`🔍 ${layer}: ${value?.toFixed(6) || 'null'} >= ${layerThreshold.toFixed(6)} = ${layerConditionMet}`);
+      
+      if (layerConditionMet) {
+        layersMet++;
       }
     }
+    
+    // ALL layers must be in their top 2.5%
+    const spreadConditionMet = layersMet === layers.length;
+    console.log(`📊 Spread condition: ${layersMet}/${layers.length} layers in top 2.5% = ${spreadConditionMet}`);
     
     if (!spreadConditionMet) {
       return false;
@@ -1874,19 +1874,23 @@ class TimeframeManager {
     for (let i = 0; i < candleData.length; i++) {
       const minuteData = candleData[i];
       
-      // Check spread condition for this minute
+      // Check if ALL spread layers are in their top 2.5% for this minute
       const layers = ['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg'];
-      let minuteSpreadMet = false;
+      let layersMetThisMinute = 0;
       
       for (const layer of layers) {
         const value = minuteData[layer];
-        if (value !== null && value >= spreadThreshold.top5Percent) {
-          minuteSpreadMet = true;
-          break;
+        const layerThreshold = spreadThreshold[layer];
+        
+        if (layerThreshold && value !== null && value >= layerThreshold) {
+          layersMetThisMinute++;
         }
       }
       
-      if (minuteSpreadMet) sustainedSpreadCount++;
+      // ALL layers must be in top 2.5% for this minute
+      if (layersMetThisMinute === layers.length) {
+        sustainedSpreadCount++;
+      }
       
       // Check slope condition for this minute (if enough data)
       if (i > 0) {
