@@ -1377,6 +1377,48 @@ class TimeframeManager {
     console.log(`✅ Layout updated for ${indicatorCount} indicators`);
   }
 
+  // CRITICAL: Refresh all indicators after symbol/exchange switches
+  refreshAllIndicators() {
+    console.log('🔄 Refreshing all indicators after data switch');
+    
+    // Wait for data to be loaded, then refresh indicators
+    setTimeout(() => {
+      if (this.volumeIndicatorEnabled) {
+        console.log('🔄 Refreshing Volume indicator');
+        const success = createVolumeSeries();
+        if (success) {
+          volumeBidsSeries.applyOptions({ visible: true });
+          volumeAsksSeries.applyOptions({ visible: true });
+          this.updateVolumeChart(this.rawData);
+        }
+      }
+      
+      if (this.indicator2Enabled) {
+        console.log('🔄 Refreshing Indicator 2');
+        const success = createIndicator2Series();
+        if (success) {
+          indicator2BidsSeries.applyOptions({ visible: true });
+          indicator2AsksSeries.applyOptions({ visible: true });
+          this.updateIndicator2Chart();
+        }
+      }
+      
+      if (this.indicator3Enabled) {
+        console.log('🔄 Refreshing Indicator 3');
+        const success = createIndicator3Series();
+        if (success) {
+          indicator3Series.applyOptions({ visible: true });
+          // Add data processing when Indicator 3 data is available
+        }
+      }
+      
+      // Recalculate layout for active indicators
+      this.updateIndicatorLayout();
+      
+      console.log('✅ All indicators refreshed');
+    }, 500); // Wait for data to be processed
+  }
+
   setMainChartMargins(margins) {
     // Adjust price scale margins to make room for indicators
     chart.priceScale('right').applyOptions({ scaleMargins: margins });
@@ -1568,7 +1610,8 @@ class TimeframeManager {
     this.applyAutoScale();
     this.startUpdateCycle();
     
-    // Volume automatically syncs since it's on the same chart
+    // CRITICAL: Refresh indicators after symbol switch
+    this.refreshAllIndicators();
   }
 
   async switchExchange(exchange) {
@@ -1598,7 +1641,8 @@ class TimeframeManager {
     this.applyAutoScale();
     this.startUpdateCycle();
     
-    // Volume automatically syncs since it's on the same chart
+    // CRITICAL: Refresh indicators after exchange switch
+    this.refreshAllIndicators();
   }
 
   startUpdateCycle() {
