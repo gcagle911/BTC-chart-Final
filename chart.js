@@ -1875,6 +1875,7 @@ class TimeframeManager {
     }
     
     console.log(`✅ Backtesting complete: Found ${skullCount} skull candles for ${this.currentTimeframe}`);
+    console.log(`📊 Total signals in map: ${this.activeSignals.size}`);
     this.updateSignalMarkers();
   }
 
