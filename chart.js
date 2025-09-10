@@ -1621,12 +1621,15 @@ class TimeframeManager {
     const currentSlope = this.calculateCurrentSlope(currentData);
     const slopeConditionMet = currentSlope >= slopeThreshold.top5Percent;
     
+    console.log(`📊 Slope check: current=${currentSlope.toExponential(3)}, threshold=${slopeThreshold.top5Percent.toExponential(3)}, met=${slopeConditionMet}`);
+    
     if (slopeConditionMet) {
       console.log(`📊 Slope condition MET: ${currentSlope.toExponential(3)} >= ${slopeThreshold.top5Percent.toExponential(3)}`);
     }
     
-    // BOTH conditions must be true
-    const bothConditionsMet = spreadConditionMet && slopeConditionMet;
+    // TEMPORARILY: Test with EITHER condition to debug
+    // TODO: Change back to && for production
+    const bothConditionsMet = spreadConditionMet || slopeConditionMet;
     
     console.log(`📊 Skull conditions: Spread=${spreadConditionMet}, Slope=${slopeConditionMet}, Both=${bothConditionsMet}`);
     
