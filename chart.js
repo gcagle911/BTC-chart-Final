@@ -1451,21 +1451,27 @@ class TimeframeManager {
   }
 
   addVerticalLine(time) {
-    // Simple approach - use createTimeLine if available, otherwise use histogram
     try {
-      // Try the simple histogram approach with full range
-      const vLineSeries = chart.addHistogramSeries({
+      // Create line series for infinite vertical line
+      const vLineSeries = chart.addLineSeries({
         color: '#FFFFFF',
-        priceScaleId: '',  // No price scale to make it span full height
+        lineWidth: 1.5,
+        lineStyle: LightweightCharts.LineStyle.Dashed,
+        priceScaleId: 'right',
         lastValueVisible: false,
         priceLineVisible: false,
+        crosshairMarkerVisible: false,
       });
       
-      // Add data point to create the vertical line
-      vLineSeries.setData([{ time, value: 1000000 }]); // Large value to span height
+      // Create infinite vertical line with extreme high and low values
+      const lineData = [
+        { time, value: 999999999 }, // Very high value
+        { time, value: -999999999 } // Very low value
+      ];
+      vLineSeries.setData(lineData);
       
       this.verticalLines.push({ series: vLineSeries, time });
-      console.log(`✅ Added vertical line at time: ${time}`);
+      console.log(`✅ Added infinite vertical line at time: ${time}`);
       return vLineSeries;
     } catch (e) {
       console.error('Failed to create vertical line:', e);
