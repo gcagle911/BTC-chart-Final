@@ -1452,27 +1452,34 @@ class TimeframeManager {
 
   addVerticalLine(time) {
     try {
-      // Simple histogram approach - just one tall bar
-      const vLineSeries = chart.addHistogramSeries({
-        color: '#FFFFFF',
-        priceScaleId: 'right',
-        lastValueVisible: false,
-        priceLineVisible: false,
-        visible: true,
-      });
+      // SIMPLE CSS OVERLAY APPROACH - No chart series involved
+      const chartContainer = document.getElementById('main-chart');
       
-      // Get a reasonable price value from current data
-      let priceValue = 100; // Default fallback
-      if (this.rawData && this.rawData.length > 0) {
-        priceValue = this.rawData[this.rawData.length - 1].price || 100;
-      }
+      // Convert time to pixel position
+      const timeScale = chart.timeScale();
+      const coordinate = timeScale.timeToCoordinate(time);
       
-      // Add single histogram bar at the clicked time
-      vLineSeries.setData([{ time, value: priceValue }]);
+      if (coordinate === null) return null;
       
-      this.verticalLines.push({ series: vLineSeries, time });
-      console.log(`✅ Added vertical line (histogram) at time: ${time}`);
-      return vLineSeries;
+      // Create simple CSS line overlay
+      const line = document.createElement('div');
+      line.style.cssText = `
+        position: absolute;
+        left: ${coordinate}px;
+        top: 0;
+        bottom: 0;
+        width: 1px;
+        background: #FFFFFF;
+        opacity: 0.8;
+        z-index: 10;
+        pointer-events: none;
+      `;
+      
+      chartContainer.appendChild(line);
+      
+      this.verticalLines.push({ element: line, time });
+      console.log(`✅ Added CSS vertical line at pixel ${coordinate}`);
+      return line;
     } catch (e) {
       console.error('Failed to create vertical line:', e);
       return null;
@@ -1522,11 +1529,13 @@ class TimeframeManager {
     });
     this.horizontalLines = [];
     
-    // Clear vertical lines
-    this.verticalLines.forEach(({ series }) => {
+    // Clear vertical lines (CSS elements)
+    this.verticalLines.forEach(({ element }) => {
       try { 
-        chart.removeSeries(series); 
-        console.log('✅ Removed vertical line');
+        if (element && element.parentNode) {
+          element.parentNode.removeChild(element);
+          console.log('✅ Removed vertical line');
+        }
       } catch (e) {
         console.warn('Failed to remove vertical line:', e);
       }
