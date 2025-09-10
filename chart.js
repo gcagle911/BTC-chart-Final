@@ -1606,10 +1606,10 @@ class TimeframeManager {
         continue;
       }
       
-      // Sort to find top 4% for THIS layer (20% more lenient than 2.5%)
+      // Sort to find top 15% for THIS layer (much more lenient to catch signals)
       layerValues.sort((a, b) => a - b);
-      const top4Index = Math.floor(layerValues.length * 0.96);
-      const threshold = layerValues[top4Index];
+      const top15Index = Math.floor(layerValues.length * 0.85);
+      const threshold = layerValues[top15Index];
       
       layerThresholds[layer] = threshold;
       
@@ -1656,20 +1656,20 @@ class TimeframeManager {
       return;
     }
     
-    // Sort to find top 4% acceleration (20% more lenient than 2.5%)
+    // Sort to find top 15% acceleration (much more lenient to catch signals)
     slopeValues.sort((a, b) => a - b);
-    const top4PercentIndex = Math.floor(slopeValues.length * 0.96);
-    const top4PercentSlope = slopeValues[top4PercentIndex];
+    const top15PercentIndex = Math.floor(slopeValues.length * 0.85);
+    const top15PercentSlope = slopeValues[top15PercentIndex];
     
     this.slopeThresholds.set(assetExchangeKey, {
-      top5Percent: top4PercentSlope, // Keep same key name for compatibility
+      top5Percent: top15PercentSlope, // Keep same key name for compatibility
       totalSlopes: slopeValues.length,
       min: slopeValues[0],
       max: slopeValues[slopeValues.length - 1]
     });
     
     console.log(`📊 Slope thresholds for ${assetExchangeKey}:`, {
-      top4Percent: top4PercentSlope.toExponential(3),
+      top15Percent: top15PercentSlope.toExponential(3),
       totalSlopes: slopeValues.length
     });
   }
@@ -1685,11 +1685,11 @@ class TimeframeManager {
       return false;
     }
     
-    // Condition 1: Check if ALL spread layers are in their respective top 4%
+    // Condition 1: Check if ALL spread layers are in their respective top 15%
     const layers = ['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg'];
     let layersMet = 0;
     
-    console.log(`🔍 Checking ALL layers must be in top 4%:`);
+    console.log(`🔍 Checking ALL layers must be in top 15%:`);
     
     for (const layer of layers) {
       const value = currentData[layer];
@@ -1726,7 +1726,7 @@ class TimeframeManager {
       console.log(`📊 Slope condition MET: ${currentSlope.toExponential(3)} >= ${slopeThreshold.top5Percent.toExponential(3)}`);
     }
     
-    // BOTH conditions must be true (top 4% for each)
+    // BOTH conditions must be true (top 15% for each)
     const bothConditionsMet = spreadConditionMet && slopeConditionMet;
     
     console.log(`📊 Skull conditions: Spread=${spreadConditionMet}, Slope=${slopeConditionMet}, Both=${bothConditionsMet}`);
@@ -1742,7 +1742,7 @@ class TimeframeManager {
     
     if (!spreadThreshold || !slopeThreshold) return false;
     
-    // Condition 1: Check if ALL spread layers are in their respective top 4%
+    // Condition 1: Check if ALL spread layers are in their respective top 15%
     const layers = ['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg'];
     let layersMet = 0;
     
@@ -1758,7 +1758,7 @@ class TimeframeManager {
       }
     }
     
-    // ALL layers must be in their respective top 4%
+    // ALL layers must be in their respective top 15%
     const spreadConditionMet = layersMet === layers.length;
     if (!spreadConditionMet) return false;
     
@@ -1766,7 +1766,7 @@ class TimeframeManager {
     const currentSlope = this.calculateCurrentSlope(currentData, dataIndex);
     const slopeConditionMet = currentSlope >= slopeThreshold.top5Percent;
     
-    // BOTH conditions must be true (top 4% for each)
+    // BOTH conditions must be true (top 15% for each)
     return spreadConditionMet && slopeConditionMet;
   }
 
@@ -1965,16 +1965,16 @@ class TimeframeManager {
       return;
     }
     
-    // Find top 12% MA change rate threshold (20% more lenient than 10%)
+    // Find top 25% MA change rate threshold (much more lenient to catch signals)
     maChangeRates.sort((a, b) => a - b);
-    const top12PercentIndex = Math.floor(maChangeRates.length * 0.88);
-    const top12PercentChangeRate = maChangeRates[top12PercentIndex];
+    const top25PercentIndex = Math.floor(maChangeRates.length * 0.75);
+    const top25PercentChangeRate = maChangeRates[top25PercentIndex];
     
     // Calculate L50 cumulative average
     const l50CumulativeAvg = l50Values.reduce((sum, item) => sum + item.value, 0) / l50Values.length;
     
     this.maChangeThresholds.set(assetExchangeKey, {
-      top10Percent: top12PercentChangeRate, // Keep same key name for compatibility
+      top10Percent: top25PercentChangeRate, // Keep same key name for compatibility
       totalRates: maChangeRates.length
     });
     
@@ -1983,7 +1983,7 @@ class TimeframeManager {
     });
     
     console.log(`📊 Gold X thresholds for ${assetExchangeKey}:`, {
-      maChangeTop12: top12PercentChangeRate.toExponential(3),
+      maChangeTop25: top25PercentChangeRate.toExponential(3),
       l50CumAvg: l50CumulativeAvg.toFixed(6)
     });
   }
@@ -1999,25 +1999,25 @@ class TimeframeManager {
       return false;
     }
     
-    // Condition 1: Price dropped >= 1.4% in last 3 hours (20% more lenient than 1.8%)
-    const priceDropMet = this.checkPriceDrop3Hour(currentData, dataIndex, 1.4);
+    // Condition 1: Price dropped >= 0.8% in last 3 hours (much more lenient to catch signals)
+    const priceDropMet = this.checkPriceDrop3Hour(currentData, dataIndex, 0.8);
     
-    // Condition 2: L50 MA changed by top 12% rate in 3-hour window (20% more lenient than 10%)
+    // Condition 2: L50 MA changed by top 25% rate in 3-hour window (much more lenient to catch signals)
     const maChangeMet = this.checkL50MAChange3Hour(currentData, dataIndex, maChangeThreshold.top10Percent);
     
-    // Condition 3: Current L50 spread within 25% of cumulative average (20% more lenient than 20%)
+    // Condition 3: Current L50 spread within 50% of cumulative average (much more lenient to catch signals)
     const currentL50 = currentData.spread_L50_pct_avg;
     const avgL50 = cumulativeAvg.L50_avg;
-    const twentyFivePercentRange = avgL50 * 0.25;
+    const fiftyPercentRange = avgL50 * 0.50;
     const nearAvgMet = currentL50 !== null && 
-                       Math.abs(currentL50 - avgL50) <= twentyFivePercentRange;
+                       Math.abs(currentL50 - avgL50) <= fiftyPercentRange;
     
     console.log(`📊 Gold X conditions: PriceDrop=${priceDropMet}, MAChange=${maChangeMet}, NearAvg=${nearAvgMet}`);
     
     return priceDropMet && maChangeMet && nearAvgMet;
   }
 
-  checkPriceDrop3Hour(currentData, dataIndex, dropThreshold = 1.4) {
+  checkPriceDrop3Hour(currentData, dataIndex, dropThreshold = 0.8) {
     if (!this.rawData || dataIndex < 180) return false; // Need 3 hours of data (180 minutes)
     
     const currentPrice = currentData.price;
@@ -2115,7 +2115,7 @@ class TimeframeManager {
     for (let i = 0; i < candleData.length; i++) {
       const minuteData = candleData[i];
       
-      // Check if ALL spread layers are in their top 4% for this minute
+      // Check if ALL spread layers are in their top 15% for this minute
       const layers = ['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg'];
       let layersMetThisMinute = 0;
       
@@ -2128,7 +2128,7 @@ class TimeframeManager {
         }
       }
       
-      // ALL layers must be in top 4% for this minute
+      // ALL layers must be in top 15% for this minute
       if (layersMetThisMinute === layers.length) {
         sustainedSpreadCount++;
       }
