@@ -603,6 +603,7 @@ class TimeframeManager {
     this.measureLines = [];
     this.activeTool = null;
     this.measureStart = null;
+    this.yAxisControl = 'Right'; // Default to right axis for horizontal lines
     this.scaleRecomputeTimeout = null;
     this.autoRefitPending = false;
     
@@ -1438,15 +1439,42 @@ class TimeframeManager {
   }
 
   addHorizontalLine(price) {
-    const line = priceSeries.createPriceLine({
-      price: price,
-      color: '#FFFFFF', // White horizontal line
-      lineWidth: 1.5,
-      lineStyle: LightweightCharts.LineStyle.Solid,
-      axisLabelVisible: true,
-      title: `${price.toFixed(3)}`,
-    });
-    this.horizontalLines.push({ line, price });
+    let line;
+    
+    if (this.yAxisControl === 'Left') {
+      // Add line to left axis (MA axis) - need to use a MA series for this
+      const leftSeries = Array.from(this.maSeriesByKey.values())[0] || 
+                         Array.from(this.emaSeriesByKey.values())[0] ||
+                         Array.from(this.avgSeriesByLayer.values())[0];
+      
+      if (leftSeries) {
+        line = leftSeries.createPriceLine({
+          price: price,
+          color: '#FFFFFF', // White horizontal line
+          lineWidth: 1.5,
+          lineStyle: LightweightCharts.LineStyle.Solid,
+          axisLabelVisible: true,
+          title: `L: ${price.toFixed(6)}`, // L for Left axis
+        });
+        console.log(`✅ Added horizontal line to LEFT axis at ${price.toFixed(6)}`);
+      } else {
+        console.warn('⚠️  No left axis series available for horizontal line');
+        return null;
+      }
+    } else {
+      // Add line to right axis (price axis)
+      line = priceSeries.createPriceLine({
+        price: price,
+        color: '#FFFFFF', // White horizontal line
+        lineWidth: 1.5,
+        lineStyle: LightweightCharts.LineStyle.Solid,
+        axisLabelVisible: true,
+        title: `R: ${price.toFixed(3)}`, // R for Right axis
+      });
+      console.log(`✅ Added horizontal line to RIGHT axis at ${price.toFixed(3)}`);
+    }
+    
+    this.horizontalLines.push({ line, price, axis: this.yAxisControl });
     return line;
   }
 
@@ -1517,11 +1545,20 @@ class TimeframeManager {
   clearAllLines() {
     console.log(`🗑️ Clearing ${this.horizontalLines.length} horizontal and ${this.verticalLines.length} vertical lines`);
     
-    // Clear horizontal lines
-    this.horizontalLines.forEach(({ line }) => {
+    // Clear horizontal lines (from both axes)
+    this.horizontalLines.forEach(({ line, axis }) => {
       try { 
-        priceSeries.removePriceLine(line); 
-        console.log('✅ Removed horizontal line');
+        if (axis === 'Left') {
+          // Remove from left axis series
+          const leftSeries = Array.from(this.maSeriesByKey.values())[0] || 
+                             Array.from(this.emaSeriesByKey.values())[0] ||
+                             Array.from(this.avgSeriesByLayer.values())[0];
+          if (leftSeries) leftSeries.removePriceLine(line);
+        } else {
+          // Remove from right axis (price series)
+          priceSeries.removePriceLine(line);
+        }
+        console.log(`✅ Removed horizontal line from ${axis} axis`);
       } catch (e) {
         console.warn('Failed to remove horizontal line:', e);
       }
@@ -2357,6 +2394,10 @@ function toggleIndicator2(enabled) {
 
 function toggleIndicator3(enabled) {
   manager.toggleIndicator3(enabled);
+}
+
+function setYAxisControl(mode) {
+  manager.setYAxisControl(mode);
 }
 
 // Enhanced zoom functions with MASSIVE zoom range like TradingView
