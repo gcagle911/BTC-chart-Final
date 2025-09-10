@@ -1788,11 +1788,6 @@ class TimeframeManager {
   }
 
   updateSignalMarkers() {
-    if (!signalMarkerSeries) {
-      console.error('❌ No signal marker series available');
-      return;
-    }
-    
     console.log(`🔍 Updating signal markers, activeSignals size: ${this.activeSignals.size}`);
     
     const markers = [];
@@ -1813,12 +1808,13 @@ class TimeframeManager {
       }
     }
     
-    console.log(`📍 Setting ${markers.length} markers on series`);
+    console.log(`📍 Setting ${markers.length} markers on PRICE series`);
     try {
-      signalMarkerSeries.setMarkers(markers);
-      console.log(`✅ Successfully set ${markers.length} signal markers`);
+      // Use price series for markers instead of invisible series
+      priceSeries.setMarkers(markers);
+      console.log(`✅ Successfully set ${markers.length} signal markers on price series`);
     } catch (error) {
-      console.error('❌ Error setting markers:', error);
+      console.error('❌ Error setting markers on price series:', error);
     }
   }
 
