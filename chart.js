@@ -1247,6 +1247,9 @@ class TimeframeManager {
     // Only auto-scale right axis on timeframe change
     this.applyAutoScale();
     
+    // CRITICAL: Clear signals when changing timeframes
+    this.clearSignalsForTimeframeChange();
+    
     // Update indicators after timeframe change
     if (this.indicator2Enabled) {
       setTimeout(() => this.updateIndicator2Chart(), 100);
@@ -1510,6 +1513,26 @@ class TimeframeManager {
     }
     
     console.log('✅ Signals cleared for new asset/exchange');
+  }
+
+  // Clear signals when changing timeframes
+  clearSignalsForTimeframeChange() {
+    console.log(`🧹 Clearing signals for timeframe change to ${this.currentTimeframe}`);
+    
+    // Clear all signals - they're specific to the previous timeframe
+    this.activeSignals.clear();
+    
+    // Clear signal markers from chart
+    if (priceSeries) {
+      try {
+        priceSeries.setMarkers([]);
+        console.log('✅ Cleared signal markers for timeframe change');
+      } catch (e) {
+        console.warn('Failed to clear signal markers:', e);
+      }
+    }
+    
+    console.log('✅ Signals cleared for new timeframe');
   }
 
   // SKULL TRIGGER SYSTEM IMPLEMENTATION
