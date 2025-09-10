@@ -286,6 +286,11 @@ let volumeBidsSeries = null;
 let volumeAsksSeries = null;
 let volumeIndicatorEnabled = false;
 
+// Interactive Signal System
+let signalMarkerSeries = null;
+let activeSignals = new Map(); // time -> signal data
+let signalSystemEnabled = false;
+
 // Indicator 2 series (timeframe-averaged volume)
 let indicator2BidsSeries = null;
 let indicator2AsksSeries = null;
@@ -480,6 +485,46 @@ function destroyIndicator3Series() {
   }
 }
 
+// Create interactive signal marker series
+function createSignalMarkerSeries() {
+  if (signalMarkerSeries) {
+    console.log('📍 Signal marker series already exists');
+    return signalMarkerSeries;
+  }
+
+  console.log('📍 Creating signal marker series');
+  
+  try {
+    signalMarkerSeries = chart.addLineSeries({
+      color: 'transparent', // Invisible line
+      lineWidth: 0,
+      priceScaleId: 'right',
+      lastValueVisible: false,
+      priceLineVisible: false,
+      crosshairMarkerVisible: false,
+    });
+
+    console.log('✅ Signal marker series created');
+    return signalMarkerSeries;
+  } catch (error) {
+    console.error('❌ Error creating signal marker series:', error);
+    return null;
+  }
+}
+
+function destroySignalMarkerSeries() {
+  if (signalMarkerSeries) {
+    try {
+      chart.removeSeries(signalMarkerSeries);
+      signalMarkerSeries = null;
+      activeSignals.clear();
+      console.log('✅ Signal marker series destroyed');
+    } catch (e) {
+      console.warn('Warning destroying signal marker series:', e);
+    }
+  }
+}
+
 // Dynamic MA series registry for multi-layer/duration combinations
 function createMASeries(color, title) {
   return chart.addLineSeries({
@@ -604,6 +649,11 @@ class TimeframeManager {
     this.activeTool = null;
     this.measureStart = null;
     this.yAxisControl = 'Right'; // Default to right axis for horizontal lines
+    
+    // Interactive Signal System
+    this.signalSystemEnabled = false;
+    this.activeSignals = new Map(); // time -> {type, price, active}
+    this.currentCandleTime = null;
     this.scaleRecomputeTimeout = null;
     this.autoRefitPending = false;
     
@@ -1615,6 +1665,16 @@ class TimeframeManager {
       this.clearAllLines();
     });
     
+    // Signal system test button
+    document.getElementById('btn-test-signal')?.addEventListener('click', () => {
+      if (this.signalSystemEnabled) {
+        this.triggerSignal('goldX', true);
+        console.log('🧪 Test signal triggered');
+      } else {
+        console.warn('⚠️ Signal system not enabled');
+      }
+    });
+    
     // Chart click handling
     chart.subscribeClick((param) => {
       if (!param?.point || !this.activeTool) return;
@@ -1638,6 +1698,109 @@ class TimeframeManager {
         }
       }
     });
+  }
+
+  // INTERACTIVE SIGNAL SYSTEM
+  
+  enableSignalSystem(enabled) {
+    this.signalSystemEnabled = enabled;
+    
+    if (enabled) {
+      createSignalMarkerSeries();
+      console.log('✅ Signal system enabled');
+    } else {
+      destroySignalMarkerSeries();
+      this.activeSignals.clear();
+      console.log('✅ Signal system disabled');
+    }
+  }
+
+  // External trigger function - call this when your condition is met
+  triggerSignal(signalType = 'goldX', active = true) {
+    if (!this.signalSystemEnabled || !signalMarkerSeries) return;
+    
+    // Get current candle time
+    const currentTime = this.getCurrentCandleTime();
+    if (!currentTime) return;
+    
+    console.log(`📍 Signal trigger: ${signalType} ${active ? 'ACTIVE' : 'INACTIVE'} at ${new Date(currentTime * 1000).toISOString()}`);
+    
+    if (active) {
+      // Get current price for marker positioning
+      const currentPrice = this.getCurrentPrice();
+      if (!currentPrice) return;
+      
+      // Add signal marker above current candlestick
+      const markerPrice = currentPrice * 1.02; // 2% above current price
+      
+      this.activeSignals.set(currentTime, {
+        type: signalType,
+        price: markerPrice,
+        active: true,
+        triggered: Date.now()
+      });
+      
+      // Update marker display
+      this.updateSignalMarkers();
+      
+    } else {
+      // Remove signal if it exists
+      this.activeSignals.delete(currentTime);
+      this.updateSignalMarkers();
+    }
+  }
+
+  getCurrentCandleTime() {
+    // Get the current candle time based on timeframe
+    const now = Date.now();
+    const timeframeMs = this.timeframes[this.currentTimeframe].seconds * 1000;
+    return Math.floor(now / timeframeMs) * (timeframeMs / 1000); // Convert to seconds
+  }
+
+  getCurrentPrice() {
+    if (!this.rawData || this.rawData.length === 0) return null;
+    return this.rawData[this.rawData.length - 1].price;
+  }
+
+  updateSignalMarkers() {
+    if (!signalMarkerSeries) return;
+    
+    const markers = [];
+    
+    for (const [time, signal] of this.activeSignals) {
+      if (signal.active) {
+        markers.push({
+          time: time,
+          position: 'aboveBar',
+          color: '#FFD700', // Gold color
+          shape: 'cross', // X shape
+          text: 'X',
+          size: 2,
+        });
+      }
+    }
+    
+    signalMarkerSeries.setMarkers(markers);
+    console.log(`📍 Updated ${markers.length} signal markers`);
+  }
+
+  // Check for candle closes and make signals permanent
+  checkCandleCloses() {
+    const currentCandleTime = this.getCurrentCandleTime();
+    
+    if (this.currentCandleTime && this.currentCandleTime !== currentCandleTime) {
+      // Candle closed - make any active signals permanent
+      console.log(`🕯️ Candle closed at ${new Date(this.currentCandleTime * 1000).toISOString()}`);
+      
+      const closedSignal = this.activeSignals.get(this.currentCandleTime);
+      if (closedSignal && closedSignal.active) {
+        console.log(`📍 Signal made permanent at candle close`);
+        // Signal becomes permanent - no longer needs to be "active"
+        closedSignal.permanent = true;
+      }
+    }
+    
+    this.currentCandleTime = currentCandleTime;
   }
 
   setMainChartMargins(margins) {
@@ -2407,6 +2570,15 @@ function setYAxisControl(mode) {
   manager.setYAxisControl(mode);
 }
 
+function toggleSignalSystem(enabled) {
+  manager.enableSignalSystem(enabled);
+}
+
+// External function to trigger signals from your conditions
+function triggerGoldXSignal(active = true) {
+  manager.triggerSignal('goldX', active);
+}
+
 // Enhanced zoom functions with MASSIVE zoom range like TradingView
 function zoomIn() {
   if (window.chart) {
@@ -2597,6 +2769,7 @@ manager.initializeChart().then(() => {
   createVolumeSeries();
   createIndicator2Series();
   createIndicator3Series();
+  createSignalMarkerSeries();
   
   // Setup trading tools
   manager.setupTradingTools();
