@@ -1272,12 +1272,17 @@ class TimeframeManager {
     // Only auto-scale right axis on timeframe change
     this.applyAutoScale();
     
-    // CRITICAL: Clear signals when changing timeframes
-    this.clearSignalsForTimeframeChange();
+    // KEEP signals when changing timeframes - they should be timeframe-independent
+    // this.clearSignalsForTimeframeChange(); // REMOVED - signals should persist across timeframes
     
     // Update indicators after timeframe change
     if (this.indicator2Enabled) {
       setTimeout(() => this.updateIndicator2Chart(), 100);
+    }
+    
+    // CRITICAL: Update signal display after timeframe change (signals should persist)
+    if (this.skullIndicatorEnabled || this.goldXIndicatorEnabled) {
+      setTimeout(() => this.updateSignalDisplay(), 100);
     }
     
     console.log(`✅ Switched to ${this.timeframes[timeframe].label}`);
@@ -1895,14 +1900,14 @@ class TimeframeManager {
     this.calculateSpreadThresholds();
     this.calculateSlopeThresholds();
     
-    // Group data by candle timeframe for duration-based checking
-    const timeframeSeconds = this.timeframes[this.currentTimeframe].seconds;
+    // FIXED: Always use 1-minute candles for signal detection regardless of display timeframe
+    const oneMinuteSeconds = 60; // Always use 1-minute buckets for signals
     const candleBuckets = new Map();
     
-    // Group raw data into candle buckets
+    // Group raw data into 1-minute buckets (timeframe-independent)
     for (const item of this.rawData) {
       const timestamp = this.toUnixTimestamp(item.time);
-      const candleTime = Math.floor(timestamp / timeframeSeconds) * timeframeSeconds;
+      const candleTime = Math.floor(timestamp / oneMinuteSeconds) * oneMinuteSeconds;
       
       if (!candleBuckets.has(candleTime)) {
         candleBuckets.set(candleTime, []);
@@ -1910,7 +1915,7 @@ class TimeframeManager {
       candleBuckets.get(candleTime).push(item);
     }
     
-    console.log(`📊 Grouped data into ${candleBuckets.size} ${this.currentTimeframe} candles`);
+    console.log(`📊 Grouped data into ${candleBuckets.size} 1-minute candles (timeframe-independent)`);
     
     let skullCount = 0;
     let lastSkullTime = 0;
@@ -2150,13 +2155,13 @@ class TimeframeManager {
     // Calculate cumulative average
     this.calculateGoldXThresholds();
     
-    // Group data by candle timeframe
-    const timeframeSeconds = this.timeframes[this.currentTimeframe].seconds;
+    // FIXED: Always use 1-minute buckets for signal detection (timeframe-independent)
+    const oneMinuteSeconds = 60; // Always use 1-minute for signals
     const candleBuckets = new Map();
     
     for (const item of this.rawData) {
       const timestamp = this.toUnixTimestamp(item.time);
-      const candleTime = Math.floor(timestamp / timeframeSeconds) * timeframeSeconds;
+      const candleTime = Math.floor(timestamp / oneMinuteSeconds) * oneMinuteSeconds;
       
       if (!candleBuckets.has(candleTime)) {
         candleBuckets.set(candleTime, []);
@@ -2164,7 +2169,7 @@ class TimeframeManager {
       candleBuckets.get(candleTime).push(item);
     }
     
-    console.log(`📊 Created ${candleBuckets.size} candle buckets for ${this.currentTimeframe} timeframe`);
+    console.log(`📊 Created ${candleBuckets.size} 1-minute candle buckets (timeframe-independent)`);
     
     let goldXCount = 0;
     let lastGoldXTime = 0;
