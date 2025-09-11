@@ -1992,26 +1992,25 @@ class TimeframeManager {
     console.log(`📊 Gold X cumulative average for ${assetExchangeKey}: ${l50CumulativeAvg.toFixed(6)} (from ${l50Values.length} values)`);
   }
 
-  // SIMPLE TEST VERSION - Check Gold X trigger conditions 
+  // EXACT SPECIFICATIONS - Check Gold X trigger conditions
   checkGoldXConditions(currentData, dataIndex) {
-    // SIMPLE TEST: Trigger on 1% price drop in last 24 hours (1440 minutes)
-    if (!this.rawData || dataIndex < 100) return false; // Need some lookback data
+    const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
+    const cumulativeAvg = this.cumulativeAverages.get(assetExchangeKey);
     
-    const currentPrice = currentData.price;
-    if (!currentPrice) return false;
+    if (!cumulativeAvg) {
+      console.warn(`⚠️ Missing Gold X cumulative average for ${assetExchangeKey}`);
+      return false;
+    }
     
-    // Look back 24 hours (or as much data as we have)
-    const lookbackMinutes = Math.min(1440, dataIndex); // 24 hours or available data
-    const pastData = this.rawData[dataIndex - lookbackMinutes];
+    // Condition 1: Price drops 1.75% or more within 2 hours
+    const priceDrop2HourMet = this.checkPriceDrop2Hour(currentData, dataIndex, 1.75);
     
-    if (!pastData || !pastData.price) return false;
+    // Condition 2: 20, 50, and 100 MA for L50 are ALL < cumulative average
+    const maConditionMet = this.checkL50MAsBelowAverage(currentData, cumulativeAvg.L50_avg);
     
-    const priceChange = ((currentPrice - pastData.price) / pastData.price) * 100;
-    const dropMet = priceChange <= -1.0; // 1% or more drop
+    console.log(`📊 Gold X conditions: PriceDrop2H=${priceDrop2HourMet}, MAsBelow=${maConditionMet}`);
     
-    console.log(`📊 SIMPLE Gold X test: ${pastData.price.toFixed(2)} → ${currentPrice.toFixed(2)} = ${priceChange.toFixed(2)}% (need ≤-1.0%) = ${dropMet}`);
-    
-    return dropMet;
+    return priceDrop2HourMet && maConditionMet;
   }
 
   // Check for price drop >= 1.75% within 2 hours
@@ -2133,102 +2132,89 @@ class TimeframeManager {
     return changeMet;
   }
 
-  // SIMPLE TEST VERSION - Calculate Gold X signals with easy trigger
+  // EXACT SPECIFICATIONS - Calculate Gold X signals with proper logic
   calculateGoldXSignals() {
     const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
-    console.log(`✖️ SIMPLE TEST: Calculating Gold X signals (1% drop in 24hrs) for ${assetExchangeKey}...`);
+    console.log(`✖️ Calculating Gold X signals (2hr drops + MA conditions) for ${assetExchangeKey}...`);
     
-    if (!this.rawData || this.rawData.length < 100) {
-      console.warn(`⚠️ Insufficient data for Gold X calculation: ${this.rawData?.length || 0} points (need 100+)`);
+    if (!this.rawData || this.rawData.length < 120) {
+      console.warn(`⚠️ Insufficient data for Gold X calculation: ${this.rawData?.length || 0} points (need 120+ for 2hr lookback)`);
       return;
     }
     
     console.log(`📊 Gold X calculation starting with ${this.rawData.length} data points`);
     
-    // Clear existing Gold X signals for this asset/exchange
-    this.goldXSignals.clear();
+    // Keep existing fake signals but add real ones
+    // this.goldXSignals.clear(); // Don't clear - keep fake signals for now
     
-    // Add some guaranteed fake signals for testing
-    console.log('🧪 Adding fake Gold X signals for testing...');
-    const dataLength = this.rawData.length;
-    const fakeSignalIndices = [
-      Math.floor(dataLength * 0.2),
-      Math.floor(dataLength * 0.5), 
-      Math.floor(dataLength * 0.8)
-    ];
+    // Calculate cumulative average
+    this.calculateGoldXThresholds();
     
-    for (const index of fakeSignalIndices) {
-      if (index < this.rawData.length) {
-        const fakeTime = this.toUnixTimestamp(this.rawData[index].time);
-        this.goldXSignals.set(fakeTime, {
-          type: 'goldX',
-          price: this.rawData[index].price * 1.02,
-          active: true,
-          asset: this.currentSymbol,
-          exchange: API_EXCHANGE,
-          timeframe: this.currentTimeframe,
-          fake: true
-        });
-        console.log(`🧪 Added fake Gold X at ${new Date(fakeTime * 1000).toISOString()}`);
+    // Group data by candle timeframe
+    const timeframeSeconds = this.timeframes[this.currentTimeframe].seconds;
+    const candleBuckets = new Map();
+    
+    for (const item of this.rawData) {
+      const timestamp = this.toUnixTimestamp(item.time);
+      const candleTime = Math.floor(timestamp / timeframeSeconds) * timeframeSeconds;
+      
+      if (!candleBuckets.has(candleTime)) {
+        candleBuckets.set(candleTime, []);
       }
+      candleBuckets.get(candleTime).push(item);
     }
     
-    let goldXCount = this.goldXSignals.size; // Count fake signals
+    console.log(`📊 Created ${candleBuckets.size} candle buckets for ${this.currentTimeframe} timeframe`);
     
-    // SIMPLE TEST: Check for 1% drops in 24 hours
-    console.log('📊 Checking for simple 1% drops in 24-hour periods...');
+    let goldXCount = 0;
+    let lastGoldXTime = 0;
+    const cooldownSeconds = 30 * 60; // 30 minutes
     
-    for (let i = 100; i < this.rawData.length; i += 60) { // Check every hour
-      const currentData = this.rawData[i];
-      const currentTime = this.toUnixTimestamp(currentData.time);
+    // Process candles
+    for (const [candleTime, candleData] of candleBuckets) {
+      if (candleData.length === 0) continue;
       
-      // Check simple condition
-      if (this.checkGoldXConditions(currentData, i)) {
-        this.goldXSignals.set(currentTime, {
+      // Check cooldown
+      if (candleTime - lastGoldXTime < cooldownSeconds) continue;
+      
+      // Check if conditions are met for ENTIRE candle
+      if (this.checkGoldXCandleConditions(candleData, candleTime)) {
+        const candlePrice = candleData[candleData.length - 1]?.price || 50000;
+        
+        this.goldXSignals.set(candleTime, {
           type: 'goldX',
-          price: currentData.price * 1.02,
+          price: candlePrice * 1.02,
           active: true,
           asset: this.currentSymbol,
           exchange: API_EXCHANGE,
           timeframe: this.currentTimeframe,
-          simple: true
+          real: true
         });
         
         goldXCount++;
-        console.log(`✖️ SIMPLE Gold X found at ${new Date(currentTime * 1000).toISOString()} - 1% drop in 24hrs`);
+        lastGoldXTime = candleTime;
+        console.log(`✖️ REAL Gold X found at ${new Date(candleTime * 1000).toISOString()}`);
       }
     }
     
-    console.log(`✅ Gold X calculation complete: Found ${goldXCount} signals with 30min cooldown`);
+    console.log(`✅ Gold X calculation complete: Found ${goldXCount} real signals + fake signals`);
     console.log(`📊 Total Gold X signals: ${this.goldXSignals.size}`);
   }
 
   // Check if Gold X conditions are met for entire candlestick
   checkGoldXCandleConditions(candleData, candleTime) {
-    if (!candleData || candleData.length === 0) {
-      console.log(`❌ No candle data for ${new Date(candleTime * 1000).toISOString()}`);
-      return false;
-    }
-    
-    console.log(`🔍 Checking Gold X candle at ${new Date(candleTime * 1000).toISOString()} with ${candleData.length} data points`);
+    if (!candleData || candleData.length === 0) return false;
     
     const cumulativeAvg = this.cumulativeAverages.get(`${this.currentSymbol}_${API_EXCHANGE}`);
-    if (!cumulativeAvg) {
-      console.log(`❌ No cumulative average found for ${this.currentSymbol}_${API_EXCHANGE}`);
-      return false;
-    }
-    
-    console.log(`📊 Using L50 cumulative average: ${cumulativeAvg.L50_avg?.toFixed(6)}`);
+    if (!cumulativeAvg) return false;
     
     let conditionsMetCount = 0;
-    let priceDropMetCount = 0;
-    let maConditionMetCount = 0;
     
     // Check each minute within the candle
     for (let i = 0; i < candleData.length; i++) {
       const minuteData = candleData[i];
       
-      // Find the index of this minute data in rawData for proper lookback
+      // Find data index for this minute
       let dataIndex = -1;
       for (let j = 0; j < this.rawData.length; j++) {
         if (this.rawData[j].time === minuteData.time) {
@@ -2237,42 +2223,19 @@ class TimeframeManager {
         }
       }
       
-      if (dataIndex === -1) {
-        console.log(`⚠️ Minute ${i + 1}: Could not find data index for ${minuteData.time}`);
-        continue;
-      }
+      if (dataIndex === -1 || dataIndex < 120) continue;
       
-      if (dataIndex < 120) {
-        console.log(`⚠️ Minute ${i + 1}: Insufficient lookback data (index ${dataIndex}, need 120+)`);
-        continue; // Need 2 hours of lookback
-      }
-      
-      // Check both conditions for this minute
-      const priceDrop2HourMet = this.checkPriceDrop2Hour(minuteData, dataIndex, 1.75);
-      const maConditionMet = this.checkL50MAsBelowAverage(minuteData, cumulativeAvg.L50_avg);
-      
-      if (priceDrop2HourMet) priceDropMetCount++;
-      if (maConditionMet) maConditionMetCount++;
-      
-      if (priceDrop2HourMet && maConditionMet) {
+      // Check both conditions
+      if (this.checkGoldXConditions(minuteData, dataIndex)) {
         conditionsMetCount++;
-        if (i < 3) { // Debug first few minutes
-          console.log(`✅ Minute ${i + 1}: BOTH conditions met - PriceDrop=${priceDrop2HourMet}, MA=${maConditionMet}`);
-        }
-      } else if (i < 3) { // Debug first few minutes
-        console.log(`❌ Minute ${i + 1}: Conditions failed - PriceDrop=${priceDrop2HourMet}, MA=${maConditionMet}`);
       }
     }
     
-    // Require conditions to be met for majority of the candle (at least 50%)
+    // Require conditions for majority of candle
     const requiredMinutes = Math.ceil(candleData.length * 0.5);
     const conditionsMet = conditionsMetCount >= requiredMinutes;
     
-    console.log(`🔍 Gold X candle summary:`);
-    console.log(`  - Price drop conditions met: ${priceDropMetCount}/${candleData.length} minutes`);
-    console.log(`  - MA conditions met: ${maConditionMetCount}/${candleData.length} minutes`);
-    console.log(`  - BOTH conditions met: ${conditionsMetCount}/${candleData.length} minutes (need ${requiredMinutes})`);
-    console.log(`  - Final result: ${conditionsMet}`);
+    console.log(`🔍 Gold X candle: ${conditionsMetCount}/${candleData.length} minutes met conditions (need ${requiredMinutes}) = ${conditionsMet}`);
     
     return conditionsMet;
   }
