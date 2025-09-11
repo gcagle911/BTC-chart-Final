@@ -2153,8 +2153,8 @@ class TimeframeManager {
     
     console.log(`📊 Gold X calculation starting with ${this.rawData.length} data points`);
     
-    // Keep existing fake signals but add real ones
-    // this.goldXSignals.clear(); // Don't clear - keep fake signals for now
+    // Clear existing signals to avoid interference with real logic
+    this.goldXSignals.clear();
     
     // Calculate cumulative average
     this.calculateGoldXThresholds();
@@ -2175,6 +2175,22 @@ class TimeframeManager {
     
     console.log(`📊 Created ${candleBuckets.size} candle buckets for ${this.currentTimeframe} timeframe`);
     
+    // DEBUG: Show candle structure for first few candles
+    let candleIndex = 0;
+    for (const [candleTime, candleData] of candleBuckets) {
+      if (candleIndex < 3) {
+        console.log(`🔍 Candle ${candleIndex + 1}: ${new Date(candleTime * 1000).toISOString()} has ${candleData.length} data points`);
+        if (candleData.length > 0) {
+          console.log(`  First point: ${candleData[0].time}, price: ${candleData[0].price}`);
+          if (candleData.length > 1) {
+            console.log(`  Last point: ${candleData[candleData.length-1].time}, price: ${candleData[candleData.length-1].price}`);
+          }
+        }
+      }
+      candleIndex++;
+      if (candleIndex >= 3) break;
+    }
+    
     let goldXCount = 0;
     let lastGoldXTime = 0;
     const cooldownSeconds = 30 * 60; // 30 minutes
@@ -2187,7 +2203,12 @@ class TimeframeManager {
       if (candleTime - lastGoldXTime < cooldownSeconds) continue;
       
       // Check if conditions are met for ENTIRE candle
-      if (this.checkGoldXCandleConditions(candleData, candleTime)) {
+      const conditionsMet = this.checkGoldXCandleConditions(candleData, candleTime);
+      
+      // DEBUG: Log every candle result for comparison
+      console.log(`🔍 Candle ${new Date(candleTime * 1000).toISOString()}: ${candleData.length} points, conditions=${conditionsMet}`);
+      
+      if (conditionsMet) {
         const candlePrice = candleData[candleData.length - 1]?.price || 50000;
         
         this.goldXSignals.set(candleTime, {
