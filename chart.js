@@ -1714,11 +1714,11 @@ class TimeframeManager {
       return false;
     }
     
-    // Condition 1: Check if ALL spread layers are in their respective top 15%
+    // Condition 1: Check if AT LEAST 2 of 3 spread layers are in their respective top 15%
     const layers = ['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg'];
     let layersMet = 0;
     
-    console.log(`🔍 Checking ALL layers must be in top 15%:`);
+    console.log(`🔍 Checking ≥2 of 3 layers in top 15%:`);
     
     for (const layer of layers) {
       const value = currentData[layer];
@@ -1737,9 +1737,9 @@ class TimeframeManager {
       }
     }
     
-    // ALL layers must be high relative to their own ranges
-    const spreadConditionMet = layersMet === layers.length;
-    console.log(`📊 Spread condition: ${layersMet}/${layers.length} layers high in their own ranges = ${spreadConditionMet}`);
+    // Require majority (2 of 3) layers to be high relative to their own ranges
+    const spreadConditionMet = layersMet >= 2;
+    console.log(`📊 Spread condition: ${layersMet}/${layers.length} layers high (need ≥2) = ${spreadConditionMet}`);
     
     if (!spreadConditionMet) {
       return false;
@@ -1755,7 +1755,7 @@ class TimeframeManager {
       console.log(`📊 Slope condition MET: ${currentSlope.toExponential(3)} >= ${slopeThreshold.top5Percent.toExponential(3)}`);
     }
     
-    // BOTH conditions must be true (top 15% for each)
+    // BOTH conditions must be true
     const bothConditionsMet = spreadConditionMet && slopeConditionMet;
     
     console.log(`📊 Skull conditions: Spread=${spreadConditionMet}, Slope=${slopeConditionMet}, Both=${bothConditionsMet}`);
@@ -1771,7 +1771,7 @@ class TimeframeManager {
     
     if (!spreadThreshold || !slopeThreshold) return false;
     
-    // Condition 1: Check if ALL spread layers are in their respective top 15%
+    // Condition 1: Check if AT LEAST 2 of 3 spread layers are in their respective top 15%
     const layers = ['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg'];
     let layersMet = 0;
     
@@ -1787,15 +1787,15 @@ class TimeframeManager {
       }
     }
     
-    // ALL layers must be in their respective top 15%
-    const spreadConditionMet = layersMet === layers.length;
+    // Require majority (2 of 3) layers
+    const spreadConditionMet = layersMet >= 2;
     if (!spreadConditionMet) return false;
     
     // Condition 2: Slope check with proper index
     const currentSlope = this.calculateCurrentSlope(currentData, dataIndex);
     const slopeConditionMet = currentSlope >= slopeThreshold.top5Percent;
     
-    // BOTH conditions must be true (top 15% for each)
+    // BOTH conditions must be true
     return spreadConditionMet && slopeConditionMet;
   }
 
@@ -1837,27 +1837,32 @@ class TimeframeManager {
       return maxSlope;
     }
     
-    // For real-time, use the existing history approach
-    const timestamp = new Date(currentData.time).getTime();
+    // For real-time, compute per-layer slope vs previous minute and take max
     const layers = ['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg'];
+    if (!this.rawData || this.rawData.length < 2) return 0;
     
-    const currentSpreadAvg = layers
-      .map(layer => currentData[layer])
-      .filter(val => val !== null && isFinite(val))
-      .reduce((sum, val, _, arr) => sum + val / arr.length, 0);
+    // Find current index by timestamp match
+    let idx = this.rawData.length - 1;
+    for (let i = this.rawData.length - 1; i >= 0; i--) {
+      if (this.rawData[i].time === currentData.time) { idx = i; break; }
+    }
+    if (idx <= 0) return 0;
     
-    this.spreadHistory.push({ time: timestamp, value: currentSpreadAvg });
-    this.spreadHistory = this.spreadHistory.slice(-10); // Keep last 10
+    const current = this.rawData[idx];
+    const previous = this.rawData[idx - 1];
+    const tDiff = new Date(current.time).getTime() - new Date(previous.time).getTime();
+    if (tDiff <= 0) return 0;
     
-    if (this.spreadHistory.length < 2) return 0;
-    
-    const recent = this.spreadHistory[this.spreadHistory.length - 1];
-    const previous = this.spreadHistory[this.spreadHistory.length - 2];
-    
-    const timeDiff = recent.time - previous.time;
-    const valueDiff = recent.value - previous.value;
-    
-    return timeDiff > 0 ? Math.abs(valueDiff / timeDiff) : 0;
+    let maxSlope = 0;
+    for (const layer of layers) {
+      const cv = current[layer];
+      const pv = previous[layer];
+      if (cv !== null && pv !== null && isFinite(cv) && isFinite(pv)) {
+        const slope = Math.abs((cv - pv) / tDiff);
+        if (slope > maxSlope) maxSlope = slope;
+      }
+    }
+    return maxSlope;
   }
 
   // Check cooloff period
@@ -2253,7 +2258,7 @@ class TimeframeManager {
     for (let i = 0; i < candleData.length; i++) {
       const minuteData = candleData[i];
       
-      // Check if ALL spread layers are in their top 15% for this minute
+      // Check if AT LEAST 2 of 3 spread layers are in their top 15% for this minute
       const layers = ['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg'];
       let layersMetThisMinute = 0;
       
@@ -2266,8 +2271,8 @@ class TimeframeManager {
         }
       }
       
-      // ALL layers must be in top 15% for this minute
-      if (layersMetThisMinute === layers.length) {
+      // Require majority (2 of 3)
+      if (layersMetThisMinute >= 2) {
         sustainedSpreadCount++;
       }
       
