@@ -2308,7 +2308,14 @@ class TimeframeManager {
     const spreadThreshold = this.spreadThresholds.get(assetExchangeKey);
     const slopeThreshold = this.slopeThresholds.get(assetExchangeKey);
     
-    if (!spreadThreshold || !slopeThreshold) return false;
+    console.log(`🔍 Skull thresholds for ${assetExchangeKey}:`);
+    console.log(`  - spreadThreshold:`, spreadThreshold);
+    console.log(`  - slopeThreshold:`, slopeThreshold);
+    
+    if (!spreadThreshold || !slopeThreshold) {
+      console.log(`❌ Missing thresholds - spreadThreshold: ${!!spreadThreshold}, slopeThreshold: ${!!slopeThreshold}`);
+      return false;
+    }
     
     let sustainedSpreadCount = 0;
     let sustainedSlopeCount = 0;
@@ -2356,14 +2363,21 @@ class TimeframeManager {
     // DEBUG: If skull triggered, show detailed breakdown
     if (bothSustained) {
       console.log(`🔍 SKULL TRIGGERED - Detailed breakdown:`);
-      console.log(`🔍 Threshold: ${spreadThreshold.top5Percent.toFixed(6)}`);
+      console.log(`🔍 Spread Thresholds:`, spreadThreshold);
+      console.log(`🔍 Slope Threshold:`, slopeThreshold?.top5Percent?.toFixed(6) || 'undefined');
       console.log(`🔍 Candle spread values:`);
       
       candleData.forEach((minuteData, idx) => {
         const layers = ['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg'];
         const spreadValues = layers.map(layer => minuteData[layer]?.toFixed(6) || 'null');
         const maxSpread = Math.max(...layers.map(layer => minuteData[layer] || 0));
-        const meetsThreshold = maxSpread >= spreadThreshold.top5Percent;
+        // Check if all layers meet their individual thresholds
+        const layersMet = layers.filter(layer => {
+          const value = minuteData[layer];
+          const layerThreshold = spreadThreshold[layer];
+          return value !== null && layerThreshold && value >= layerThreshold;
+        }).length;
+        const meetsThreshold = layersMet === layers.length;
         
         console.log(`🔍 Minute ${idx}: [${spreadValues.join(', ')}] max=${maxSpread.toFixed(6)} >= threshold=${meetsThreshold}`);
       });
