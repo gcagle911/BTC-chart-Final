@@ -817,9 +817,12 @@ class TimeframeManager {
   processAndSetData(data, isUpdate = false) {
     const timeframeSeconds = this.timeframes[this.currentTimeframe].seconds;
     
+    // CRITICAL: Ensure data is properly sorted before processing
+    const sortedData = [...data].sort((a, b) => new Date(a.time) - new Date(b.time));
+    
     // Always use 1-minute data for MAs, only aggregate prices
-    const rawMinuteData = this.currentTimeframe === '1m' ? data : this.rawData || data;
-    const aggregatedPriceData = this.aggregateData(data, timeframeSeconds);
+    const rawMinuteData = this.currentTimeframe === '1m' ? sortedData : this.rawData || sortedData;
+    const aggregatedPriceData = this.aggregateData(sortedData, timeframeSeconds);
 
     const priceData = [];
     const ma20Data = [];
@@ -1224,7 +1227,8 @@ class TimeframeManager {
 
       if (newData.length > 0) {
         this.rawData = [...this.rawData, ...newData].sort((a, b) => new Date(a.time) - new Date(b.time));
-        this.processAndSetData(newData, true);
+        // CRITICAL FIX: Process full sorted dataset, not just new data
+        this.processAndSetData(this.rawData, false);
         console.log(`📈 Updated ${this.currentSymbol} with ${newData.length} new data points`);
       }
 
