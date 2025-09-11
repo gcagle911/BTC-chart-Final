@@ -2143,23 +2143,9 @@ class TimeframeManager {
 
   // EXACT SPECIFICATIONS - Calculate Gold X signals with proper logic
   calculateGoldXSignals() {
-    const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
-    console.log(`✖️ Calculating Gold X signals (2hr drops + MA conditions) for ${assetExchangeKey}...`);
-    
-    if (!this.rawData || this.rawData.length < 120) {
-      console.warn(`⚠️ Insufficient data for Gold X calculation: ${this.rawData?.length || 0} points (need 120+ for 2hr lookback)`);
-      return;
-    }
-    
-    console.log(`📊 Gold X calculation starting with ${this.rawData.length} data points`);
-    
-    // Clear existing signals to avoid interference with real logic
     this.goldXSignals.clear();
-    
-    // Calculate cumulative average
     this.calculateGoldXThresholds();
     
-    // Group data by candle timeframe
     const timeframeSeconds = this.timeframes[this.currentTimeframe].seconds;
     const candleBuckets = new Map();
     
@@ -2173,62 +2159,30 @@ class TimeframeManager {
       candleBuckets.get(candleTime).push(item);
     }
     
-    console.log(`📊 Created ${candleBuckets.size} candle buckets for ${this.currentTimeframe} timeframe`);
-    
-    // DEBUG: Show candle structure for first few candles
-    let candleIndex = 0;
-    for (const [candleTime, candleData] of candleBuckets) {
-      if (candleIndex < 3) {
-        console.log(`🔍 Candle ${candleIndex + 1}: ${new Date(candleTime * 1000).toISOString()} has ${candleData.length} data points`);
-        if (candleData.length > 0) {
-          console.log(`  First point: ${candleData[0].time}, price: ${candleData[0].price}`);
-          if (candleData.length > 1) {
-            console.log(`  Last point: ${candleData[candleData.length-1].time}, price: ${candleData[candleData.length-1].price}`);
-          }
-        }
-      }
-      candleIndex++;
-      if (candleIndex >= 3) break;
-    }
-    
     let goldXCount = 0;
-    let lastGoldXTime = 0;
-    const cooldownSeconds = 30 * 60; // 30 minutes
+    let qualifyingCandles = 0;
+    let checkedCandles = 0;
     
     // Process candles
     for (const [candleTime, candleData] of candleBuckets) {
       if (candleData.length === 0) continue;
+      checkedCandles++;
       
-      // Check cooldown
-      if (candleTime - lastGoldXTime < cooldownSeconds) continue;
-      
-      // Check if conditions are met for ENTIRE candle
-      const conditionsMet = this.checkGoldXCandleConditions(candleData, candleTime);
-      
-      // DEBUG: Log every candle result for comparison
-      console.log(`🔍 Candle ${new Date(candleTime * 1000).toISOString()}: ${candleData.length} points, conditions=${conditionsMet}`);
-      
-      if (conditionsMet) {
-        const candlePrice = candleData[candleData.length - 1]?.price || 50000;
-        
+      if (this.checkGoldXCandleConditions(candleData, candleTime)) {
+        qualifyingCandles++;
         this.goldXSignals.set(candleTime, {
           type: 'goldX',
-          price: candlePrice * 1.02,
+          price: candleData[candleData.length - 1]?.price * 1.02,
           active: true,
           asset: this.currentSymbol,
           exchange: API_EXCHANGE,
-          timeframe: this.currentTimeframe,
-          real: true
+          timeframe: this.currentTimeframe
         });
-        
         goldXCount++;
-        lastGoldXTime = candleTime;
-        console.log(`✖️ REAL Gold X found at ${new Date(candleTime * 1000).toISOString()}`);
       }
     }
     
-    console.log(`✅ Gold X calculation complete: Found ${goldXCount} real signals + fake signals`);
-    console.log(`📊 Total Gold X signals: ${this.goldXSignals.size}`);
+    console.log(`✖️ GOLD X ${this.currentTimeframe}: ${goldXCount} signals from ${checkedCandles} candles (${qualifyingCandles} qualified)`);
   }
 
   // Check if Gold X conditions are met for entire candlestick
@@ -2264,8 +2218,6 @@ class TimeframeManager {
     // Require conditions for majority of candle
     const requiredMinutes = Math.ceil(candleData.length * 0.5);
     const conditionsMet = conditionsMetCount >= requiredMinutes;
-    
-    console.log(`🔍 Gold X candle: ${conditionsMetCount}/${candleData.length} minutes met conditions (need ${requiredMinutes}) = ${conditionsMet}`);
     
     return conditionsMet;
   }
@@ -2677,71 +2629,18 @@ class TimeframeManager {
   }
   
   calculateAllSignals() {
-    console.log('🔄 Calculating all historical signals...');
-    console.log(`📊 Raw data available: ${this.rawData?.length || 0} points`);
-    console.log(`📊 Current asset: ${this.currentSymbol}_${API_EXCHANGE}`);
-    console.log(`📊 Current timeframe: ${this.currentTimeframe}`);
+    console.log(`🔄 CALCULATING SIGNALS: ${this.currentSymbol}_${API_EXCHANGE} on ${this.currentTimeframe} (${this.rawData?.length || 0} points)`);
     
     if (!this.rawData || this.rawData.length < 50) {
-      console.warn(`⚠️ Insufficient data for signal calculation: ${this.rawData?.length || 0} points (need 50+)`);
+      console.warn(`⚠️ Insufficient data: ${this.rawData?.length || 0} points`);
       return;
     }
     
-    // Sample some data to verify structure
-    console.log('📊 Sample data point:', JSON.stringify(this.rawData[0], null, 2));
-    console.log('📊 Last data point:', JSON.stringify(this.rawData[this.rawData.length - 1], null, 2));
-    
-    // Check data fields we need
-    const samplePoint = this.rawData[0];
-    console.log('🔍 Data fields check:');
-    console.log(`  - price: ${samplePoint.price} (${typeof samplePoint.price})`);
-    console.log(`  - spread_L50_pct_avg: ${samplePoint.spread_L50_pct_avg} (${typeof samplePoint.spread_L50_pct_avg})`);
-    console.log(`  - time: ${samplePoint.time} (${typeof samplePoint.time})`);
-    
-    // DEBUG TEST: Add multiple test signals to verify display works
-    console.log('🧪 Adding fake skull signals for testing...');
-    const fakeSkullIndices = [
-      Math.floor(this.rawData.length * 0.3),
-      Math.floor(this.rawData.length * 0.6),
-      Math.floor(this.rawData.length * 0.9)
-    ];
-    
-    for (const index of fakeSkullIndices) {
-      if (index < this.rawData.length) {
-        const testTime = this.toUnixTimestamp(this.rawData[index].time);
-        this.skullSignals.set(testTime, {
-          type: 'skull',
-          price: this.rawData[index].price * 1.02,
-          active: true,
-          asset: this.currentSymbol,
-          exchange: API_EXCHANGE,
-          timeframe: this.currentTimeframe,
-          test: true
-        });
-        console.log(`🧪 Added fake skull signal at ${new Date(testTime * 1000).toISOString()}`);
-      }
-    }
-    
-    console.log('🔄 Starting Skull signal calculation...');
     this.calculateSkullSignals();
-    console.log('🔄 Starting Gold X signal calculation...');
     this.calculateGoldXSignals();
     this.signalsCalculated = true;
-    console.log(`✅ Signal calculation complete: ${this.skullSignals.size} skulls, ${this.goldXSignals.size} gold X`);
     
-    // Debug signal details
-    if (this.skullSignals.size > 0) {
-      console.log('💀 All skull signals:');
-      Array.from(this.skullSignals.entries()).forEach(([time, signal], index) => {
-        console.log(`  ${index + 1}. Time: ${time} (${new Date(time * 1000).toISOString()}), Signal:`, signal);
-      });
-    }
-    if (this.goldXSignals.size > 0) {
-      console.log('✖️ All gold X signals:');
-      Array.from(this.goldXSignals.entries()).forEach(([time, signal], index) => {
-        console.log(`  ${index + 1}. Time: ${time} (${new Date(time * 1000).toISOString()}), Signal:`, signal);
-      });
-    }
+    console.log(`✅ RESULTS: ${this.skullSignals.size} skulls, ${this.goldXSignals.size} gold X on ${this.currentTimeframe}`);
   }
 
   // External trigger function - call this when your condition is met
