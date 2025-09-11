@@ -497,6 +497,38 @@ class TimeframeManager {
       console.log(`   Cumulative L20 Avg: ${cumulativeData.length} points (LEFT y-axis)`);
     }
 
+    // Calculate indicator data - only for the latest point or when setting complete dataset
+    const indicatorData = [];
+    if (ma50Data.length > 0 && ma100Data.length > 0 && ma200Data.length > 0) {
+      if (isUpdate) {
+        // For updates, calculate indicator for new data points only
+        const latestTime = priceData.length > 0 ? priceData[priceData.length - 1].time : null;
+        if (latestTime) {
+          const indicatorValue = calculateCustomIndicator(ma50Data, ma100Data, ma200Data, latestTime);
+          indicatorData.push({
+            time: latestTime,
+            value: indicatorValue
+          });
+        }
+      } else {
+        // For complete dataset, calculate indicator for all points with sufficient MA data
+        for (let i = Math.max(199, ma50Data.length - 1000); i < ma50Data.length; i++) {
+          if (i >= 0 && ma50Data[i] && ma100Data[i] && ma200Data[i]) {
+            // Create temporary arrays up to current point for calculation
+            const currentMA50 = ma50Data.slice(0, i + 1);
+            const currentMA100 = ma100Data.slice(0, i + 1);
+            const currentMA200 = ma200Data.slice(0, i + 1);
+            
+            const indicatorValue = calculateCustomIndicator(currentMA50, currentMA100, currentMA200, ma50Data[i].time);
+            indicatorData.push({
+              time: ma50Data[i].time,
+              value: indicatorValue
+            });
+          }
+        }
+      }
+    }
+
     if (isUpdate) {
       // Add new data points
       if (priceData.length > 0) {
@@ -511,6 +543,13 @@ class TimeframeManager {
       ema100Data.forEach(p => ema100.update(p));
       ema200Data.forEach(p => ema200.update(p));
       cumulativeData.forEach(p => cumulativeMA.update(p));
+      
+      // Update indicator
+      if (indicatorSeries && indicatorData.length > 0) {
+        console.log(`📊 Updating indicator with ${indicatorData.length} new points`);
+        indicatorData.forEach(p => indicatorSeries.update(p));
+        syncTimeScales();
+      }
     } else {
       // Set complete dataset
       priceSeries.setData(priceData);
@@ -523,6 +562,15 @@ class TimeframeManager {
       ema100.setData(ema100Data);
       ema200.setData(ema200Data);
       cumulativeMA.setData(cumulativeData);
+      
+      // Set indicator data
+      if (indicatorSeries && indicatorData.length > 0) {
+        console.log(`📊 Setting ${indicatorData.length} indicator data points`);
+        indicatorSeries.setData(indicatorData);
+        syncTimeScales();
+      } else if (indicatorData.length === 0) {
+        console.log('⚠️ No indicator data calculated - need more MA data points');
+      }
       
       // Fit content to show all data
       chart.timeScale().fitContent();
@@ -680,6 +728,260 @@ class TimeframeManager {
   }
 }
 
+// Indicator Chart Setup
+let indicatorChart = null;
+let indicatorSeries = null;
+let crossoverState = {
+  currentState: 0.5, // 0.0 = bearish, 0.5 = mixed, 1.0 = bullish
+  pendingState: null,
+  confirmationCount: 0,
+  requiredConfirmations: 20,
+  history: [] // Keep last 50 points for memory management
+};
+
+// Initialize indicator chart
+function initializeIndicatorChart() {
+  const indicatorContainer = document.getElementById('indicator-chart');
+  if (!indicatorContainer) return;
+
+  // Clear existing placeholder
+  indicatorContainer.innerHTML = '';
+
+  indicatorChart = LightweightCharts.createChart(indicatorContainer, {
+    layout: {
+      background: { color: '#0f131a' },
+      textColor: '#D1D4DC',
+      fontSize: 7,
+    },
+    grid: {
+      vertLines: { color: '#2B2B43' },
+      horzLines: { color: '#2B2B43' },
+    },
+    rightPriceScale: { 
+      visible: true,
+      scaleMargins: { top: 0.1, bottom: 0.1 },
+      borderVisible: false,
+      autoScale: false,
+      mode: LightweightCharts.PriceScaleMode.Normal,
+    },
+    timeScale: { 
+      timeVisible: false, 
+      borderVisible: false,
+      rightOffset: 15,
+      barSpacing: 12,
+      minBarSpacing: 0.1,
+      fixLeftEdge: false,
+      fixRightEdge: false,
+    },
+    crosshair: {
+      mode: LightweightCharts.CrosshairMode.Normal,
+    },
+    handleScroll: {
+      mouseWheel: false,
+      pressedMouseMove: false,
+      horzTouchDrag: false,
+      vertTouchDrag: false,
+    },
+    handleScale: {
+      mouseWheel: false,
+      pinch: false,
+      axisPressedMouseMove: { time: false, price: false },
+    },
+  });
+
+  // Add indicator series
+  indicatorSeries = indicatorChart.addLineSeries({
+    color: '#8A2BE2',
+    lineWidth: 2,
+    title: 'MA Crossover',
+    lastValueVisible: true,
+    priceLineVisible: false,
+  });
+
+  // Set fixed price scale for indicator (0.0 to 1.0)
+  indicatorChart.priceScale('right').applyOptions({
+    autoScale: false,
+    scaleMargins: { top: 0.1, bottom: 0.1 },
+  });
+
+  // Add reference lines
+  indicatorSeries.createPriceLine({
+    price: 1.0,
+    color: '#4ADF86',
+    lineStyle: LightweightCharts.LineStyle.Dashed,
+    axisLabelVisible: true,
+    title: 'Bullish ✗',
+  });
+
+  indicatorSeries.createPriceLine({
+    price: 0.5,
+    color: '#FFD700',
+    lineStyle: LightweightCharts.LineStyle.Dashed,
+    axisLabelVisible: true,
+    title: 'Mixed',
+  });
+
+  indicatorSeries.createPriceLine({
+    price: 0.0,
+    color: '#ef5350',
+    lineStyle: LightweightCharts.LineStyle.Dashed,
+    axisLabelVisible: true,
+    title: 'Bearish 💀',
+  });
+
+  console.log('✅ Indicator chart initialized');
+  
+  // Add some debugging info
+  console.log('Indicator chart dimensions:', indicatorContainer.clientWidth, 'x', indicatorContainer.clientHeight);
+}
+
+// Calculate custom MA crossover indicator
+function calculateCustomIndicator(ma50Data, ma100Data, ma200Data, currentTime) {
+  if (!ma50Data.length || !ma100Data.length || !ma200Data.length) {
+    return crossoverState.currentState;
+  }
+
+  // Get latest MA values
+  const latestMA50 = ma50Data[ma50Data.length - 1];
+  const latestMA100 = ma100Data[ma100Data.length - 1];
+  const latestMA200 = ma200Data[ma200Data.length - 1];
+
+  if (!latestMA50 || !latestMA100 || !latestMA200) {
+    return crossoverState.currentState;
+  }
+
+  // Determine current crossover state
+  let newState;
+  if (latestMA50.value > latestMA200.value && latestMA100.value > latestMA200.value) {
+    newState = 1.0; // Bullish - both MA50 and MA100 above MA200
+  } else if (latestMA50.value < latestMA200.value && latestMA100.value < latestMA200.value) {
+    newState = 0.0; // Bearish - both MA50 and MA100 below MA200
+  } else {
+    newState = 0.5; // Mixed state
+  }
+
+  // Check if we need to start confirmation process
+  if (crossoverState.pendingState === null || crossoverState.pendingState !== newState) {
+    // New potential crossover detected
+    crossoverState.pendingState = newState;
+    crossoverState.confirmationCount = 1;
+    console.log(`🔄 New crossover detected: ${getStateLabel(newState)}, starting confirmation (1/${crossoverState.requiredConfirmations})`);
+  } else if (crossoverState.pendingState === newState) {
+    // Same state continues, increment confirmation
+    crossoverState.confirmationCount++;
+    console.log(`🔄 Crossover confirmation: ${getStateLabel(newState)} (${crossoverState.confirmationCount}/${crossoverState.requiredConfirmations})`);
+    
+    // Check if we have enough confirmations
+    if (crossoverState.confirmationCount >= crossoverState.requiredConfirmations) {
+      // Confirm the crossover
+      if (crossoverState.currentState !== newState) {
+        console.log(`✅ Crossover CONFIRMED: ${getStateLabel(crossoverState.currentState)} → ${getStateLabel(newState)}`);
+        crossoverState.currentState = newState;
+      }
+      crossoverState.pendingState = null;
+      crossoverState.confirmationCount = 0;
+    }
+    
+    // Update status display
+    updateCrossoverStatus();
+  }
+
+  // Add to history for memory management
+  crossoverState.history.push({
+    time: currentTime,
+    value: crossoverState.currentState,
+    pending: crossoverState.pendingState,
+    confirmations: crossoverState.confirmationCount
+  });
+
+  // Keep only last 50 points
+  if (crossoverState.history.length > 50) {
+    crossoverState.history.shift();
+  }
+
+  return crossoverState.currentState;
+}
+
+// Helper function to get state label
+function getStateLabel(state) {
+  switch(state) {
+    case 1.0: return 'BULLISH ✗';
+    case 0.0: return 'BEARISH 💀';
+    case 0.5: return 'MIXED';
+    default: return 'UNKNOWN';
+  }
+}
+
+// Update crossover status display
+function updateCrossoverStatus() {
+  let statusDiv = document.getElementById('crossover-status');
+  if (!statusDiv) {
+    statusDiv = document.createElement('div');
+    statusDiv.id = 'crossover-status';
+    statusDiv.style.cssText = `
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 10px 15px;
+      border-radius: 6px;
+      z-index: 1000;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      min-width: 200px;
+    `;
+    document.body.appendChild(statusDiv);
+  }
+
+  const currentLabel = getStateLabel(crossoverState.currentState);
+  let statusText = `<strong>Current: ${currentLabel}</strong><br/>`;
+  
+  if (crossoverState.pendingState !== null) {
+    const pendingLabel = getStateLabel(crossoverState.pendingState);
+    const progress = `${crossoverState.confirmationCount}/${crossoverState.requiredConfirmations}`;
+    statusText += `<span style="color: #FFD700;">Pending: ${pendingLabel}</span><br/>`;
+    statusText += `<span style="color: #8A2BE2;">Confirmation: ${progress}</span>`;
+  } else {
+    statusText += `<span style="color: #4ADF86;">Status: Confirmed</span>`;
+  }
+
+  statusDiv.innerHTML = statusText;
+}
+
+// Sync indicator chart time scale with main chart
+function syncTimeScales() {
+  if (!indicatorChart || !window.chart) return;
+  
+  try {
+    const mainVisibleRange = window.chart.timeScale().getVisibleLogicalRange();
+    if (mainVisibleRange) {
+      indicatorChart.timeScale().setVisibleLogicalRange(mainVisibleRange);
+    }
+  } catch (error) {
+    console.warn('Time scale sync warning:', error);
+  }
+}
+
+// Set up chart synchronization
+function setupChartSync() {
+  if (!window.chart) return;
+  
+  // Subscribe to main chart time scale changes
+  window.chart.timeScale().subscribeVisibleLogicalRangeChange((newRange) => {
+    if (indicatorChart && newRange) {
+      try {
+        indicatorChart.timeScale().setVisibleLogicalRange(newRange);
+      } catch (error) {
+        console.warn('Chart sync error:', error);
+      }
+    }
+  });
+  
+  console.log('✅ Chart synchronization set up');
+}
+
 // Global instance
 const manager = new TimeframeManager();
 
@@ -704,6 +1006,19 @@ window.toggleIndicatorPanel = function toggleIndicatorPanel() {
       main.style.flex = '0 0 auto';
     }
     indicator.style.display = 'block';
+    
+    // Initialize indicator chart if not already done
+    if (!indicatorChart) {
+      initializeIndicatorChart();
+    }
+    
+    // Sync time scales when showing
+    setTimeout(() => {
+      syncTimeScales();
+      if (indicatorChart) {
+        indicatorChart.timeScale().fitContent();
+      }
+    }, 100);
   } else {
     indicator.style.display = 'none';
     // Restore flex so main fills
@@ -1361,6 +1676,12 @@ function setupTools() {
 // Initialize everything
 manager.initializeChart().then(() => {
   console.log('🎯 Chart ready with bid spread data and dual y-axis!');
+  
+  // Initialize indicator chart
+  initializeIndicatorChart();
+  
+  // Set up chart synchronization
+  setupChartSync();
   
   // Wire MA toggles
   setupMAToggles();

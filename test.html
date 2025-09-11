@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bitcoin Chart Test</title>
+    <style>
+        body { margin: 0; padding: 0; background: #131722; color: white; }
+        .test-info {
+            position: fixed;
+            top: 50px;
+            left: 10px;
+            background: rgba(0,0,0,0.8);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-info">
+        <h3>Indicator Test Status</h3>
+        <div id="test-status">Loading...</div>
+    </div>
+    
+    <!-- Include the main HTML content -->
+    <div id="chart-container">
+        <div id="control-panel">
+            <div class="panel-section">
+                <div class="panel-title">Indicator Panel</div>
+                <div class="btn-row">
+                    <button id="btn-toggle-indicator" class="btn">Toggle Indicator Panel</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="charts-stack">
+            <div id="main-chart"></div>
+            <div id="indicator-chart">
+                <div id="indicator-placeholder">Indicator Panel (placeholder)</div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://unpkg.com/lightweight-charts@4.0.0/dist/lightweight-charts.standalone.production.js"></script>
+    <script src="chart.js"></script>
+    <script>
+        // Test the indicator functionality
+        function updateTestStatus(message) {
+            const statusDiv = document.getElementById('test-status');
+            if (statusDiv) {
+                statusDiv.innerHTML += '<br/>' + new Date().toLocaleTimeString() + ': ' + message;
+            }
+        }
+
+        // Override console.log to capture debug messages
+        const originalLog = console.log;
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            const message = args.join(' ');
+            if (message.includes('✅') || message.includes('📊') || message.includes('🔄')) {
+                updateTestStatus(message);
+            }
+        };
+
+        // Test button functionality
+        document.getElementById('btn-toggle-indicator').addEventListener('click', () => {
+            updateTestStatus('Indicator toggle clicked');
+            if (window.toggleIndicatorPanel) {
+                window.toggleIndicatorPanel();
+            }
+        });
+
+        updateTestStatus('Test page loaded, waiting for chart initialization...');
+    </script>
+    
+    <style>
+        /* Copy necessary styles from main index.html */
+        #chart-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        #charts-stack {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            width: 100%;
+        }
+        
+        #main-chart {
+            width: 100%;
+            flex: 1 1 auto;
+            touch-action: pan-x pan-y pinch-zoom;
+            overflow: hidden;
+        }
+
+        #indicator-chart {
+            width: 100%;
+            height: 20%;
+            display: none;
+            border-top: 1px solid rgba(255,255,255,0.08);
+            position: relative;
+            background: #0f131a;
+        }
+
+        #control-panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+    </style>
+</body>
+</html>
