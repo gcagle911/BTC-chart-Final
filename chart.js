@@ -1961,91 +1961,92 @@ class TimeframeManager {
   
   calculateGoldXThresholds() {
     const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
-    console.log(`📊 Calculating Gold X thresholds for ${assetExchangeKey}`);
+    console.log(`📊 Calculating Gold X thresholds (L50 cumulative average) for ${assetExchangeKey}`);
     
-    if (!this.rawData || this.rawData.length < 200) {
+    if (!this.rawData || this.rawData.length < 50) {
       console.warn('⚠️ Insufficient data for Gold X threshold calculation');
       return;
     }
     
-    // Calculate L50 MA change rates (for top 10% threshold)
-    const maChangeRates = [];
-    const l50Values = this.rawData
-      .map(item => ({ time: new Date(item.time).getTime(), value: item.spread_L50_pct_avg }))
-      .filter(item => item.value !== null && isFinite(item.value))
-      .sort((a, b) => a.time - b.time);
-    
-    // Calculate MA change rates over 3-hour windows
-    const threeHours = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
-    
-    for (let i = 1; i < l50Values.length; i++) {
-      const current = l50Values[i];
-      const previous = l50Values[i - 1];
-      
-      const timeDiff = current.time - previous.time;
-      const valueDiff = Math.abs(current.value - previous.value);
-      
-      if (timeDiff > 0 && timeDiff <= threeHours) {
-        const changeRate = valueDiff / timeDiff;
-        maChangeRates.push(changeRate);
+    // Calculate L50 cumulative average (only thing we need now)
+    const l50Values = [];
+    for (const item of this.rawData) {
+      const value = item.spread_L50_pct_avg;
+      if (value !== null && value !== undefined && isFinite(value)) {
+        l50Values.push(value);
       }
     }
     
-    if (maChangeRates.length === 0) {
-      console.warn('⚠️ No valid MA change rates calculated');
+    if (l50Values.length === 0) {
+      console.warn('⚠️ No valid L50 spread values found');
       return;
     }
     
-    // Find top 25% MA change rate threshold (much more lenient to catch signals)
-    maChangeRates.sort((a, b) => a - b);
-    const top25PercentIndex = Math.floor(maChangeRates.length * 0.75);
-    const top25PercentChangeRate = maChangeRates[top25PercentIndex];
-    
-    // Calculate L50 cumulative average
-    const l50CumulativeAvg = l50Values.reduce((sum, item) => sum + item.value, 0) / l50Values.length;
-    
-    this.maChangeThresholds.set(assetExchangeKey, {
-      top10Percent: top25PercentChangeRate, // Keep same key name for compatibility
-      totalRates: maChangeRates.length
-    });
+    const l50CumulativeAvg = l50Values.reduce((sum, val) => sum + val, 0) / l50Values.length;
     
     this.cumulativeAverages.set(assetExchangeKey, {
       L50_avg: l50CumulativeAvg
     });
     
     console.log(`📊 Gold X thresholds for ${assetExchangeKey}:`, {
-      maChangeTop25: top25PercentChangeRate.toExponential(3),
-      l50CumAvg: l50CumulativeAvg.toFixed(6)
+      l50CumAvg: l50CumulativeAvg.toFixed(6),
+      sampleCount: l50Values.length
     });
   }
 
-  // Check Gold X trigger conditions
+  // Check Gold X trigger conditions - NEW LOGIC
   checkGoldXConditions(currentData, dataIndex) {
     const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
-    const maChangeThreshold = this.maChangeThresholds.get(assetExchangeKey);
     const cumulativeAvg = this.cumulativeAverages.get(assetExchangeKey);
     
-    if (!maChangeThreshold || !cumulativeAvg) {
-      console.warn(`⚠️ Missing Gold X thresholds for ${assetExchangeKey}`);
+    if (!cumulativeAvg) {
+      console.warn(`⚠️ Missing Gold X cumulative average for ${assetExchangeKey}`);
       return false;
     }
     
-    // Condition 1: Price dropped >= 0.8% in last 3 hours (much more lenient to catch signals)
-    const priceDropMet = this.checkPriceDrop3Hour(currentData, dataIndex, 0.8);
+    // Condition 1: Volatile price drop >= 1.5% within 30 minutes
+    const volatileDropMet = this.checkVolatilePriceDrop(currentData, dataIndex, 1.5, 30);
     
-    // Condition 2: L50 MA changed by top 25% rate in 3-hour window (much more lenient to catch signals)
-    const maChangeMet = this.checkL50MAChange3Hour(currentData, dataIndex, maChangeThreshold.top10Percent);
-    
-    // Condition 3: Current L50 spread within 50% of cumulative average (much more lenient to catch signals)
+    // Condition 2: L50 spread within 20% of cumulative average AFTER the drop
     const currentL50 = currentData.spread_L50_pct_avg;
     const avgL50 = cumulativeAvg.L50_avg;
-    const fiftyPercentRange = avgL50 * 0.50;
-    const nearAvgMet = currentL50 !== null && 
-                       Math.abs(currentL50 - avgL50) <= fiftyPercentRange;
+    const twentyPercentRange = avgL50 * 0.20;
+    const spreadNormalizedMet = currentL50 !== null && 
+                               Math.abs(currentL50 - avgL50) <= twentyPercentRange;
     
-    console.log(`📊 Gold X conditions: PriceDrop=${priceDropMet}, MAChange=${maChangeMet}, NearAvg=${nearAvgMet}`);
+    console.log(`📊 Gold X conditions: VolatileDrop=${volatileDropMet}, SpreadNormalized=${spreadNormalizedMet}`);
+    console.log(`📊 L50: current=${currentL50?.toFixed(6)}, avg=${avgL50?.toFixed(6)}, range=±${twentyPercentRange?.toFixed(6)}`);
     
-    return priceDropMet && maChangeMet && nearAvgMet;
+    return volatileDropMet && spreadNormalizedMet;
+  }
+
+  // NEW: Check for volatile price drop within specified timeframe
+  checkVolatilePriceDrop(currentData, dataIndex, dropThreshold, timeframeMinutes) {
+    if (!this.rawData || dataIndex < timeframeMinutes) return false;
+    
+    const currentPrice = currentData.price;
+    if (!currentPrice) return false;
+    
+    // Look back through the specified timeframe window
+    let maxPriceInWindow = currentPrice;
+    let minPriceInWindow = currentPrice;
+    
+    // Check each minute in the lookback window
+    for (let i = 0; i < timeframeMinutes && (dataIndex - i) >= 0; i++) {
+      const pastData = this.rawData[dataIndex - i];
+      if (pastData && pastData.price) {
+        maxPriceInWindow = Math.max(maxPriceInWindow, pastData.price);
+        minPriceInWindow = Math.min(minPriceInWindow, pastData.price);
+      }
+    }
+    
+    // Calculate the maximum drop within the window
+    const maxDrop = ((minPriceInWindow - maxPriceInWindow) / maxPriceInWindow) * 100;
+    const volatileDropMet = maxDrop <= -dropThreshold; // More negative = bigger drop
+    
+    console.log(`📊 Volatile drop check (${timeframeMinutes}min): max=${maxPriceInWindow.toFixed(2)}, min=${minPriceInWindow.toFixed(2)}, drop=${maxDrop.toFixed(2)}% (need ≤-${dropThreshold}%) = ${volatileDropMet}`);
+    
+    return volatileDropMet;
   }
 
   checkPriceDrop3Hour(currentData, dataIndex, dropThreshold = 0.8) {
@@ -2083,12 +2084,12 @@ class TimeframeManager {
     return changeMet;
   }
 
-  // Calculate all Gold X signals for current asset/exchange
+  // Calculate all Gold X signals for current asset/exchange - NEW LOGIC
   calculateGoldXSignals() {
     const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
-    console.log(`✖️ Calculating Gold X signals for ${assetExchangeKey}...`);
+    console.log(`✖️ Calculating Gold X signals (volatile drops + spread normalization) for ${assetExchangeKey}...`);
     
-    if (!this.rawData || this.rawData.length < 200) {
+    if (!this.rawData || this.rawData.length < 50) {
       console.warn('⚠️ Insufficient data for Gold X calculation');
       return;
     }
@@ -2096,17 +2097,17 @@ class TimeframeManager {
     // Clear existing Gold X signals for this asset/exchange
     this.goldXSignals.clear();
     
-    // Calculate thresholds first
+    // Calculate thresholds first (just L50 cumulative average)
     this.calculateGoldXThresholds();
     
     let goldXCount = 0;
     
-    // Process data points (start at 180 for 3-hour lookback)
-    for (let i = 180; i < this.rawData.length; i++) {
+    // Process data points (start at 30 for 30-minute lookback)
+    for (let i = 30; i < this.rawData.length; i++) {
       const currentData = this.rawData[i];
       const currentTime = this.toUnixTimestamp(currentData.time);
       
-      // Check Gold X conditions
+      // Check Gold X conditions (volatile drop + spread normalization)
       if (this.checkGoldXConditions(currentData, i)) {
         // Add Gold X signal
         this.goldXSignals.set(currentTime, {
@@ -2119,11 +2120,11 @@ class TimeframeManager {
         });
         
         goldXCount++;
-        console.log(`✖️ Historical Gold X found at ${new Date(currentTime * 1000).toISOString()}`);
+        console.log(`✖️ Gold X found at ${new Date(currentTime * 1000).toISOString()} - volatile drop with normalized spread`);
       }
     }
     
-    console.log(`✅ Gold X calculation complete: Found ${goldXCount} signals`);
+    console.log(`✅ Gold X calculation complete: Found ${goldXCount} volatile drop signals`);
     console.log(`📊 Total Gold X signals: ${this.goldXSignals.size}`);
   }
 
