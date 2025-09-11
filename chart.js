@@ -668,6 +668,7 @@ class TimeframeManager {
     this.skullSignals = new Map(); // time -> signal data
     this.goldXSignals = new Map(); // time -> signal data
     this.signalsCalculated = false;
+    this.signalSystemEnabled = false;
     
     // Skull Trigger System
     this.spreadThresholds = new Map(); // asset_exchange -> {top5Percent: value}
@@ -2610,6 +2611,8 @@ class TimeframeManager {
       // Create signal series if needed
       createSignalMarkerSeries();
     }
+    // Enable the signal system when any signal indicator is on
+    this.signalSystemEnabled = this.skullIndicatorEnabled || this.goldXIndicatorEnabled;
     
     // Update display
     this.updateSignalDisplay();
@@ -2627,6 +2630,8 @@ class TimeframeManager {
       // Create signal series if needed
       createSignalMarkerSeries();
     }
+    // Enable the signal system when any signal indicator is on
+    this.signalSystemEnabled = this.skullIndicatorEnabled || this.goldXIndicatorEnabled;
     
     // Update display
     this.updateSignalDisplay();
@@ -2739,7 +2744,7 @@ class TimeframeManager {
           time: time,
           position: 'aboveBar',
           color: '#FF0000',
-          shape: 'circle',
+          shape: 'text',
           text: '💀',
           size: 2,
         });
@@ -2754,7 +2759,7 @@ class TimeframeManager {
           time: time,
           position: 'belowBar',
           color: '#FFD700',
-          shape: 'circle',
+          shape: 'text',
           text: '✖',
           size: 2,
         });
