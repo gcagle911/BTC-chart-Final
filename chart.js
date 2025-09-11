@@ -1978,6 +1978,10 @@ class TimeframeManager {
       return;
     }
     
+    // DEBUG: Check data source URL
+    const todayUrl = buildDailyUrl(this.currentSymbol, getDateStringWithOffset(0));
+    console.log(`🔍 Data source URL: ${todayUrl}`);
+    
     // Calculate L50 cumulative average
     const l50Values = [];
     for (const item of this.rawData) {
@@ -2635,6 +2639,14 @@ class TimeframeManager {
       console.warn(`⚠️ Insufficient data: ${this.rawData?.length || 0} points`);
       return;
     }
+    
+    // DEBUG: Check data validity
+    const firstPoint = this.rawData[0];
+    const lastPoint = this.rawData[this.rawData.length - 1];
+    console.log(`🔍 DATA CHECK:`);
+    console.log(`  First: ${firstPoint.time}, price: $${firstPoint.price?.toFixed(2)}`);
+    console.log(`  Last: ${lastPoint.time}, price: $${lastPoint.price?.toFixed(2)}`);
+    console.log(`  Today: ${new Date().toISOString()}`);
     
     this.calculateSkullSignals();
     this.calculateGoldXSignals();
