@@ -1618,6 +1618,24 @@ class TimeframeManager {
     
     this.spreadThresholds.set(assetExchangeKey, layerThresholds);
     console.log(`✅ Separate thresholds calculated for ${assetExchangeKey}:`, layerThresholds);
+    
+    // DEBUG: Show how many values would qualify with these thresholds
+    for (const layer of layers) {
+      const layerValues = [];
+      for (const item of this.rawData) {
+        const value = item[layer];
+        if (value !== null && value !== undefined && isFinite(value)) {
+          layerValues.push(value);
+        }
+      }
+      if (layerValues.length > 0) {
+        layerValues.sort((a, b) => a - b);
+        const threshold = layerThresholds[layer];
+        const qualifyingCount = layerValues.filter(v => v >= threshold).length;
+        const percentage = (qualifyingCount / layerValues.length * 100).toFixed(1);
+        console.log(`🔍 ${layer}: ${qualifyingCount}/${layerValues.length} values (${percentage}%) would qualify with threshold ${threshold.toFixed(6)}`);
+      }
+    }
   }
 
   calculateSlopeThresholds() {
@@ -1924,6 +1942,19 @@ class TimeframeManager {
     
     console.log(`✅ Skull calculation complete: Found ${skullCount} skull candles for ${this.currentTimeframe}`);
     console.log(`📊 Total skull signals: ${this.skullSignals.size}`);
+    
+    // DEBUG: Show why we might have 0 signals
+    if (skullCount === 0) {
+      console.log('🔍 DEBUG: No skull signals found. Checking first few candles...');
+      let debugCount = 0;
+      for (const [candleTime, candleData] of candleBuckets) {
+        if (debugCount >= 3) break; // Only check first 3 candles
+        console.log(`🔍 Candle ${debugCount + 1}: ${new Date(candleTime * 1000).toISOString()} with ${candleData.length} data points`);
+        const conditionsMet = this.checkCandleDurationConditions(candleData, candleTime);
+        console.log(`🔍 Candle ${debugCount + 1} conditions met: ${conditionsMet}`);
+        debugCount++;
+      }
+    }
   }
 
   // GOLD X TRIGGER SYSTEM IMPLEMENTATION
@@ -2490,10 +2521,43 @@ class TimeframeManager {
   
   calculateAllSignals() {
     console.log('🔄 Calculating all historical signals...');
+    console.log(`📊 Raw data available: ${this.rawData?.length || 0} points`);
+    console.log(`📊 Current asset: ${this.currentSymbol}_${API_EXCHANGE}`);
+    console.log(`📊 Current timeframe: ${this.currentTimeframe}`);
+    
+    if (!this.rawData || this.rawData.length < 200) {
+      console.warn(`⚠️ Insufficient data for signal calculation: ${this.rawData?.length || 0} points (need 200+)`);
+      return;
+    }
+    
+    // Sample some data to verify structure
+    console.log('📊 Sample data point:', JSON.stringify(this.rawData[0], null, 2));
+    
+    // DEBUG TEST: Add a test signal to verify display works
+    const testTime = this.toUnixTimestamp(this.rawData[Math.floor(this.rawData.length / 2)].time);
+    this.skullSignals.set(testTime, {
+      type: 'skull',
+      price: this.rawData[Math.floor(this.rawData.length / 2)].price * 1.02,
+      active: true,
+      asset: this.currentSymbol,
+      exchange: API_EXCHANGE,
+      timeframe: this.currentTimeframe,
+      test: true
+    });
+    console.log('🧪 Added test skull signal for debugging');
+    
     this.calculateSkullSignals();
     this.calculateGoldXSignals();
     this.signalsCalculated = true;
     console.log(`✅ Signal calculation complete: ${this.skullSignals.size} skulls, ${this.goldXSignals.size} gold X`);
+    
+    // Debug signal details
+    if (this.skullSignals.size > 0) {
+      console.log('💀 First skull signal:', Array.from(this.skullSignals.entries())[0]);
+    }
+    if (this.goldXSignals.size > 0) {
+      console.log('✖️ First gold X signal:', Array.from(this.goldXSignals.entries())[0]);
+    }
   }
 
   // External trigger function - call this when your condition is met
