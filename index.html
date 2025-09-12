@@ -1054,7 +1054,13 @@
         .filter(line => line.trim())
         .map(line => {
           try {
-            return JSON.parse(line);
+            const parsed = JSON.parse(line);
+            // Normalize the data structure - convert 'mid' to 'price' and 't' to 'time'
+            return {
+              ...parsed,
+              price: parsed.mid || parsed.price,
+              time: parsed.t || parsed.time
+            };
           } catch (e) {
             return null;
           }
@@ -1069,21 +1075,51 @@
       // Get current price (last data point)
       const currentPrice = data[data.length - 1].price;
       
-      // Get price from 24h ago (approximately)
-      const targetTime = Date.now() - (24 * 60 * 60 * 1000);
-      let closestIndex = 0;
-      let closestTimeDiff = Math.abs(new Date(data[0].time).getTime() - targetTime);
+      // For 24h change, we want to compare with data from ~24h ago
+      // Since we have minute data, look for data from 24*60 = 1440 minutes ago
+      const targetIndex = Math.max(0, data.length - 1440);
+      const oldPrice = data[targetIndex].price;
       
-      for (let i = 1; i < data.length; i++) {
-        const timeDiff = Math.abs(new Date(data[i].time).getTime() - targetTime);
-        if (timeDiff < closestTimeDiff) {
-          closestTimeDiff = timeDiff;
-          closestIndex = i;
+      if (!currentPrice || !oldPrice) return 0;
+      
+      return ((currentPrice - oldPrice) / oldPrice) * 100;
+    }
+
+    // Fetch data for multiple days to ensure we have 24h history
+    async function fetchMultipleDays(symbol, exchange, maxDays = 2) {
+      let allData = [];
+      
+      for (let dayOffset = 0; dayOffset < maxDays; dayOffset++) {
+        try {
+          const date = new Date();
+          date.setUTCDate(date.getUTCDate() - dayOffset);
+          const dateStr = date.getUTCFullYear() + '-' + 
+                         String(date.getUTCMonth() + 1).padStart(2, '0') + '-' + 
+                         String(date.getUTCDate()).padStart(2, '0');
+          
+          let url;
+          if (exchange === 'coinbase_F') {
+            url = `${API_BASE}/futures/coinbase/${symbol}/1min/${dateStr}.jsonl`;
+          } else if (exchange === 'okx' || exchange === 'upbit') {
+            url = `${API_BASE}/futures/${exchange}/${symbol}/1min/${dateStr}.jsonl`;
+          } else {
+            url = `${API_BASE}/${exchange}/${symbol}/1min/${dateStr}.jsonl`;
+          }
+          
+          const response = await fetch(url);
+          if (response.ok) {
+            const text = await response.text();
+            const dayData = parseJsonLines(text);
+            allData = [...dayData, ...allData]; // Prepend older data
+          }
+        } catch (e) {
+          console.warn(`Failed to fetch ${symbol}/${exchange} for day ${dayOffset}:`, e);
         }
       }
       
-      const oldPrice = data[closestIndex].price;
-      return ((currentPrice - oldPrice) / oldPrice) * 100;
+      // Sort by time to ensure proper order
+      allData.sort((a, b) => new Date(a.time) - new Date(b.time));
+      return allData;
     }
 
     // Fetch and update price data for a card
@@ -1092,19 +1128,14 @@
       const exchange = card.dataset.exchange;
       
       try {
-        const url = buildDataUrl(symbol, exchange);
-        const response = await fetch(url);
-        
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-        
-        const text = await response.text();
-        const data = parseJsonLines(text);
+        console.log(`Fetching data for ${symbol}/${exchange}...`);
+        const data = await fetchMultipleDays(symbol, exchange);
         
         if (data.length > 0) {
           const currentPrice = data[data.length - 1].price;
           const change24h = calculate24hChange(data);
+          
+          console.log(`${symbol}/${exchange}: Price=${currentPrice}, Change=${change24h.toFixed(2)}%`);
           
           // Update price
           const priceElement = card.querySelector('.loading-price');
@@ -1129,6 +1160,8 @@
               changeElement.classList.add('price-neutral');
             }
           }
+        } else {
+          throw new Error('No data available');
         }
       } catch (error) {
         console.warn(`Failed to fetch data for ${symbol}/${exchange}:`, error);
