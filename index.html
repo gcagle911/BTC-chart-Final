@@ -1000,12 +1000,19 @@
 
     // Navigation function to open chart with selected asset and exchange
     function openChart(symbol, exchange) {
+      // Debug logging to verify correct parameters
+      console.log(`🔗 Opening chart for: ${symbol} on ${exchange}`);
+      
       // Add loading state
       const card = event.currentTarget;
       card.classList.add('loading');
       
+      // Show alert for debugging (remove after testing)
+      alert(`Opening: ${symbol} on ${exchange}`);
+      
       // Navigate to chart page with parameters
       const url = `chart.html?symbol=${symbol}&exchange=${exchange}`;
+      console.log(`🔗 Navigating to: ${url}`);
       window.location.href = url;
     }
 
