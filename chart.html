@@ -292,6 +292,8 @@
       const exchange = urlParams.get('exchange');
       
       if (symbol || exchange) {
+        console.log('🔗 Navigating from landing page with:', { symbol, exchange });
+        
         // Wait for the chart to initialize
         setTimeout(() => {
           if (exchange && exchange !== 'coinbase') {
@@ -304,7 +306,23 @@
             // Wait a bit more for exchange to be set first
             setTimeout(() => {
               setSymbol(symbol);
+              
+              // Apply proper autoscale after symbol is loaded
+              setTimeout(() => {
+                console.log('🔗 Applying autoscale after navigation');
+                if (typeof manager !== 'undefined' && manager.applyAutoScale) {
+                  manager.applyAutoScale();
+                }
+              }, 2000);
             }, 500);
+          } else {
+            // Even if it's BTC, apply autoscale after exchange change
+            setTimeout(() => {
+              console.log('🔗 Applying autoscale for BTC after exchange change');
+              if (typeof manager !== 'undefined' && manager.applyAutoScale) {
+                manager.applyAutoScale();
+              }
+            }, 1500);
           }
         }, 1000);
       }

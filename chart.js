@@ -698,15 +698,24 @@ class TimeframeManager {
 
   applyAutoScale() {
     try {
-      // Only auto-scale right axis (price data)
+      // Auto-scale right axis (price data) with proper margins
       chart.priceScale('right').applyOptions({ 
-        autoScale: true
+        autoScale: true,
+        scaleMargins: {
+          top: 0.02,
+          bottom: 0.02,
+        }
       });
+      
       // Keep left axis manual but allow user scaling
       chart.priceScale('left').applyOptions({ 
         autoScale: false // Manual control, but scaling allowed
       });
-      console.log('✅ Auto-scale applied: right=enabled, left=manual');
+      
+      // Fit content to show all data properly
+      chart.timeScale().fitContent();
+      
+      console.log('✅ Auto-scale applied: right=enabled with margins, left=manual, content fitted');
     } catch (e) {
       console.error('Failed to apply auto-scale:', e);
     }

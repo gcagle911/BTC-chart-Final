@@ -15,27 +15,28 @@
     html, body {
       width: 100%; 
       height: 100%;
-      background: linear-gradient(135deg, #0a0d18 0%, #131722 100%);
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      color: #d1d4dc;
+      background: #0b0e18;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif;
+      color: #e2e8f0;
       overflow-x: hidden;
+      scroll-behavior: smooth;
     }
 
-    /* Header */
+    /* Header - Sleeker Design */
     .header {
-      background: rgba(25, 28, 35, 0.95);
+      background: rgba(15, 20, 30, 0.95);
       backdrop-filter: blur(20px);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-      padding: 20px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 16px 0;
       position: sticky;
       top: 0;
       z-index: 100;
     }
 
     .header-container {
-      max-width: 1200px;
+      max-width: 1400px;
       margin: 0 auto;
-      padding: 0 20px;
+      padding: 0 24px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -44,38 +45,39 @@
     .logo-section {
       display: flex;
       align-items: center;
-      gap: 15px;
+      gap: 12px;
     }
 
     .logo {
-      width: 50px;
-      height: 50px;
-      border-radius: 12px;
-      background: linear-gradient(135deg, #2962ff, #4285f4);
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #3b82f6, #1d4ed8);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 24px;
-      font-weight: bold;
+      font-size: 18px;
+      font-weight: 700;
       color: white;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
     }
 
     .brand-info h1 {
-      font-size: 28px;
+      font-size: 24px;
       font-weight: 700;
       color: #ffffff;
       margin-bottom: 2px;
     }
 
     .brand-info p {
-      font-size: 14px;
-      color: #8b8e93;
-      font-weight: 400;
+      font-size: 13px;
+      color: #64748b;
+      font-weight: 500;
     }
 
     .header-stats {
       display: flex;
-      gap: 30px;
+      gap: 32px;
       align-items: center;
     }
 
@@ -84,108 +86,113 @@
     }
 
     .stat-value {
-      font-size: 18px;
-      font-weight: 600;
+      font-size: 20px;
+      font-weight: 700;
       color: #ffffff;
       display: block;
     }
 
     .stat-label {
-      font-size: 12px;
-      color: #8b8e93;
+      font-size: 11px;
+      color: #64748b;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.8px;
+      font-weight: 500;
     }
 
-    /* Main Content */
+    /* Main Content - Cleaner Layout */
     .main-container {
-      max-width: 1200px;
+      max-width: 1400px;
       margin: 0 auto;
-      padding: 40px 20px;
+      padding: 32px 24px;
     }
 
     .section-title {
-      font-size: 32px;
-      font-weight: 700;
+      font-size: 36px;
+      font-weight: 800;
       color: #ffffff;
-      margin-bottom: 12px;
+      margin-bottom: 8px;
       text-align: center;
+      letter-spacing: -0.02em;
     }
 
     .section-subtitle {
       font-size: 16px;
-      color: #8b8e93;
+      color: #64748b;
       text-align: center;
-      margin-bottom: 50px;
-      max-width: 600px;
+      margin-bottom: 48px;
+      max-width: 560px;
       margin-left: auto;
       margin-right: auto;
+      line-height: 1.6;
     }
 
-    /* Exchange Sections */
+    /* Exchange Sections - More Compact */
     .exchange-section {
-      margin-bottom: 60px;
+      margin-bottom: 48px;
     }
 
     .exchange-header {
       display: flex;
       align-items: center;
-      gap: 15px;
-      margin-bottom: 25px;
-      padding-bottom: 15px;
-      border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+      gap: 12px;
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     }
 
     .exchange-icon {
-      width: 40px;
-      height: 40px;
+      width: 36px;
+      height: 36px;
       border-radius: 8px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 18px;
-      font-weight: bold;
+      font-size: 14px;
+      font-weight: 700;
       color: white;
     }
 
     .coinbase { background: linear-gradient(135deg, #0052ff, #1652f0); }
     .kraken { background: linear-gradient(135deg, #5741d9, #7c3aed); }
     .coinbase_F { background: linear-gradient(135deg, #ff6b35, #f7931e); }
-    .okx { background: linear-gradient(135deg, #000000, #333333); }
+    .okx { background: linear-gradient(135deg, #000000, #1a1a1a); }
     .upbit { background: linear-gradient(135deg, #0099ff, #00ccff); }
 
     .exchange-title {
-      font-size: 24px;
-      font-weight: 600;
+      font-size: 20px;
+      font-weight: 700;
       color: #ffffff;
     }
 
     .exchange-type {
-      font-size: 12px;
-      color: #8b8e93;
-      background: rgba(255, 255, 255, 0.1);
-      padding: 4px 8px;
-      border-radius: 4px;
+      font-size: 11px;
+      color: #64748b;
+      background: rgba(255, 255, 255, 0.06);
+      padding: 3px 8px;
+      border-radius: 12px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
+      font-weight: 500;
     }
 
-    /* Asset Grid */
+    /* Asset Grid - Mobile First */
     .assets-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 20px;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 16px;
     }
 
     .asset-card {
-      background: rgba(25, 28, 35, 0.8);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 12px;
-      padding: 24px;
+      background: rgba(15, 20, 30, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 16px;
+      padding: 20px;
       cursor: pointer;
-      transition: all 0.3s ease;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       position: relative;
       overflow: hidden;
+      backdrop-filter: blur(10px);
     }
 
     .asset-card::before {
@@ -195,16 +202,16 @@
       left: 0;
       right: 0;
       bottom: 0;
-      background: linear-gradient(135deg, rgba(41, 98, 255, 0.1), rgba(66, 133, 244, 0.05));
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(99, 102, 241, 0.04));
       opacity: 0;
       transition: opacity 0.3s ease;
       pointer-events: none;
     }
 
     .asset-card:hover {
-      border-color: #2962ff;
-      transform: translateY(-2px);
-      box-shadow: 0 8px 25px rgba(41, 98, 255, 0.15);
+      border-color: rgba(59, 130, 246, 0.3);
+      transform: translateY(-4px);
+      box-shadow: 0 12px 32px rgba(59, 130, 246, 0.12);
     }
 
     .asset-card:hover::before {
@@ -214,23 +221,24 @@
     .asset-header {
       display: flex;
       align-items: center;
-      gap: 15px;
-      margin-bottom: 20px;
+      gap: 12px;
+      margin-bottom: 16px;
       position: relative;
       z-index: 1;
     }
 
     .asset-icon {
-      width: 50px;
-      height: 50px;
+      width: 44px;
+      height: 44px;
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 20px;
-      font-weight: bold;
+      font-weight: 600;
       color: white;
       position: relative;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.2);
     }
 
     .btc { background: linear-gradient(135deg, #f7931a, #ffb347); }
@@ -239,58 +247,66 @@
     .xrp { background: linear-gradient(135deg, #00aae4, #1ba0d8); }
 
     .asset-info h3 {
-      font-size: 20px;
-      font-weight: 600;
+      font-size: 18px;
+      font-weight: 700;
       color: #ffffff;
-      margin-bottom: 4px;
+      margin-bottom: 2px;
     }
 
     .asset-info p {
-      font-size: 14px;
-      color: #8b8e93;
+      font-size: 13px;
+      color: #64748b;
+      font-weight: 500;
     }
 
     .asset-stats {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 15px;
-      margin-bottom: 20px;
+      gap: 12px;
+      margin-bottom: 16px;
       position: relative;
       z-index: 1;
     }
 
     .stat-box {
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 8px;
-      padding: 12px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      border-radius: 10px;
+      padding: 12px 8px;
       text-align: center;
     }
 
     .stat-box .value {
-      font-size: 16px;
-      font-weight: 600;
+      font-size: 15px;
+      font-weight: 700;
       color: #ffffff;
       display: block;
+      margin-bottom: 2px;
     }
 
     .stat-box .label {
-      font-size: 11px;
-      color: #8b8e93;
+      font-size: 10px;
+      color: #64748b;
       text-transform: uppercase;
       letter-spacing: 0.5px;
+      font-weight: 500;
     }
+
+    .price-positive { color: #10b981; }
+    .price-negative { color: #ef4444; }
+    .price-neutral { color: #64748b; }
 
     .view-chart-btn {
       width: 100%;
-      background: linear-gradient(135deg, #2962ff, #4285f4);
+      background: linear-gradient(135deg, #3b82f6, #1d4ed8);
       border: none;
       color: white;
       padding: 12px 20px;
-      border-radius: 8px;
-      font-size: 14px;
+      border-radius: 10px;
+      font-size: 13px;
       font-weight: 600;
       cursor: pointer;
-      transition: all 0.3s ease;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       text-transform: uppercase;
       letter-spacing: 0.5px;
       position: relative;
@@ -298,60 +314,76 @@
     }
 
     .view-chart-btn:hover {
-      background: linear-gradient(135deg, #1e4fff, #2962ff);
+      background: linear-gradient(135deg, #2563eb, #1e40af);
       transform: translateY(-1px);
-      box-shadow: 0 4px 15px rgba(41, 98, 255, 0.3);
+      box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
     }
 
-    /* Footer */
+    /* Loading States */
+    .loading-price, .loading-change {
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.6; }
+      50% { opacity: 1; }
+    }
+
+    /* Footer - Cleaner */
     .footer {
-      background: rgba(25, 28, 35, 0.95);
-      border-top: 1px solid rgba(255, 255, 255, 0.1);
-      padding: 30px 0;
-      margin-top: 60px;
+      background: rgba(15, 20, 30, 0.95);
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      padding: 24px 0;
+      margin-top: 48px;
     }
 
     .footer-container {
-      max-width: 1200px;
+      max-width: 1400px;
       margin: 0 auto;
-      padding: 0 20px;
+      padding: 0 24px;
       text-align: center;
     }
 
     .footer-text {
-      color: #8b8e93;
-      font-size: 14px;
-      margin-bottom: 10px;
+      color: #64748b;
+      font-size: 13px;
+      margin-bottom: 8px;
     }
 
     .footer-links {
       display: flex;
       justify-content: center;
-      gap: 30px;
+      gap: 24px;
       flex-wrap: wrap;
     }
 
     .footer-link {
-      color: #d1d4dc;
+      color: #94a3b8;
       text-decoration: none;
-      font-size: 14px;
+      font-size: 13px;
       transition: color 0.3s ease;
+      font-weight: 500;
     }
 
     .footer-link:hover {
-      color: #2962ff;
+      color: #3b82f6;
     }
 
-    /* Responsive Design */
+    /* Mobile Responsive - Much Cleaner */
     @media (max-width: 768px) {
       .header-container {
         flex-direction: column;
-        gap: 20px;
+        gap: 16px;
         text-align: center;
+        padding: 0 16px;
       }
 
       .header-stats {
         gap: 20px;
+      }
+
+      .main-container {
+        padding: 24px 16px;
       }
 
       .section-title {
@@ -360,48 +392,75 @@
 
       .assets-grid {
         grid-template-columns: 1fr;
-        gap: 15px;
+        gap: 12px;
       }
 
       .exchange-header {
-        flex-direction: column;
+        justify-content: center;
         text-align: center;
-        gap: 10px;
+        gap: 8px;
       }
 
-      .footer-links {
-        flex-direction: column;
-        gap: 15px;
+      .asset-card {
+        padding: 16px;
+      }
+
+      .asset-stats {
+        gap: 8px;
+      }
+
+      .stat-box {
+        padding: 10px 6px;
+      }
+
+      .stat-box .value {
+        font-size: 14px;
       }
     }
 
     @media (max-width: 480px) {
-      .main-container {
-        padding: 30px 15px;
+      .header-container {
+        padding: 0 12px;
       }
 
-      .asset-card {
-        padding: 20px;
+      .main-container {
+        padding: 20px 12px;
       }
 
       .brand-info h1 {
+        font-size: 20px;
+      }
+
+      .section-title {
         font-size: 24px;
       }
-    }
 
-    /* Loading Animation */
-    .loading {
-      opacity: 0.7;
-      pointer-events: none;
-    }
+      .section-subtitle {
+        font-size: 14px;
+      }
 
-    .loading .asset-card {
-      animation: pulse 2s infinite;
-    }
+      .asset-card {
+        padding: 14px;
+      }
 
-    @keyframes pulse {
-      0%, 100% { opacity: 0.7; }
-      50% { opacity: 1; }
+      .asset-header {
+        gap: 10px;
+      }
+
+      .asset-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 18px;
+      }
+
+      .asset-info h3 {
+        font-size: 16px;
+      }
+
+      .footer-links {
+        flex-direction: column;
+        gap: 12px;
+      }
     }
   </style>
 </head>
@@ -451,7 +510,7 @@
         </div>
       </div>
       <div class="assets-grid">
-        <div class="asset-card" onclick="openChart('BTC', 'coinbase')">
+        <div class="asset-card" onclick="openChart('BTC', 'coinbase')" data-symbol="BTC" data-exchange="coinbase">
           <div class="asset-header">
             <div class="asset-icon btc">₿</div>
             <div class="asset-info">
@@ -461,18 +520,18 @@
           </div>
           <div class="asset-stats">
             <div class="stat-box">
-              <span class="value">$--,---</span>
+              <span class="value loading-price">Loading...</span>
               <span class="label">Price</span>
             </div>
             <div class="stat-box">
-              <span class="value">--.-%</span>
+              <span class="value loading-change">--.-%</span>
               <span class="label">24h Change</span>
             </div>
           </div>
           <button class="view-chart-btn">View Chart</button>
         </div>
 
-        <div class="asset-card" onclick="openChart('ETH', 'coinbase')">
+        <div class="asset-card" onclick="openChart('ETH', 'coinbase')" data-symbol="ETH" data-exchange="coinbase">
           <div class="asset-header">
             <div class="asset-icon eth">Ξ</div>
             <div class="asset-info">
@@ -482,18 +541,18 @@
           </div>
           <div class="asset-stats">
             <div class="stat-box">
-              <span class="value">$--,---</span>
+              <span class="value loading-price">Loading...</span>
               <span class="label">Price</span>
             </div>
             <div class="stat-box">
-              <span class="value">--.-%</span>
+              <span class="value loading-change">--.-%</span>
               <span class="label">24h Change</span>
             </div>
           </div>
           <button class="view-chart-btn">View Chart</button>
         </div>
 
-        <div class="asset-card" onclick="openChart('ADA', 'coinbase')">
+        <div class="asset-card" onclick="openChart('ADA', 'coinbase')" data-symbol="ADA" data-exchange="coinbase">
           <div class="asset-header">
             <div class="asset-icon ada">₳</div>
             <div class="asset-info">
@@ -503,18 +562,18 @@
           </div>
           <div class="asset-stats">
             <div class="stat-box">
-              <span class="value">$--.--</span>
+              <span class="value loading-price">Loading...</span>
               <span class="label">Price</span>
             </div>
             <div class="stat-box">
-              <span class="value">--.-%</span>
+              <span class="value loading-change">--.-%</span>
               <span class="label">24h Change</span>
             </div>
           </div>
           <button class="view-chart-btn">View Chart</button>
         </div>
 
-        <div class="asset-card" onclick="openChart('XRP', 'coinbase')">
+        <div class="asset-card" onclick="openChart('XRP', 'coinbase')" data-symbol="XRP" data-exchange="coinbase">
           <div class="asset-header">
             <div class="asset-icon xrp">◉</div>
             <div class="asset-info">
@@ -524,11 +583,11 @@
           </div>
           <div class="asset-stats">
             <div class="stat-box">
-              <span class="value">$--.--</span>
+              <span class="value loading-price">Loading...</span>
               <span class="label">Price</span>
             </div>
             <div class="stat-box">
-              <span class="value">--.-%</span>
+              <span class="value loading-change">--.-%</span>
               <span class="label">24h Change</span>
             </div>
           </div>
@@ -547,7 +606,7 @@
         </div>
       </div>
       <div class="assets-grid">
-        <div class="asset-card" onclick="openChart('BTC', 'kraken')">
+        <div class="asset-card" onclick="openChart('BTC', 'kraken')" data-symbol="BTC" data-exchange="kraken">
           <div class="asset-header">
             <div class="asset-icon btc">₿</div>
             <div class="asset-info">
@@ -557,18 +616,18 @@
           </div>
           <div class="asset-stats">
             <div class="stat-box">
-              <span class="value">$--,---</span>
+              <span class="value loading-price">Loading...</span>
               <span class="label">Price</span>
             </div>
             <div class="stat-box">
-              <span class="value">--.-%</span>
+              <span class="value loading-change">--.-%</span>
               <span class="label">24h Change</span>
             </div>
           </div>
           <button class="view-chart-btn">View Chart</button>
         </div>
 
-        <div class="asset-card" onclick="openChart('ETH', 'kraken')">
+        <div class="asset-card" onclick="openChart('ETH', 'kraken')" data-symbol="ETH" data-exchange="kraken">
           <div class="asset-header">
             <div class="asset-icon eth">Ξ</div>
             <div class="asset-info">
@@ -578,18 +637,18 @@
           </div>
           <div class="asset-stats">
             <div class="stat-box">
-              <span class="value">$--,---</span>
+              <span class="value loading-price">Loading...</span>
               <span class="label">Price</span>
             </div>
             <div class="stat-box">
-              <span class="value">--.-%</span>
+              <span class="value loading-change">--.-%</span>
               <span class="label">24h Change</span>
             </div>
           </div>
           <button class="view-chart-btn">View Chart</button>
         </div>
 
-        <div class="asset-card" onclick="openChart('ADA', 'kraken')">
+        <div class="asset-card" onclick="openChart('ADA', 'kraken')" data-symbol="ADA" data-exchange="kraken">
           <div class="asset-header">
             <div class="asset-icon ada">₳</div>
             <div class="asset-info">
@@ -599,18 +658,18 @@
           </div>
           <div class="asset-stats">
             <div class="stat-box">
-              <span class="value">$--.--</span>
+              <span class="value loading-price">Loading...</span>
               <span class="label">Price</span>
             </div>
             <div class="stat-box">
-              <span class="value">--.-%</span>
+              <span class="value loading-change">--.-%</span>
               <span class="label">24h Change</span>
             </div>
           </div>
           <button class="view-chart-btn">View Chart</button>
         </div>
 
-        <div class="asset-card" onclick="openChart('XRP', 'kraken')">
+        <div class="asset-card" onclick="openChart('XRP', 'kraken')" data-symbol="XRP" data-exchange="kraken">
           <div class="asset-header">
             <div class="asset-icon xrp">◉</div>
             <div class="asset-info">
@@ -620,11 +679,11 @@
           </div>
           <div class="asset-stats">
             <div class="stat-box">
-              <span class="value">$--.--</span>
+              <span class="value loading-price">Loading...</span>
               <span class="label">Price</span>
             </div>
             <div class="stat-box">
-              <span class="value">--.-%</span>
+              <span class="value loading-change">--.-%</span>
               <span class="label">24h Change</span>
             </div>
           </div>
@@ -643,7 +702,7 @@
         </div>
       </div>
       <div class="assets-grid">
-        <div class="asset-card" onclick="openChart('BTC', 'coinbase_F')">
+        <div class="asset-card" onclick="openChart('BTC', 'coinbase_F')" data-symbol="BTC" data-exchange="coinbase_F">
           <div class="asset-header">
             <div class="asset-icon btc">₿</div>
             <div class="asset-info">
@@ -653,18 +712,18 @@
           </div>
           <div class="asset-stats">
             <div class="stat-box">
-              <span class="value">$--,---</span>
+              <span class="value loading-price">Loading...</span>
               <span class="label">Price</span>
             </div>
             <div class="stat-box">
-              <span class="value">--.-%</span>
+              <span class="value loading-change">--.-%</span>
               <span class="label">24h Change</span>
             </div>
           </div>
           <button class="view-chart-btn">View Chart</button>
         </div>
 
-        <div class="asset-card" onclick="openChart('ETH', 'coinbase_F')">
+        <div class="asset-card" onclick="openChart('ETH', 'coinbase_F')" data-symbol="ETH" data-exchange="coinbase_F">
           <div class="asset-header">
             <div class="asset-icon eth">Ξ</div>
             <div class="asset-info">
@@ -674,18 +733,18 @@
           </div>
           <div class="asset-stats">
             <div class="stat-box">
-              <span class="value">$--,---</span>
+              <span class="value loading-price">Loading...</span>
               <span class="label">Price</span>
             </div>
             <div class="stat-box">
-              <span class="value">--.-%</span>
+              <span class="value loading-change">--.-%</span>
               <span class="label">24h Change</span>
             </div>
           </div>
           <button class="view-chart-btn">View Chart</button>
         </div>
 
-        <div class="asset-card" onclick="openChart('ADA', 'coinbase_F')">
+        <div class="asset-card" onclick="openChart('ADA', 'coinbase_F')" data-symbol="ADA" data-exchange="coinbase_F">
           <div class="asset-header">
             <div class="asset-icon ada">₳</div>
             <div class="asset-info">
@@ -695,18 +754,18 @@
           </div>
           <div class="asset-stats">
             <div class="stat-box">
-              <span class="value">$--.--</span>
+              <span class="value loading-price">Loading...</span>
               <span class="label">Price</span>
             </div>
             <div class="stat-box">
-              <span class="value">--.-%</span>
+              <span class="value loading-change">--.-%</span>
               <span class="label">24h Change</span>
             </div>
           </div>
           <button class="view-chart-btn">View Chart</button>
         </div>
 
-        <div class="asset-card" onclick="openChart('XRP', 'coinbase_F')">
+        <div class="asset-card" onclick="openChart('XRP', 'coinbase_F')" data-symbol="XRP" data-exchange="coinbase_F">
           <div class="asset-header">
             <div class="asset-icon xrp">◉</div>
             <div class="asset-info">
@@ -716,11 +775,11 @@
           </div>
           <div class="asset-stats">
             <div class="stat-box">
-              <span class="value">$--.--</span>
+              <span class="value loading-price">Loading...</span>
               <span class="label">Price</span>
             </div>
             <div class="stat-box">
-              <span class="value">--.-%</span>
+              <span class="value loading-change">--.-%</span>
               <span class="label">24h Change</span>
             </div>
           </div>
@@ -739,7 +798,7 @@
         </div>
       </div>
       <div class="assets-grid">
-        <div class="asset-card" onclick="openChart('BTC', 'okx')">
+        <div class="asset-card" onclick="openChart('BTC', 'okx')" data-symbol="BTC" data-exchange="okx">
           <div class="asset-header">
             <div class="asset-icon btc">₿</div>
             <div class="asset-info">
@@ -749,18 +808,18 @@
           </div>
           <div class="asset-stats">
             <div class="stat-box">
-              <span class="value">$--,---</span>
+              <span class="value loading-price">Loading...</span>
               <span class="label">Price</span>
             </div>
             <div class="stat-box">
-              <span class="value">--.-%</span>
+              <span class="value loading-change">--.-%</span>
               <span class="label">24h Change</span>
             </div>
           </div>
           <button class="view-chart-btn">View Chart</button>
         </div>
 
-        <div class="asset-card" onclick="openChart('ETH', 'okx')">
+        <div class="asset-card" onclick="openChart('ETH', 'okx')" data-symbol="ETH" data-exchange="okx">
           <div class="asset-header">
             <div class="asset-icon eth">Ξ</div>
             <div class="asset-info">
@@ -770,18 +829,18 @@
           </div>
           <div class="asset-stats">
             <div class="stat-box">
-              <span class="value">$--,---</span>
+              <span class="value loading-price">Loading...</span>
               <span class="label">Price</span>
             </div>
             <div class="stat-box">
-              <span class="value">--.-%</span>
+              <span class="value loading-change">--.-%</span>
               <span class="label">24h Change</span>
             </div>
           </div>
           <button class="view-chart-btn">View Chart</button>
         </div>
 
-        <div class="asset-card" onclick="openChart('ADA', 'okx')">
+        <div class="asset-card" onclick="openChart('ADA', 'okx')" data-symbol="ADA" data-exchange="okx">
           <div class="asset-header">
             <div class="asset-icon ada">₳</div>
             <div class="asset-info">
@@ -791,18 +850,18 @@
           </div>
           <div class="asset-stats">
             <div class="stat-box">
-              <span class="value">$--.--</span>
+              <span class="value loading-price">Loading...</span>
               <span class="label">Price</span>
             </div>
             <div class="stat-box">
-              <span class="value">--.-%</span>
+              <span class="value loading-change">--.-%</span>
               <span class="label">24h Change</span>
             </div>
           </div>
           <button class="view-chart-btn">View Chart</button>
         </div>
 
-        <div class="asset-card" onclick="openChart('XRP', 'okx')">
+        <div class="asset-card" onclick="openChart('XRP', 'okx')" data-symbol="XRP" data-exchange="okx">
           <div class="asset-header">
             <div class="asset-icon xrp">◉</div>
             <div class="asset-info">
@@ -812,11 +871,11 @@
           </div>
           <div class="asset-stats">
             <div class="stat-box">
-              <span class="value">$--.--</span>
+              <span class="value loading-price">Loading...</span>
               <span class="label">Price</span>
             </div>
             <div class="stat-box">
-              <span class="value">--.-%</span>
+              <span class="value loading-change">--.-%</span>
               <span class="label">24h Change</span>
             </div>
           </div>
@@ -835,7 +894,7 @@
         </div>
       </div>
       <div class="assets-grid">
-        <div class="asset-card" onclick="openChart('BTC', 'upbit')">
+        <div class="asset-card" onclick="openChart('BTC', 'upbit')" data-symbol="BTC" data-exchange="upbit">
           <div class="asset-header">
             <div class="asset-icon btc">₿</div>
             <div class="asset-info">
@@ -845,18 +904,18 @@
           </div>
           <div class="asset-stats">
             <div class="stat-box">
-              <span class="value">$--,---</span>
+              <span class="value loading-price">Loading...</span>
               <span class="label">Price</span>
             </div>
             <div class="stat-box">
-              <span class="value">--.-%</span>
+              <span class="value loading-change">--.-%</span>
               <span class="label">24h Change</span>
             </div>
           </div>
           <button class="view-chart-btn">View Chart</button>
         </div>
 
-        <div class="asset-card" onclick="openChart('ETH', 'upbit')">
+        <div class="asset-card" onclick="openChart('ETH', 'upbit')" data-symbol="ETH" data-exchange="upbit">
           <div class="asset-header">
             <div class="asset-icon eth">Ξ</div>
             <div class="asset-info">
@@ -866,18 +925,18 @@
           </div>
           <div class="asset-stats">
             <div class="stat-box">
-              <span class="value">$--,---</span>
+              <span class="value loading-price">Loading...</span>
               <span class="label">Price</span>
             </div>
             <div class="stat-box">
-              <span class="value">--.-%</span>
+              <span class="value loading-change">--.-%</span>
               <span class="label">24h Change</span>
             </div>
           </div>
           <button class="view-chart-btn">View Chart</button>
         </div>
 
-        <div class="asset-card" onclick="openChart('ADA', 'upbit')">
+        <div class="asset-card" onclick="openChart('ADA', 'upbit')" data-symbol="ADA" data-exchange="upbit">
           <div class="asset-header">
             <div class="asset-icon ada">₳</div>
             <div class="asset-info">
@@ -887,18 +946,18 @@
           </div>
           <div class="asset-stats">
             <div class="stat-box">
-              <span class="value">$--.--</span>
+              <span class="value loading-price">Loading...</span>
               <span class="label">Price</span>
             </div>
             <div class="stat-box">
-              <span class="value">--.-%</span>
+              <span class="value loading-change">--.-%</span>
               <span class="label">24h Change</span>
             </div>
           </div>
           <button class="view-chart-btn">View Chart</button>
         </div>
 
-        <div class="asset-card" onclick="openChart('XRP', 'upbit')">
+        <div class="asset-card" onclick="openChart('XRP', 'upbit')" data-symbol="XRP" data-exchange="upbit">
           <div class="asset-header">
             <div class="asset-icon xrp">◉</div>
             <div class="asset-info">
@@ -908,11 +967,11 @@
           </div>
           <div class="asset-stats">
             <div class="stat-box">
-              <span class="value">$--.--</span>
+              <span class="value loading-price">Loading...</span>
               <span class="label">Price</span>
             </div>
             <div class="stat-box">
-              <span class="value">--.-%</span>
+              <span class="value loading-change">--.-%</span>
               <span class="label">24h Change</span>
             </div>
           </div>
@@ -936,6 +995,9 @@
   </footer>
 
   <script>
+    // API Base URL for fetching data
+    const API_BASE = 'https://storage.googleapis.com/bananazone';
+
     // Navigation function to open chart with selected asset and exchange
     function openChart(symbol, exchange) {
       // Add loading state
@@ -947,21 +1009,146 @@
       window.location.href = url;
     }
 
-    // Add smooth scroll behavior
-    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-      anchor.addEventListener('click', function (e) {
-        e.preventDefault();
-        const target = document.querySelector(this.getAttribute('href'));
-        if (target) {
-          target.scrollIntoView({
-            behavior: 'smooth',
-            block: 'start'
-          });
-        }
-      });
-    });
+    // Format price with appropriate decimal places
+    function formatPrice(price) {
+      if (price >= 1000) {
+        return `$${price.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+      } else if (price >= 1) {
+        return `$${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      } else {
+        return `$${price.toFixed(4)}`;
+      }
+    }
 
-    // Add hover effects and animations
+    // Format percentage change
+    function formatChange(change) {
+      const formatted = Math.abs(change).toFixed(2);
+      return change >= 0 ? `+${formatted}%` : `-${formatted}%`;
+    }
+
+    // Get current date string
+    function getDateString() {
+      const now = new Date();
+      const year = now.getUTCFullYear();
+      const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(now.getUTCDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    // Build URL for fetching data
+    function buildDataUrl(symbol, exchange) {
+      const today = getDateString();
+      if (exchange === 'coinbase_F') {
+        return `${API_BASE}/futures/coinbase/${symbol}/1min/${today}.jsonl`;
+      } else if (exchange === 'okx' || exchange === 'upbit') {
+        return `${API_BASE}/futures/${exchange}/${symbol}/1min/${today}.jsonl`;
+      } else {
+        return `${API_BASE}/${exchange}/${symbol}/1min/${today}.jsonl`;
+      }
+    }
+
+    // Parse JSONL data
+    function parseJsonLines(text) {
+      if (!text || text.trim() === '') return [];
+      return text.trim().split('\n')
+        .filter(line => line.trim())
+        .map(line => {
+          try {
+            return JSON.parse(line);
+          } catch (e) {
+            return null;
+          }
+        })
+        .filter(Boolean);
+    }
+
+    // Calculate 24h change
+    function calculate24hChange(data) {
+      if (!data || data.length < 2) return 0;
+      
+      // Get current price (last data point)
+      const currentPrice = data[data.length - 1].price;
+      
+      // Get price from 24h ago (approximately)
+      const targetTime = Date.now() - (24 * 60 * 60 * 1000);
+      let closestIndex = 0;
+      let closestTimeDiff = Math.abs(new Date(data[0].time).getTime() - targetTime);
+      
+      for (let i = 1; i < data.length; i++) {
+        const timeDiff = Math.abs(new Date(data[i].time).getTime() - targetTime);
+        if (timeDiff < closestTimeDiff) {
+          closestTimeDiff = timeDiff;
+          closestIndex = i;
+        }
+      }
+      
+      const oldPrice = data[closestIndex].price;
+      return ((currentPrice - oldPrice) / oldPrice) * 100;
+    }
+
+    // Fetch and update price data for a card
+    async function updateCardData(card) {
+      const symbol = card.dataset.symbol;
+      const exchange = card.dataset.exchange;
+      
+      try {
+        const url = buildDataUrl(symbol, exchange);
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const text = await response.text();
+        const data = parseJsonLines(text);
+        
+        if (data.length > 0) {
+          const currentPrice = data[data.length - 1].price;
+          const change24h = calculate24hChange(data);
+          
+          // Update price
+          const priceElement = card.querySelector('.loading-price');
+          if (priceElement) {
+            priceElement.textContent = formatPrice(currentPrice);
+            priceElement.classList.remove('loading-price');
+          }
+          
+          // Update 24h change
+          const changeElement = card.querySelector('.loading-change');
+          if (changeElement) {
+            changeElement.textContent = formatChange(change24h);
+            changeElement.classList.remove('loading-change');
+            
+            // Add color based on change
+            changeElement.classList.remove('price-positive', 'price-negative', 'price-neutral');
+            if (change24h > 0) {
+              changeElement.classList.add('price-positive');
+            } else if (change24h < 0) {
+              changeElement.classList.add('price-negative');
+            } else {
+              changeElement.classList.add('price-neutral');
+            }
+          }
+        }
+      } catch (error) {
+        console.warn(`Failed to fetch data for ${symbol}/${exchange}:`, error);
+        
+        // Update with error state
+        const priceElement = card.querySelector('.loading-price');
+        if (priceElement) {
+          priceElement.textContent = 'N/A';
+          priceElement.classList.remove('loading-price');
+        }
+        
+        const changeElement = card.querySelector('.loading-change');
+        if (changeElement) {
+          changeElement.textContent = 'N/A';
+          changeElement.classList.remove('loading-change');
+        }
+      }
+    }
+
+    // Initialize page
     document.addEventListener('DOMContentLoaded', function() {
       // Animate cards on scroll
       const cards = document.querySelectorAll('.asset-card');
@@ -974,11 +1161,33 @@
         });
       }, { threshold: 0.1 });
 
-      cards.forEach(card => {
+      // Set up animation and fetch data for each card
+      cards.forEach((card, index) => {
+        // Initial animation setup
         card.style.opacity = '0';
         card.style.transform = 'translateY(20px)';
         card.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+        card.style.transitionDelay = `${index * 0.1}s`;
         observer.observe(card);
+        
+        // Fetch data with staggered timing to avoid overwhelming the API
+        setTimeout(() => {
+          updateCardData(card);
+        }, index * 200);
+      });
+
+      // Smooth scroll for anchor links
+      document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener('click', function (e) {
+          e.preventDefault();
+          const target = document.querySelector(this.getAttribute('href'));
+          if (target) {
+            target.scrollIntoView({
+              behavior: 'smooth',
+              block: 'start'
+            });
+          }
+        });
       });
     });
   </script>
