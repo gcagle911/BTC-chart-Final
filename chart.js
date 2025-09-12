@@ -3788,8 +3788,42 @@ function handlePinchZoom(scaleChange) {
   }
 }
 
-// Initialize everything
-manager.initializeChart().then(() => {
+// Initialize everything with URL parameter support
+async function initializeWithUrlParams() {
+  // Check for URL parameters before initialization
+  if (typeof window !== 'undefined' && (window.urlSymbol || window.urlExchange)) {
+    console.log('🔗 Pre-initialization URL parameters detected:', { 
+      symbol: window.urlSymbol, 
+      exchange: window.urlExchange 
+    });
+    
+    // Set parameters before initialization
+    if (window.urlExchange && window.urlExchange !== 'coinbase') {
+      console.log('🔗 Setting exchange before initialization:', window.urlExchange);
+      API_EXCHANGE = window.urlExchange;
+    }
+    
+    if (window.urlSymbol && window.urlSymbol !== 'BTC') {
+      console.log('🔗 Setting symbol before initialization:', window.urlSymbol);
+      manager.currentSymbol = window.urlSymbol;
+    }
+    
+    // Update dropdowns to reflect the URL parameters
+    setTimeout(() => {
+      const exchangeDropdown = document.getElementById('exchange-dropdown');
+      if (exchangeDropdown && window.urlExchange) {
+        exchangeDropdown.value = window.urlExchange;
+      }
+      
+      const symbolDropdown = document.getElementById('symbol-dropdown');
+      if (symbolDropdown && window.urlSymbol) {
+        symbolDropdown.value = window.urlSymbol;
+      }
+    }, 100);
+  }
+  
+  // Now initialize the chart
+  await manager.initializeChart();
   console.log('🎯 Chart ready with bid spread data and dual y-axis!');
   
   // CRITICAL: Initialize all indicator series for TradingView-style indicators
@@ -3818,7 +3852,10 @@ manager.initializeChart().then(() => {
     addMobileOptimizations();
     addScaleResetButton();
   }, 1000);
-});
+}
+
+// Initialize everything
+initializeWithUrlParams();
 
 // Better approach: Add a "Reset Scales" button instead of blocking scaling
 function addScaleResetButton() {
