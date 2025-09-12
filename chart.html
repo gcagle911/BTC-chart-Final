@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=5.0, minimum-scale=0.5, user-scalable=yes, viewport-fit=cover" />
+  <title>BlueData Chart v2 - Lenient Signals</title>
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    html, body {
+      margin: 0; padding: 0; width: 100%; height: 100%;
+      background-color: #0a0d18;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      overflow: hidden; position: fixed; touch-action: manipulation;
+    }
+
+    /* --- LAYOUT --- */
+    #chart-container {
+      width: 100vw; height: 100vh; position: relative; display: flex; flex-direction: column;
+      /* very subtle blue-black edge vignette */
+      background:
+        radial-gradient(circle at center, rgba(10,13,24,0.00) 30%, rgba(10,13,24,0.92) 95%),
+        #0a0d18;
+    }
+
+    /* watermark logo: visible but not intrusive */
+    #background-logo {
+      position: absolute; top: 50%; left: 50%;
+      width: 600px; max-width: 90vw; transform: translate(-50%, -50%);
+      opacity: 0.065; /* ← visibility (0.05–0.10) */
+      filter: blur(0.25px) saturate(100%);
+      pointer-events: none; z-index: 0;
+    }
+    /* optional soft glow (uncomment if you want a touch more pop) */
+    /* #background-logo { filter: blur(0.25px) saturate(100%) drop-shadow(0 0 20px rgba(255,215,0,0.06)); } */
+
+    @media (max-width: 768px){
+      #background-logo { width: 360px; opacity: 0.085; }
+    }
+    @media (max-width: 480px){
+      #background-logo { width: 280px; opacity: 0.09; }
+    }
+
+    #main-chart {
+      width: 100%; height: 100%;
+      touch-action: pan-x pan-y pinch-zoom;
+      background: transparent;
+      position: relative; z-index: 1; /* above watermark */
+    }
+
+    /* --- UI CONTROLS --- */
+    #timeframe-controls, #tools-controls {
+      position: absolute; z-index: 200; /* keep above chart */
+    }
+
+    #timeframe-controls {
+      top: 10px; left: 10px;
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      background: rgba(0,0,0,0.80);
+      padding: 8px 12px; border-radius: 8px;
+      backdrop-filter: blur(15px);
+      border: 1px solid rgba(255,255,255,0.18);
+      box-shadow: 0 4px 15px rgba(0,0,0,0.30);
+      max-width: calc(100vw - 140px); /* Leave space for tools button */
+    }
+
+    #tools-controls {
+      top: 10px; right: 10px;
+      z-index: 250; /* Higher than timeframe controls */
+    }
+
+    select {
+      background: #2a2e39; border: 1px solid #4a4e59; color: #d1d4dc;
+      padding: 6px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; min-width: 80px;
+    }
+    select:hover { background: #363a45; border-color: #5a5e69; }
+    select:focus { outline: none; border-color: #2962ff; box-shadow: 0 0 0 2px rgba(41,98,255,0.2); }
+    .timeframe-label { color: #d1d4dc; font-size: 12px; font-weight: 500; }
+    
+    .tool-btn {
+      background: #2a2e39;
+      border: 1px solid #4a4e59;
+      color: #d1d4dc;
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      margin: 2px 0;
+      width: 100%;
+      transition: all 0.2s ease;
+    }
+    
+    .tool-btn:hover {
+      background: #363a45;
+      border-color: #5a5e69;
+    }
+    
+    .tool-btn.active {
+      background: #2962ff;
+      border-color: #4285f4;
+      color: #ffffff;
+    }
+
+    /* --- MA tools dropdown --- */
+    #ma-tools-button {
+      background: rgba(25,28,35,0.92);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: #d1d4dc; padding: 8px 12px; border-radius: 8px;
+      cursor: pointer; font-size: 12px; font-weight: 600;
+    }
+    #ma-tools-button:hover { background: #363a45; }
+    #ma-tools-button:focus { outline: none; border-color: #2962ff; box-shadow: 0 0 0 2px rgba(41,98,255,0.20); }
+
+    .dropdown {
+      position: relative; display: inline-block;
+    }
+    .dropdown-menu {
+      display: none;
+      position: absolute; top: calc(100% + 6px); right: 0;
+      background: rgba(25,28,35,0.98);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 8px; padding: 10px; min-width: 240px;
+      max-height: 80vh; /* Prevent going off-screen */
+      overflow-y: auto; /* Scrollable if too tall */
+      box-shadow: 0 8px 24px rgba(0,0,0,0.40);
+      backdrop-filter: blur(10px);
+      z-index: 250;
+    }
+    .dropdown.open .dropdown-menu { display: block; }
+
+    .ma-toggle-list { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 6px 12px; margin-top: 8px; }
+    .ma-toggle-list label { display: flex; align-items: center; gap: 6px; color: #d1d4dc; font-size: 12px; }
+
+    @media (max-width: 768px){
+      #timeframe-controls { 
+        top: 5px; left: 110px; padding: 6px 8px; gap: 6px;
+        max-width: calc(100vw - 220px); /* More space for back button and tools button */
+        flex-wrap: wrap; /* Allow wrapping on small screens */
+      }
+      #tools-controls { top: 5px; right: 5px; }
+      select, .timeframe-label, #ma-tools-button { font-size: 11px; padding: 4px 6px; min-width: 65px; }
+      .timeframe-label { white-space: nowrap; }
+    }
+    @media (max-width: 480px){
+      #timeframe-controls { 
+        left: 5px; top: 50px; /* Move below back button on very small screens */
+        padding: 4px 6px; gap: 4px;
+        max-width: calc(100vw - 110px);
+        flex-direction: column; /* Stack vertically on very small screens */
+        align-items: flex-start;
+      }
+      select, .timeframe-label, #ma-tools-button { font-size: 10px; padding: 2px 4px; min-width: 55px; }
+      .dropdown-menu { min-width: 200px; max-height: 60vh; right: -10px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="chart-container">
+    <!-- Watermark image (non-interactive) -->
+    <img id="background-logo" src="./images/bluedata-logo-dark.png" alt="BlueData" />
+
+    <!-- Back button -->
+    <div style="position: absolute; top: 10px; left: 10px; z-index: 300;">
+      <button onclick="window.location.href='index.html'" style="background: rgba(25,28,35,0.92); border: 1px solid rgba(255,255,255,0.12); color: #d1d4dc; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; margin-right: 10px; transition: all 0.3s ease;">
+        ← Markets
+      </button>
+    </div>
+
+    <!-- Top-left controls -->
+    <div id="timeframe-controls" style="left: 120px;">
+      <label class="timeframe-label" for="exchange-dropdown">Exchange:</label>
+      <select id="exchange-dropdown" onchange="setExchange(this.value)">
+        <option value="coinbase" selected>Coinbase</option>
+        <option value="kraken">Kraken</option>
+        <option value="coinbase_F">Coinbase Futures</option>
+        <option value="okx">OKX</option>
+        <option value="upbit">Upbit</option>
+      </select>
+
+      <label class="timeframe-label" for="symbol-dropdown">Symbol:</label>
+      <select id="symbol-dropdown" onchange="setSymbol(this.value)">
+        <option value="BTC" selected>BTC</option>
+        <option value="ETH">ETH</option>
+        <option value="ADA">ADA</option>
+        <option value="XRP">XRP</option>
+      </select>
+
+      <label class="timeframe-label" for="timeframe-dropdown">Timeframe:</label>
+      <select id="timeframe-dropdown" onchange="setTimeframe(this.value)">
+        <option value="1m" selected>1m</option>
+        <option value="5m">5m</option>
+        <option value="15m">15m</option>
+        <option value="1h">1h</option>
+        <option value="4h">4h</option>
+        <option value="1d">1d</option>
+      </select>
+    </div>
+
+    <!-- Top-right tools dropdown -->
+    <div id="tools-controls">
+      <div class="dropdown" id="ma-tools">
+        <button id="ma-tools-button" type="button">MAs ▾</button>
+        <div class="dropdown-menu">
+          <div class="ma-toggle-list" style="grid-template-columns: 1fr;">
+            <label class="timeframe-label" style="display:flex;align-items:center;gap:8px;">
+              <span>Y‑Axis:</span>
+              <label style="display:flex;align-items:center;gap:4px;">
+                <input type="radio" name="yaxis" value="Right" checked onclick="setYAxisControl('Right')"> Right
+              </label>
+              <label style="display:flex;align-items:center;gap:4px;">
+                <input type="radio" name="yaxis" value="Left" onclick="setYAxisControl('Left')"> Left
+              </label>
+            </label>
+          </div>
+
+          <div class="ma-toggle-list">
+            <label><input type="checkbox" onchange="toggleMALayer('spread_L5_pct_avg', this.checked)"> L5 Layer</label>
+            <label><input type="checkbox" onchange="toggleMALayer('spread_L50_pct_avg', this.checked)" checked> L50 Layer</label>
+            <label><input type="checkbox" onchange="toggleMALayer('spread_L100_pct_avg', this.checked)"> L100 Layer</label>
+          </div>
+
+          <div class="ma-toggle-list" style="margin-top:8px;">
+            <label><input type="checkbox" onchange="toggleCumulativeAvg(this.checked)"> Cumulative Avg</label>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;justify-content:space-between;margin-top:8px;border-top: 1px solid rgba(255,255,255,0.1);padding-top:8px;">
+            <label class="timeframe-label"><input type="checkbox" id="normalize-toggle" onchange="toggleNormalize(this.checked)"> Normalize → Scaled (match medians)</label>
+            <span id="scaled-badge" style="display:none;color:#fff;background:#555;padding:2px 6px;border-radius:6px;font-size:10px;">Scaled</span>
+          </div>
+
+          <hr style="border-color: rgba(255,255,255,0.1); margin: 10px 0;">
+
+          <div class="ma-toggle-list">
+            <label><input type="checkbox" onchange="toggleMADuration(20, this.checked)"> MA20</label>
+            <label><input type="checkbox" onchange="toggleMADuration(50, this.checked)" checked> MA50</label>
+            <label><input type="checkbox" onchange="toggleMADuration(100, this.checked)"> MA100</label>
+            <label><input type="checkbox" onchange="toggleMADuration(200, this.checked)" checked> MA200</label>
+          </div>
+
+          <div class="ma-toggle-list" style="margin-top:8px; border-top:1px solid rgba(255,255,255,0.1); padding-top:8px;">
+            <label style="color:#d1d4dc; font-size:11px; margin-bottom:4px; display:block;">EMAs (Dashed):</label>
+            <label><input type="checkbox" onchange="toggleEMADuration(20, this.checked)"> EMA20</label>
+            <label><input type="checkbox" onchange="toggleEMADuration(50, this.checked)" checked> EMA50</label>
+            <label><input type="checkbox" onchange="toggleEMADuration(100, this.checked)"> EMA100</label>
+            <label><input type="checkbox" onchange="toggleEMADuration(200, this.checked)"> EMA200</label>
+          </div>
+
+          <div class="ma-toggle-list" style="margin-top:8px; border-top:1px solid rgba(255,255,255,0.1); padding-top:8px;">
+            <label style="color: #d1d4dc; font-size: 11px; margin-bottom: 4px; display: block;">Indicators:</label>
+            <label><input type="checkbox" onchange="toggleVolumeIndicator(this.checked)"> Volume L50 (Bids/Asks)</label>
+            <label><input type="checkbox" onchange="toggleIndicator2(this.checked)"> Volume L50 (Timeframe-Averaged)</label>
+            <label><input type="checkbox" onchange="toggleIndicator3(this.checked)"> Indicator 3 (Ready)</label>
+          </div>
+          
+          <hr style="border-color: rgba(255,255,255,0.1); margin: 10px 0;">
+          
+          <div class="ma-toggle-list" style="margin-top:8px;">
+            <label style="color: #d1d4dc; font-size: 11px; margin-bottom: 4px; display: block;">Trading Tools:</label>
+            <button id="btn-horizontal-line" class="tool-btn">📏 Horizontal Line</button>
+            <button id="btn-vertical-line" class="tool-btn">📐 Vertical Line</button>
+            <button id="btn-measure" class="tool-btn">📊 Measure Tool</button>
+            <button id="btn-clear-lines" class="tool-btn" style="background: #d32f2f;">🗑️ Clear Lines</button>
+          </div>
+          
+          <hr style="border-color: rgba(255,255,255,0.1); margin: 10px 0;">
+          
+          <div class="ma-toggle-list" style="margin-top:8px;">
+            <label style="color: #d1d4dc; font-size: 11px; margin-bottom: 4px; display: block;">Signal Indicators:</label>
+            <label><input type="checkbox" id="skull-indicator-toggle" onchange="toggleSkullIndicator(this.checked)"> 💀 Skull Signals</label>
+            <label><input type="checkbox" id="goldx-indicator-toggle" onchange="toggleGoldXIndicator(this.checked)"> ✖️ Gold X Signals</label>
+            <button id="btn-calculate-signals" class="tool-btn" style="background: #2962ff; color: #fff;">🔄 Calculate All Signals</button>
+            <div id="signal-status" style="font-size: 10px; color: #888; margin-top: 4px; text-align: center;">Toggle indicators to show historical signals</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chart canvas holder -->
+    <div id="main-chart"></div>
+  </div>
+
+  <!-- Lightweight Charts + your logic -->
+  <script src="https://unpkg.com/lightweight-charts@4.0.0/dist/lightweight-charts.standalone.production.js"></script>
+  <script src="chart.js"></script>
+  
+  <!-- URL parameter handling -->
+  <script>
+    // Parse URL parameters and set initial symbol/exchange
+    document.addEventListener('DOMContentLoaded', function() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const symbol = urlParams.get('symbol');
+      const exchange = urlParams.get('exchange');
+      
+      if (symbol || exchange) {
+        // Wait for the chart to initialize
+        setTimeout(() => {
+          if (exchange && exchange !== 'coinbase') {
+            console.log('🔗 Setting exchange from URL:', exchange);
+            setExchange(exchange);
+          }
+          
+          if (symbol && symbol !== 'BTC') {
+            console.log('🔗 Setting symbol from URL:', symbol);
+            // Wait a bit more for exchange to be set first
+            setTimeout(() => {
+              setSymbol(symbol);
+            }, 500);
+          }
+        }, 1000);
+      }
+    });
+  </script>
+
+  <!-- small script to make the dropdown work -->
+  <script>
+    (function(){
+      const dd = document.getElementById('ma-tools');
+      const btn = document.getElementById('ma-tools-button');
+      btn.addEventListener('click', () => dd.classList.toggle('open'));
+
+      // close on outside click
+      document.addEventListener('click', (e) => {
+        if (!dd.contains(e.target)) dd.classList.remove('open');
+      });
+    })();
+  </script>
+</body>
+</html>

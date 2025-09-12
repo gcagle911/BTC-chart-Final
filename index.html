@@ -2,291 +2,985 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport"
-        content="width=device-width, initial-scale=1.0, maximum-scale=5.0, minimum-scale=0.5, user-scalable=yes, viewport-fit=cover" />
-  <title>BlueData Chart v2 - Lenient Signals</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, minimum-scale=0.5, user-scalable=yes, viewport-fit=cover" />
+  <title>BlueData Markets - Professional Crypto Trading</title>
   <style>
-    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    * { 
+      box-sizing: border-box; 
+      -webkit-tap-highlight-color: transparent; 
+      margin: 0; 
+      padding: 0; 
+    }
 
     html, body {
-      margin: 0; padding: 0; width: 100%; height: 100%;
-      background-color: #0a0d18;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      overflow: hidden; position: fixed; touch-action: manipulation;
-    }
-
-    /* --- LAYOUT --- */
-    #chart-container {
-      width: 100vw; height: 100vh; position: relative; display: flex; flex-direction: column;
-      /* very subtle blue-black edge vignette */
-      background:
-        radial-gradient(circle at center, rgba(10,13,24,0.00) 30%, rgba(10,13,24,0.92) 95%),
-        #0a0d18;
-    }
-
-    /* watermark logo: visible but not intrusive */
-    #background-logo {
-      position: absolute; top: 50%; left: 50%;
-      width: 600px; max-width: 90vw; transform: translate(-50%, -50%);
-      opacity: 0.065; /* ← visibility (0.05–0.10) */
-      filter: blur(0.25px) saturate(100%);
-      pointer-events: none; z-index: 0;
-    }
-    /* optional soft glow (uncomment if you want a touch more pop) */
-    /* #background-logo { filter: blur(0.25px) saturate(100%) drop-shadow(0 0 20px rgba(255,215,0,0.06)); } */
-
-    @media (max-width: 768px){
-      #background-logo { width: 360px; opacity: 0.085; }
-    }
-    @media (max-width: 480px){
-      #background-logo { width: 280px; opacity: 0.09; }
-    }
-
-    #main-chart {
-      width: 100%; height: 100%;
-      touch-action: pan-x pan-y pinch-zoom;
-      background: transparent;
-      position: relative; z-index: 1; /* above watermark */
-    }
-
-    /* --- UI CONTROLS --- */
-    #timeframe-controls, #tools-controls {
-      position: absolute; z-index: 200; /* keep above chart */
-    }
-
-    #timeframe-controls {
-      top: 10px; left: 10px;
-      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-      background: rgba(0,0,0,0.80);
-      padding: 8px 12px; border-radius: 8px;
-      backdrop-filter: blur(15px);
-      border: 1px solid rgba(255,255,255,0.18);
-      box-shadow: 0 4px 15px rgba(0,0,0,0.30);
-      max-width: calc(100vw - 140px); /* Leave space for tools button */
-    }
-
-    #tools-controls {
-      top: 10px; right: 10px;
-      z-index: 250; /* Higher than timeframe controls */
-    }
-
-    select {
-      background: #2a2e39; border: 1px solid #4a4e59; color: #d1d4dc;
-      padding: 6px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; min-width: 80px;
-    }
-    select:hover { background: #363a45; border-color: #5a5e69; }
-    select:focus { outline: none; border-color: #2962ff; box-shadow: 0 0 0 2px rgba(41,98,255,0.2); }
-    .timeframe-label { color: #d1d4dc; font-size: 12px; font-weight: 500; }
-    
-    .tool-btn {
-      background: #2a2e39;
-      border: 1px solid #4a4e59;
+      width: 100%; 
+      height: 100%;
+      background: linear-gradient(135deg, #0a0d18 0%, #131722 100%);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       color: #d1d4dc;
-      padding: 8px 12px;
-      border-radius: 6px;
-      cursor: pointer;
+      overflow-x: hidden;
+    }
+
+    /* Header */
+    .header {
+      background: rgba(25, 28, 35, 0.95);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 20px 0;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .header-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .logo-section {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .logo {
+      width: 50px;
+      height: 50px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #2962ff, #4285f4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: bold;
+      color: white;
+    }
+
+    .brand-info h1 {
+      font-size: 28px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 2px;
+    }
+
+    .brand-info p {
+      font-size: 14px;
+      color: #8b8e93;
+      font-weight: 400;
+    }
+
+    .header-stats {
+      display: flex;
+      gap: 30px;
+      align-items: center;
+    }
+
+    .stat-item {
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 18px;
+      font-weight: 600;
+      color: #ffffff;
+      display: block;
+    }
+
+    .stat-label {
       font-size: 12px;
-      margin: 2px 0;
-      width: 100%;
-      transition: all 0.2s ease;
+      color: #8b8e93;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
-    
-    .tool-btn:hover {
-      background: #363a45;
-      border-color: #5a5e69;
+
+    /* Main Content */
+    .main-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 40px 20px;
     }
-    
-    .tool-btn.active {
-      background: #2962ff;
-      border-color: #4285f4;
+
+    .section-title {
+      font-size: 32px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 12px;
+      text-align: center;
+    }
+
+    .section-subtitle {
+      font-size: 16px;
+      color: #8b8e93;
+      text-align: center;
+      margin-bottom: 50px;
+      max-width: 600px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    /* Exchange Sections */
+    .exchange-section {
+      margin-bottom: 60px;
+    }
+
+    .exchange-header {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      margin-bottom: 25px;
+      padding-bottom: 15px;
+      border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .exchange-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: bold;
+      color: white;
+    }
+
+    .coinbase { background: linear-gradient(135deg, #0052ff, #1652f0); }
+    .kraken { background: linear-gradient(135deg, #5741d9, #7c3aed); }
+    .coinbase_F { background: linear-gradient(135deg, #ff6b35, #f7931e); }
+    .okx { background: linear-gradient(135deg, #000000, #333333); }
+    .upbit { background: linear-gradient(135deg, #0099ff, #00ccff); }
+
+    .exchange-title {
+      font-size: 24px;
+      font-weight: 600;
       color: #ffffff;
     }
 
-    /* --- MA tools dropdown --- */
-    #ma-tools-button {
-      background: rgba(25,28,35,0.92);
-      border: 1px solid rgba(255,255,255,0.12);
-      color: #d1d4dc; padding: 8px 12px; border-radius: 8px;
-      cursor: pointer; font-size: 12px; font-weight: 600;
+    .exchange-type {
+      font-size: 12px;
+      color: #8b8e93;
+      background: rgba(255, 255, 255, 0.1);
+      padding: 4px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
-    #ma-tools-button:hover { background: #363a45; }
-    #ma-tools-button:focus { outline: none; border-color: #2962ff; box-shadow: 0 0 0 2px rgba(41,98,255,0.20); }
 
-    .dropdown {
-      position: relative; display: inline-block;
+    /* Asset Grid */
+    .assets-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
     }
-    .dropdown-menu {
-      display: none;
-      position: absolute; top: calc(100% + 6px); right: 0;
-      background: rgba(25,28,35,0.98);
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 8px; padding: 10px; min-width: 240px;
-      max-height: 80vh; /* Prevent going off-screen */
-      overflow-y: auto; /* Scrollable if too tall */
-      box-shadow: 0 8px 24px rgba(0,0,0,0.40);
-      backdrop-filter: blur(10px);
-      z-index: 250;
+
+    .asset-card {
+      background: rgba(25, 28, 35, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 24px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
     }
-    .dropdown.open .dropdown-menu { display: block; }
 
-    .ma-toggle-list { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 6px 12px; margin-top: 8px; }
-    .ma-toggle-list label { display: flex; align-items: center; gap: 6px; color: #d1d4dc; font-size: 12px; }
+    .asset-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(135deg, rgba(41, 98, 255, 0.1), rgba(66, 133, 244, 0.05));
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      pointer-events: none;
+    }
 
-    @media (max-width: 768px){
-      #timeframe-controls { 
-        top: 5px; left: 5px; padding: 6px 8px; gap: 6px;
-        max-width: calc(100vw - 120px); /* More space for tools button */
-        flex-wrap: wrap; /* Allow wrapping on small screens */
+    .asset-card:hover {
+      border-color: #2962ff;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(41, 98, 255, 0.15);
+    }
+
+    .asset-card:hover::before {
+      opacity: 1;
+    }
+
+    .asset-header {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      margin-bottom: 20px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .asset-icon {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: bold;
+      color: white;
+      position: relative;
+    }
+
+    .btc { background: linear-gradient(135deg, #f7931a, #ffb347); }
+    .eth { background: linear-gradient(135deg, #627eea, #8fa4f3); }
+    .ada { background: linear-gradient(135deg, #0033ad, #1e88e5); }
+    .xrp { background: linear-gradient(135deg, #00aae4, #1ba0d8); }
+
+    .asset-info h3 {
+      font-size: 20px;
+      font-weight: 600;
+      color: #ffffff;
+      margin-bottom: 4px;
+    }
+
+    .asset-info p {
+      font-size: 14px;
+      color: #8b8e93;
+    }
+
+    .asset-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+      margin-bottom: 20px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .stat-box {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      padding: 12px;
+      text-align: center;
+    }
+
+    .stat-box .value {
+      font-size: 16px;
+      font-weight: 600;
+      color: #ffffff;
+      display: block;
+    }
+
+    .stat-box .label {
+      font-size: 11px;
+      color: #8b8e93;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .view-chart-btn {
+      width: 100%;
+      background: linear-gradient(135deg, #2962ff, #4285f4);
+      border: none;
+      color: white;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .view-chart-btn:hover {
+      background: linear-gradient(135deg, #1e4fff, #2962ff);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 15px rgba(41, 98, 255, 0.3);
+    }
+
+    /* Footer */
+    .footer {
+      background: rgba(25, 28, 35, 0.95);
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 30px 0;
+      margin-top: 60px;
+    }
+
+    .footer-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 20px;
+      text-align: center;
+    }
+
+    .footer-text {
+      color: #8b8e93;
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 30px;
+      flex-wrap: wrap;
+    }
+
+    .footer-link {
+      color: #d1d4dc;
+      text-decoration: none;
+      font-size: 14px;
+      transition: color 0.3s ease;
+    }
+
+    .footer-link:hover {
+      color: #2962ff;
+    }
+
+    /* Responsive Design */
+    @media (max-width: 768px) {
+      .header-container {
+        flex-direction: column;
+        gap: 20px;
+        text-align: center;
       }
-      #tools-controls { top: 5px; right: 5px; }
-      select, .timeframe-label, #ma-tools-button { font-size: 11px; padding: 4px 6px; min-width: 65px; }
-      .timeframe-label { white-space: nowrap; }
-    }
-    @media (max-width: 480px){
-      #timeframe-controls { 
-        padding: 4px 6px; gap: 4px;
-        max-width: calc(100vw - 100px);
-        flex-direction: column; /* Stack vertically on very small screens */
-        align-items: flex-start;
+
+      .header-stats {
+        gap: 20px;
       }
-      select, .timeframe-label, #ma-tools-button { font-size: 10px; padding: 2px 4px; min-width: 55px; }
-      .dropdown-menu { min-width: 200px; max-height: 60vh; right: -10px; }
+
+      .section-title {
+        font-size: 28px;
+      }
+
+      .assets-grid {
+        grid-template-columns: 1fr;
+        gap: 15px;
+      }
+
+      .exchange-header {
+        flex-direction: column;
+        text-align: center;
+        gap: 10px;
+      }
+
+      .footer-links {
+        flex-direction: column;
+        gap: 15px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .main-container {
+        padding: 30px 15px;
+      }
+
+      .asset-card {
+        padding: 20px;
+      }
+
+      .brand-info h1 {
+        font-size: 24px;
+      }
+    }
+
+    /* Loading Animation */
+    .loading {
+      opacity: 0.7;
+      pointer-events: none;
+    }
+
+    .loading .asset-card {
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.7; }
+      50% { opacity: 1; }
     }
   </style>
 </head>
 <body>
-  <div id="chart-container">
-    <!-- Watermark image (non-interactive) -->
-    <img id="background-logo" src="./images/bluedata-logo-dark.png" alt="BlueData" />
-
-    <!-- Top-left controls -->
-    <div id="timeframe-controls">
-      <label class="timeframe-label" for="exchange-dropdown">Exchange:</label>
-      <select id="exchange-dropdown" onchange="setExchange(this.value)">
-        <option value="coinbase" selected>Coinbase</option>
-        <option value="kraken">Kraken</option>
-        <option value="coinbase_F">Coinbase Futures</option>
-        <option value="okx">OKX</option>
-        <option value="upbit">Upbit</option>
-      </select>
-
-      <label class="timeframe-label" for="symbol-dropdown">Symbol:</label>
-      <select id="symbol-dropdown" onchange="setSymbol(this.value)">
-        <option value="BTC" selected>BTC</option>
-        <option value="ETH">ETH</option>
-        <option value="ADA">ADA</option>
-        <option value="XRP">XRP</option>
-      </select>
-
-      <label class="timeframe-label" for="timeframe-dropdown">Timeframe:</label>
-      <select id="timeframe-dropdown" onchange="setTimeframe(this.value)">
-        <option value="1m" selected>1m</option>
-        <option value="5m">5m</option>
-        <option value="15m">15m</option>
-        <option value="1h">1h</option>
-        <option value="4h">4h</option>
-        <option value="1d">1d</option>
-      </select>
-    </div>
-
-    <!-- Top-right tools dropdown -->
-    <div id="tools-controls">
-      <div class="dropdown" id="ma-tools">
-        <button id="ma-tools-button" type="button">MAs ▾</button>
-        <div class="dropdown-menu">
-          <div class="ma-toggle-list" style="grid-template-columns: 1fr;">
-            <label class="timeframe-label" style="display:flex;align-items:center;gap:8px;">
-              <span>Y‑Axis:</span>
-              <label style="display:flex;align-items:center;gap:4px;">
-                <input type="radio" name="yaxis" value="Right" checked onclick="setYAxisControl('Right')"> Right
-              </label>
-              <label style="display:flex;align-items:center;gap:4px;">
-                <input type="radio" name="yaxis" value="Left" onclick="setYAxisControl('Left')"> Left
-              </label>
-            </label>
-          </div>
-
-          <div class="ma-toggle-list">
-            <label><input type="checkbox" onchange="toggleMALayer('spread_L5_pct_avg', this.checked)"> L5 Layer</label>
-            <label><input type="checkbox" onchange="toggleMALayer('spread_L50_pct_avg', this.checked)" checked> L50 Layer</label>
-            <label><input type="checkbox" onchange="toggleMALayer('spread_L100_pct_avg', this.checked)"> L100 Layer</label>
-          </div>
-
-          <div class="ma-toggle-list" style="margin-top:8px;">
-            <label><input type="checkbox" onchange="toggleCumulativeAvg(this.checked)"> Cumulative Avg</label>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px;justify-content:space-between;margin-top:8px;border-top: 1px solid rgba(255,255,255,0.1);padding-top:8px;">
-            <label class="timeframe-label"><input type="checkbox" id="normalize-toggle" onchange="toggleNormalize(this.checked)"> Normalize → Scaled (match medians)</label>
-            <span id="scaled-badge" style="display:none;color:#fff;background:#555;padding:2px 6px;border-radius:6px;font-size:10px;">Scaled</span>
-          </div>
-
-          <hr style="border-color: rgba(255,255,255,0.1); margin: 10px 0;">
-
-          <div class="ma-toggle-list">
-            <label><input type="checkbox" onchange="toggleMADuration(20, this.checked)"> MA20</label>
-            <label><input type="checkbox" onchange="toggleMADuration(50, this.checked)" checked> MA50</label>
-            <label><input type="checkbox" onchange="toggleMADuration(100, this.checked)"> MA100</label>
-            <label><input type="checkbox" onchange="toggleMADuration(200, this.checked)" checked> MA200</label>
-          </div>
-
-          <div class="ma-toggle-list" style="margin-top:8px; border-top:1px solid rgba(255,255,255,0.1); padding-top:8px;">
-            <label style="color:#d1d4dc; font-size:11px; margin-bottom:4px; display:block;">EMAs (Dashed):</label>
-            <label><input type="checkbox" onchange="toggleEMADuration(20, this.checked)"> EMA20</label>
-            <label><input type="checkbox" onchange="toggleEMADuration(50, this.checked)" checked> EMA50</label>
-            <label><input type="checkbox" onchange="toggleEMADuration(100, this.checked)"> EMA100</label>
-            <label><input type="checkbox" onchange="toggleEMADuration(200, this.checked)"> EMA200</label>
-          </div>
-
-          <div class="ma-toggle-list" style="margin-top:8px; border-top:1px solid rgba(255,255,255,0.1); padding-top:8px;">
-            <label style="color: #d1d4dc; font-size: 11px; margin-bottom: 4px; display: block;">Indicators:</label>
-            <label><input type="checkbox" onchange="toggleVolumeIndicator(this.checked)"> Volume L50 (Bids/Asks)</label>
-            <label><input type="checkbox" onchange="toggleIndicator2(this.checked)"> Volume L50 (Timeframe-Averaged)</label>
-            <label><input type="checkbox" onchange="toggleIndicator3(this.checked)"> Indicator 3 (Ready)</label>
-          </div>
-          
-          <hr style="border-color: rgba(255,255,255,0.1); margin: 10px 0;">
-          
-          <div class="ma-toggle-list" style="margin-top:8px;">
-            <label style="color: #d1d4dc; font-size: 11px; margin-bottom: 4px; display: block;">Trading Tools:</label>
-            <button id="btn-horizontal-line" class="tool-btn">📏 Horizontal Line</button>
-            <button id="btn-vertical-line" class="tool-btn">📐 Vertical Line</button>
-            <button id="btn-measure" class="tool-btn">📊 Measure Tool</button>
-            <button id="btn-clear-lines" class="tool-btn" style="background: #d32f2f;">🗑️ Clear Lines</button>
-          </div>
-          
-          <hr style="border-color: rgba(255,255,255,0.1); margin: 10px 0;">
-          
-          <div class="ma-toggle-list" style="margin-top:8px;">
-            <label style="color: #d1d4dc; font-size: 11px; margin-bottom: 4px; display: block;">Signal Indicators:</label>
-            <label><input type="checkbox" id="skull-indicator-toggle" onchange="toggleSkullIndicator(this.checked)"> 💀 Skull Signals</label>
-            <label><input type="checkbox" id="goldx-indicator-toggle" onchange="toggleGoldXIndicator(this.checked)"> ✖️ Gold X Signals</label>
-            <button id="btn-calculate-signals" class="tool-btn" style="background: #2962ff; color: #fff;">🔄 Calculate All Signals</button>
-            <div id="signal-status" style="font-size: 10px; color: #888; margin-top: 4px; text-align: center;">Toggle indicators to show historical signals</div>
-          </div>
+  <!-- Header -->
+  <header class="header">
+    <div class="header-container">
+      <div class="logo-section">
+        <div class="logo">BD</div>
+        <div class="brand-info">
+          <h1>BlueData Markets</h1>
+          <p>Professional Crypto Trading Platform</p>
+        </div>
+      </div>
+      <div class="header-stats">
+        <div class="stat-item">
+          <span class="stat-value">4</span>
+          <span class="stat-label">Assets</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value">5</span>
+          <span class="stat-label">Exchanges</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value">20</span>
+          <span class="stat-label">Markets</span>
         </div>
       </div>
     </div>
+  </header>
 
-    <!-- Chart canvas holder -->
-    <div id="main-chart"></div>
-  </div>
+  <!-- Main Content -->
+  <main class="main-container">
+    <h1 class="section-title">Choose Your Market</h1>
+    <p class="section-subtitle">
+      Select from our comprehensive range of cryptocurrency markets across multiple exchanges. 
+      Real-time data, advanced charting, and professional trading tools.
+    </p>
 
-  <!-- Lightweight Charts + your logic -->
-  <script src="https://unpkg.com/lightweight-charts@4.0.0/dist/lightweight-charts.standalone.production.js"></script>
-  <script src="chart.js"></script>
+    <!-- Coinbase Section -->
+    <section class="exchange-section">
+      <div class="exchange-header">
+        <div class="exchange-icon coinbase">CB</div>
+        <div>
+          <h2 class="exchange-title">Coinbase</h2>
+          <span class="exchange-type">Spot Trading</span>
+        </div>
+      </div>
+      <div class="assets-grid">
+        <div class="asset-card" onclick="openChart('BTC', 'coinbase')">
+          <div class="asset-header">
+            <div class="asset-icon btc">₿</div>
+            <div class="asset-info">
+              <h3>Bitcoin</h3>
+              <p>BTC/USD</p>
+            </div>
+          </div>
+          <div class="asset-stats">
+            <div class="stat-box">
+              <span class="value">$--,---</span>
+              <span class="label">Price</span>
+            </div>
+            <div class="stat-box">
+              <span class="value">--.-%</span>
+              <span class="label">24h Change</span>
+            </div>
+          </div>
+          <button class="view-chart-btn">View Chart</button>
+        </div>
 
-  <!-- small script to make the dropdown work -->
+        <div class="asset-card" onclick="openChart('ETH', 'coinbase')">
+          <div class="asset-header">
+            <div class="asset-icon eth">Ξ</div>
+            <div class="asset-info">
+              <h3>Ethereum</h3>
+              <p>ETH/USD</p>
+            </div>
+          </div>
+          <div class="asset-stats">
+            <div class="stat-box">
+              <span class="value">$--,---</span>
+              <span class="label">Price</span>
+            </div>
+            <div class="stat-box">
+              <span class="value">--.-%</span>
+              <span class="label">24h Change</span>
+            </div>
+          </div>
+          <button class="view-chart-btn">View Chart</button>
+        </div>
+
+        <div class="asset-card" onclick="openChart('ADA', 'coinbase')">
+          <div class="asset-header">
+            <div class="asset-icon ada">₳</div>
+            <div class="asset-info">
+              <h3>Cardano</h3>
+              <p>ADA/USD</p>
+            </div>
+          </div>
+          <div class="asset-stats">
+            <div class="stat-box">
+              <span class="value">$--.--</span>
+              <span class="label">Price</span>
+            </div>
+            <div class="stat-box">
+              <span class="value">--.-%</span>
+              <span class="label">24h Change</span>
+            </div>
+          </div>
+          <button class="view-chart-btn">View Chart</button>
+        </div>
+
+        <div class="asset-card" onclick="openChart('XRP', 'coinbase')">
+          <div class="asset-header">
+            <div class="asset-icon xrp">◉</div>
+            <div class="asset-info">
+              <h3>Ripple</h3>
+              <p>XRP/USD</p>
+            </div>
+          </div>
+          <div class="asset-stats">
+            <div class="stat-box">
+              <span class="value">$--.--</span>
+              <span class="label">Price</span>
+            </div>
+            <div class="stat-box">
+              <span class="value">--.-%</span>
+              <span class="label">24h Change</span>
+            </div>
+          </div>
+          <button class="view-chart-btn">View Chart</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Kraken Section -->
+    <section class="exchange-section">
+      <div class="exchange-header">
+        <div class="exchange-icon kraken">KR</div>
+        <div>
+          <h2 class="exchange-title">Kraken</h2>
+          <span class="exchange-type">Spot Trading</span>
+        </div>
+      </div>
+      <div class="assets-grid">
+        <div class="asset-card" onclick="openChart('BTC', 'kraken')">
+          <div class="asset-header">
+            <div class="asset-icon btc">₿</div>
+            <div class="asset-info">
+              <h3>Bitcoin</h3>
+              <p>BTC/USD</p>
+            </div>
+          </div>
+          <div class="asset-stats">
+            <div class="stat-box">
+              <span class="value">$--,---</span>
+              <span class="label">Price</span>
+            </div>
+            <div class="stat-box">
+              <span class="value">--.-%</span>
+              <span class="label">24h Change</span>
+            </div>
+          </div>
+          <button class="view-chart-btn">View Chart</button>
+        </div>
+
+        <div class="asset-card" onclick="openChart('ETH', 'kraken')">
+          <div class="asset-header">
+            <div class="asset-icon eth">Ξ</div>
+            <div class="asset-info">
+              <h3>Ethereum</h3>
+              <p>ETH/USD</p>
+            </div>
+          </div>
+          <div class="asset-stats">
+            <div class="stat-box">
+              <span class="value">$--,---</span>
+              <span class="label">Price</span>
+            </div>
+            <div class="stat-box">
+              <span class="value">--.-%</span>
+              <span class="label">24h Change</span>
+            </div>
+          </div>
+          <button class="view-chart-btn">View Chart</button>
+        </div>
+
+        <div class="asset-card" onclick="openChart('ADA', 'kraken')">
+          <div class="asset-header">
+            <div class="asset-icon ada">₳</div>
+            <div class="asset-info">
+              <h3>Cardano</h3>
+              <p>ADA/USD</p>
+            </div>
+          </div>
+          <div class="asset-stats">
+            <div class="stat-box">
+              <span class="value">$--.--</span>
+              <span class="label">Price</span>
+            </div>
+            <div class="stat-box">
+              <span class="value">--.-%</span>
+              <span class="label">24h Change</span>
+            </div>
+          </div>
+          <button class="view-chart-btn">View Chart</button>
+        </div>
+
+        <div class="asset-card" onclick="openChart('XRP', 'kraken')">
+          <div class="asset-header">
+            <div class="asset-icon xrp">◉</div>
+            <div class="asset-info">
+              <h3>Ripple</h3>
+              <p>XRP/USD</p>
+            </div>
+          </div>
+          <div class="asset-stats">
+            <div class="stat-box">
+              <span class="value">$--.--</span>
+              <span class="label">Price</span>
+            </div>
+            <div class="stat-box">
+              <span class="value">--.-%</span>
+              <span class="label">24h Change</span>
+            </div>
+          </div>
+          <button class="view-chart-btn">View Chart</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Coinbase Futures Section -->
+    <section class="exchange-section">
+      <div class="exchange-header">
+        <div class="exchange-icon coinbase_F">CF</div>
+        <div>
+          <h2 class="exchange-title">Coinbase Futures</h2>
+          <span class="exchange-type">Futures Trading</span>
+        </div>
+      </div>
+      <div class="assets-grid">
+        <div class="asset-card" onclick="openChart('BTC', 'coinbase_F')">
+          <div class="asset-header">
+            <div class="asset-icon btc">₿</div>
+            <div class="asset-info">
+              <h3>Bitcoin Futures</h3>
+              <p>BTC/USD</p>
+            </div>
+          </div>
+          <div class="asset-stats">
+            <div class="stat-box">
+              <span class="value">$--,---</span>
+              <span class="label">Price</span>
+            </div>
+            <div class="stat-box">
+              <span class="value">--.-%</span>
+              <span class="label">24h Change</span>
+            </div>
+          </div>
+          <button class="view-chart-btn">View Chart</button>
+        </div>
+
+        <div class="asset-card" onclick="openChart('ETH', 'coinbase_F')">
+          <div class="asset-header">
+            <div class="asset-icon eth">Ξ</div>
+            <div class="asset-info">
+              <h3>Ethereum Futures</h3>
+              <p>ETH/USD</p>
+            </div>
+          </div>
+          <div class="asset-stats">
+            <div class="stat-box">
+              <span class="value">$--,---</span>
+              <span class="label">Price</span>
+            </div>
+            <div class="stat-box">
+              <span class="value">--.-%</span>
+              <span class="label">24h Change</span>
+            </div>
+          </div>
+          <button class="view-chart-btn">View Chart</button>
+        </div>
+
+        <div class="asset-card" onclick="openChart('ADA', 'coinbase_F')">
+          <div class="asset-header">
+            <div class="asset-icon ada">₳</div>
+            <div class="asset-info">
+              <h3>Cardano Futures</h3>
+              <p>ADA/USD</p>
+            </div>
+          </div>
+          <div class="asset-stats">
+            <div class="stat-box">
+              <span class="value">$--.--</span>
+              <span class="label">Price</span>
+            </div>
+            <div class="stat-box">
+              <span class="value">--.-%</span>
+              <span class="label">24h Change</span>
+            </div>
+          </div>
+          <button class="view-chart-btn">View Chart</button>
+        </div>
+
+        <div class="asset-card" onclick="openChart('XRP', 'coinbase_F')">
+          <div class="asset-header">
+            <div class="asset-icon xrp">◉</div>
+            <div class="asset-info">
+              <h3>Ripple Futures</h3>
+              <p>XRP/USD</p>
+            </div>
+          </div>
+          <div class="asset-stats">
+            <div class="stat-box">
+              <span class="value">$--.--</span>
+              <span class="label">Price</span>
+            </div>
+            <div class="stat-box">
+              <span class="value">--.-%</span>
+              <span class="label">24h Change</span>
+            </div>
+          </div>
+          <button class="view-chart-btn">View Chart</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- OKX Section -->
+    <section class="exchange-section">
+      <div class="exchange-header">
+        <div class="exchange-icon okx">OKX</div>
+        <div>
+          <h2 class="exchange-title">OKX</h2>
+          <span class="exchange-type">Futures Trading</span>
+        </div>
+      </div>
+      <div class="assets-grid">
+        <div class="asset-card" onclick="openChart('BTC', 'okx')">
+          <div class="asset-header">
+            <div class="asset-icon btc">₿</div>
+            <div class="asset-info">
+              <h3>Bitcoin</h3>
+              <p>BTC/USD</p>
+            </div>
+          </div>
+          <div class="asset-stats">
+            <div class="stat-box">
+              <span class="value">$--,---</span>
+              <span class="label">Price</span>
+            </div>
+            <div class="stat-box">
+              <span class="value">--.-%</span>
+              <span class="label">24h Change</span>
+            </div>
+          </div>
+          <button class="view-chart-btn">View Chart</button>
+        </div>
+
+        <div class="asset-card" onclick="openChart('ETH', 'okx')">
+          <div class="asset-header">
+            <div class="asset-icon eth">Ξ</div>
+            <div class="asset-info">
+              <h3>Ethereum</h3>
+              <p>ETH/USD</p>
+            </div>
+          </div>
+          <div class="asset-stats">
+            <div class="stat-box">
+              <span class="value">$--,---</span>
+              <span class="label">Price</span>
+            </div>
+            <div class="stat-box">
+              <span class="value">--.-%</span>
+              <span class="label">24h Change</span>
+            </div>
+          </div>
+          <button class="view-chart-btn">View Chart</button>
+        </div>
+
+        <div class="asset-card" onclick="openChart('ADA', 'okx')">
+          <div class="asset-header">
+            <div class="asset-icon ada">₳</div>
+            <div class="asset-info">
+              <h3>Cardano</h3>
+              <p>ADA/USD</p>
+            </div>
+          </div>
+          <div class="asset-stats">
+            <div class="stat-box">
+              <span class="value">$--.--</span>
+              <span class="label">Price</span>
+            </div>
+            <div class="stat-box">
+              <span class="value">--.-%</span>
+              <span class="label">24h Change</span>
+            </div>
+          </div>
+          <button class="view-chart-btn">View Chart</button>
+        </div>
+
+        <div class="asset-card" onclick="openChart('XRP', 'okx')">
+          <div class="asset-header">
+            <div class="asset-icon xrp">◉</div>
+            <div class="asset-info">
+              <h3>Ripple</h3>
+              <p>XRP/USD</p>
+            </div>
+          </div>
+          <div class="asset-stats">
+            <div class="stat-box">
+              <span class="value">$--.--</span>
+              <span class="label">Price</span>
+            </div>
+            <div class="stat-box">
+              <span class="value">--.-%</span>
+              <span class="label">24h Change</span>
+            </div>
+          </div>
+          <button class="view-chart-btn">View Chart</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Upbit Section -->
+    <section class="exchange-section">
+      <div class="exchange-header">
+        <div class="exchange-icon upbit">UP</div>
+        <div>
+          <h2 class="exchange-title">Upbit</h2>
+          <span class="exchange-type">Futures Trading</span>
+        </div>
+      </div>
+      <div class="assets-grid">
+        <div class="asset-card" onclick="openChart('BTC', 'upbit')">
+          <div class="asset-header">
+            <div class="asset-icon btc">₿</div>
+            <div class="asset-info">
+              <h3>Bitcoin</h3>
+              <p>BTC/USD</p>
+            </div>
+          </div>
+          <div class="asset-stats">
+            <div class="stat-box">
+              <span class="value">$--,---</span>
+              <span class="label">Price</span>
+            </div>
+            <div class="stat-box">
+              <span class="value">--.-%</span>
+              <span class="label">24h Change</span>
+            </div>
+          </div>
+          <button class="view-chart-btn">View Chart</button>
+        </div>
+
+        <div class="asset-card" onclick="openChart('ETH', 'upbit')">
+          <div class="asset-header">
+            <div class="asset-icon eth">Ξ</div>
+            <div class="asset-info">
+              <h3>Ethereum</h3>
+              <p>ETH/USD</p>
+            </div>
+          </div>
+          <div class="asset-stats">
+            <div class="stat-box">
+              <span class="value">$--,---</span>
+              <span class="label">Price</span>
+            </div>
+            <div class="stat-box">
+              <span class="value">--.-%</span>
+              <span class="label">24h Change</span>
+            </div>
+          </div>
+          <button class="view-chart-btn">View Chart</button>
+        </div>
+
+        <div class="asset-card" onclick="openChart('ADA', 'upbit')">
+          <div class="asset-header">
+            <div class="asset-icon ada">₳</div>
+            <div class="asset-info">
+              <h3>Cardano</h3>
+              <p>ADA/USD</p>
+            </div>
+          </div>
+          <div class="asset-stats">
+            <div class="stat-box">
+              <span class="value">$--.--</span>
+              <span class="label">Price</span>
+            </div>
+            <div class="stat-box">
+              <span class="value">--.-%</span>
+              <span class="label">24h Change</span>
+            </div>
+          </div>
+          <button class="view-chart-btn">View Chart</button>
+        </div>
+
+        <div class="asset-card" onclick="openChart('XRP', 'upbit')">
+          <div class="asset-header">
+            <div class="asset-icon xrp">◉</div>
+            <div class="asset-info">
+              <h3>Ripple</h3>
+              <p>XRP/USD</p>
+            </div>
+          </div>
+          <div class="asset-stats">
+            <div class="stat-box">
+              <span class="value">$--.--</span>
+              <span class="label">Price</span>
+            </div>
+            <div class="stat-box">
+              <span class="value">--.-%</span>
+              <span class="label">24h Change</span>
+            </div>
+          </div>
+          <button class="view-chart-btn">View Chart</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-container">
+      <p class="footer-text">© 2025 BlueData Markets. Professional cryptocurrency trading platform.</p>
+      <div class="footer-links">
+        <a href="#" class="footer-link">Terms of Service</a>
+        <a href="#" class="footer-link">Privacy Policy</a>
+        <a href="#" class="footer-link">API Documentation</a>
+        <a href="#" class="footer-link">Support</a>
+      </div>
+    </div>
+  </footer>
+
   <script>
-    (function(){
-      const dd = document.getElementById('ma-tools');
-      const btn = document.getElementById('ma-tools-button');
-      btn.addEventListener('click', () => dd.classList.toggle('open'));
+    // Navigation function to open chart with selected asset and exchange
+    function openChart(symbol, exchange) {
+      // Add loading state
+      const card = event.currentTarget;
+      card.classList.add('loading');
+      
+      // Navigate to chart page with parameters
+      const url = `chart.html?symbol=${symbol}&exchange=${exchange}`;
+      window.location.href = url;
+    }
 
-      // close on outside click
-      document.addEventListener('click', (e) => {
-        if (!dd.contains(e.target)) dd.classList.remove('open');
+    // Add smooth scroll behavior
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+          target.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start'
+          });
+        }
       });
-    })();
+    });
+
+    // Add hover effects and animations
+    document.addEventListener('DOMContentLoaded', function() {
+      // Animate cards on scroll
+      const cards = document.querySelectorAll('.asset-card');
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.style.opacity = '1';
+            entry.target.style.transform = 'translateY(0)';
+          }
+        });
+      }, { threshold: 0.1 });
+
+      cards.forEach(card => {
+        card.style.opacity = '0';
+        card.style.transform = 'translateY(20px)';
+        card.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+        observer.observe(card);
+      });
+    });
   </script>
 </body>
 </html>
