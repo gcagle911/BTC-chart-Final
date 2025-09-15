@@ -12,7 +12,7 @@ const TRIGGER_CONFIG = {
   },
   goldX: {
     enabled: true,
-    triggerTime: "14:30",  // 2:30 PM EST (TEST - far from 9:30 AM)
+    triggerTime: "20:00",  // 8:00 PM EST (back to original)
     timezone: "America/New_York"
   }
 };
@@ -2942,10 +2942,10 @@ class TimeframeManager {
       for (const [time, signal] of this.goldXSignals) {
         markers.push({
           time: time,
-          position: 'aboveBar', // TEMP: Same as skulls to test
+          position: 'belowBar', // Back to belowBar - different from skulls
           color: '#FFD700',
           shape: 'text',
-          text: '✖️', // Use full emoji
+          text: '✖️',
           size: 2,
         });
       }
@@ -2957,8 +2957,12 @@ class TimeframeManager {
     
     try {
       if (priceSeries) {
-        priceSeries.setMarkers(markers);
-        console.log(`✅ Signal display updated successfully`);
+        // Clear markers first, then set new ones to avoid conflicts
+        priceSeries.setMarkers([]);
+        setTimeout(() => {
+          priceSeries.setMarkers(markers);
+          console.log(`✅ Signal display updated successfully with ${markers.length} markers`);
+        }, 10); // Small delay to ensure chart is ready
         
         // Update status
         const statusEl = document.getElementById('signal-status');
