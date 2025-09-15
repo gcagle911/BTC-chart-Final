@@ -6,14 +6,12 @@
 // =============================================================================
 const TRIGGER_CONFIG = {
   sell: {
-    enabled: true,
-    triggerTime: "09:30",  // 9:30 AM EST
-    timezone: "America/New_York"
+    enabled: true
+    // Clean slate - no trigger requirements yet
   },
   buy: {
-    enabled: true,
-    triggerTime: "20:00",  // 8:00 PM EST
-    timezone: "America/New_York"
+    enabled: true
+    // Clean slate - no trigger requirements yet
   }
 };
 
@@ -25,105 +23,27 @@ let API_EXCHANGE = 'coinbase';
 const EARLIEST_DATA_DATE = new Date('2025-09-09T00:00:00Z');
 
 // =============================================================================
-// CLEAN SLATE - SIMPLE TIME-BASED TRIGGERS
+// CLEAN SLATE - TRIGGER FUNCTIONS (NO LOGIC YET)
 // =============================================================================
 
-// Check if sell trigger time (Red X above candles) falls within this candle's timeframe
-function checkSellTrigger(candleTime, timeframeSeconds) {
+// Check sell trigger conditions (Red X above candles)
+function checkSellTrigger(candleData, candleTime, rawData, currentSymbol, exchange, timeframe) {
   if (!TRIGGER_CONFIG.sell.enabled) return false;
   
-  // Parse target time
-  const [targetHour, targetMinute] = TRIGGER_CONFIG.sell.triggerTime.split(':').map(Number);
+  // Clean slate - no trigger logic yet
+  // TODO: Add sell trigger requirements here
   
-  // Convert candle time to EST and get hour/minute
-  const candleDate = new Date(candleTime * 1000);
-  const estFormatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: TRIGGER_CONFIG.sell.timezone,
-    hour: 'numeric',
-    minute: 'numeric',
-    hour12: false
-  });
-  
-  const estParts = estFormatter.formatToParts(candleDate);
-  const candleHour = parseInt(estParts.find(part => part.type === 'hour').value);
-  const candleMinute = parseInt(estParts.find(part => part.type === 'minute').value);
-  
-  // For different timeframes, check if target time would fall within this candle
-  const candleEndTime = candleTime + timeframeSeconds;
-  const candleEndDate = new Date(candleEndTime * 1000);
-  const candleEndParts = estFormatter.formatToParts(candleEndDate);
-  const candleEndHour = parseInt(candleEndParts.find(part => part.type === 'hour').value);
-  const candleEndMinute = parseInt(candleEndParts.find(part => part.type === 'minute').value);
-  
-  // Convert times to minutes for easier comparison
-  const targetMinutes = targetHour * 60 + targetMinute;
-  const candleStartMinutes = candleHour * 60 + candleMinute;
-  const candleEndMinutes = candleEndHour * 60 + candleEndMinute;
-  
-  // Handle day boundary crossing
-  let matches = false;
-  if (candleEndMinutes > candleStartMinutes) {
-    // Normal case - candle doesn't cross day boundary
-    matches = targetMinutes >= candleStartMinutes && targetMinutes < candleEndMinutes;
-  } else {
-    // Candle crosses midnight
-    matches = targetMinutes >= candleStartMinutes || targetMinutes < candleEndMinutes;
-  }
-  
-  if (matches) {
-    console.log(`❌ SELL TRIGGER: Target ${TRIGGER_CONFIG.sell.triggerTime} EST falls within candle ${candleHour.toString().padStart(2,'0')}:${candleMinute.toString().padStart(2,'0')} - ${candleEndHour.toString().padStart(2,'0')}:${candleEndMinute.toString().padStart(2,'0')}`);
-  }
-  
-  return matches;
+  return false; // No triggers until requirements are defined
 }
 
-// Check if buy trigger time (Green Circle below candles) falls within this candle's timeframe
-function checkBuyTrigger(candleTime, timeframeSeconds) {
+// Check buy trigger conditions (Green Circle below candles)
+function checkBuyTrigger(candleData, candleTime, rawData, currentSymbol, exchange, timeframe) {
   if (!TRIGGER_CONFIG.buy.enabled) return false;
   
-  // Parse target time
-  const [targetHour, targetMinute] = TRIGGER_CONFIG.buy.triggerTime.split(':').map(Number);
+  // Clean slate - no trigger logic yet
+  // TODO: Add buy trigger requirements here
   
-  // Convert candle time to EST and get hour/minute
-  const candleDate = new Date(candleTime * 1000);
-  const estFormatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: TRIGGER_CONFIG.buy.timezone,
-    hour: 'numeric',
-    minute: 'numeric',
-    hour12: false
-  });
-  
-  const estParts = estFormatter.formatToParts(candleDate);
-  const candleHour = parseInt(estParts.find(part => part.type === 'hour').value);
-  const candleMinute = parseInt(estParts.find(part => part.type === 'minute').value);
-  
-  // For different timeframes, check if target time would fall within this candle
-  const candleEndTime = candleTime + timeframeSeconds;
-  const candleEndDate = new Date(candleEndTime * 1000);
-  const candleEndParts = estFormatter.formatToParts(candleEndDate);
-  const candleEndHour = parseInt(candleEndParts.find(part => part.type === 'hour').value);
-  const candleEndMinute = parseInt(candleEndParts.find(part => part.type === 'minute').value);
-  
-  // Convert times to minutes for easier comparison
-  const targetMinutes = targetHour * 60 + targetMinute;
-  const candleStartMinutes = candleHour * 60 + candleMinute;
-  const candleEndMinutes = candleEndHour * 60 + candleEndMinute;
-  
-  // Handle day boundary crossing
-  let matches = false;
-  if (candleEndMinutes > candleStartMinutes) {
-    // Normal case - candle doesn't cross day boundary
-    matches = targetMinutes >= candleStartMinutes && targetMinutes < candleEndMinutes;
-  } else {
-    // Candle crosses midnight
-    matches = targetMinutes >= candleStartMinutes || targetMinutes < candleEndMinutes;
-  }
-  
-  if (matches) {
-    console.log(`🟢 BUY TRIGGER: Target ${TRIGGER_CONFIG.buy.triggerTime} EST falls within candle ${candleHour.toString().padStart(2,'0')}:${candleMinute.toString().padStart(2,'0')} - ${candleEndHour.toString().padStart(2,'0')}:${candleEndMinute.toString().padStart(2,'0')}`);
-  }
-  
-  return matches;
+  return false; // No triggers until requirements are defined
 }
 
 function formatDateYYYYMMDD(date) {
@@ -2776,10 +2696,10 @@ class TimeframeManager {
   }
 
   // =============================================================================
-  // CLEAN SLATE - TIME-BASED SIGNAL CALCULATION
+  // CLEAN SLATE - SIGNAL CALCULATION (NO TRIGGERS YET)
   // =============================================================================
   calculateSimpleSignals() {
-    console.log(`🔄 Calculating time-based signals for ${this.currentSymbol}_${API_EXCHANGE} on ${this.currentTimeframe}`);
+    console.log(`🔄 Calculating signals for ${this.currentSymbol}_${API_EXCHANGE} on ${this.currentTimeframe}`);
     
     // Clear existing signals
     this.sellSignals.clear();
@@ -2795,34 +2715,34 @@ class TimeframeManager {
     // Check each candle for time-based triggers
     for (const [candleTime, candleData] of candleBuckets) {
       
-      // Check sell trigger (Red X above candles) - pass timeframe seconds
-      if (checkSellTrigger(candleTime, timeframeSeconds)) {
+      // Check sell trigger (Red X above candles)
+      if (checkSellTrigger(candleData, candleTime, this.rawData, this.currentSymbol, API_EXCHANGE, this.currentTimeframe)) {
         const price = candleData[candleData.length - 1]?.price || 50000;
         this.sellSignals.set(candleTime, {
           type: 'sell',
           price: price * 1.02,
           active: true,
           timeframe: this.currentTimeframe,
-          triggerReason: '9:30 AM EST'
+          triggerReason: 'Custom sell logic'
         });
         sellCount++;
       }
       
-      // Check buy trigger (Green Circle below candles) - pass timeframe seconds
-      if (checkBuyTrigger(candleTime, timeframeSeconds)) {
+      // Check buy trigger (Green Circle below candles)
+      if (checkBuyTrigger(candleData, candleTime, this.rawData, this.currentSymbol, API_EXCHANGE, this.currentTimeframe)) {
         const price = candleData[candleData.length - 1]?.price || 50000;
         this.buySignals.set(candleTime, {
           type: 'buy',
           price: price * 1.02,
           active: true,
           timeframe: this.currentTimeframe,
-          triggerReason: '8:00 PM EST'
+          triggerReason: 'Custom buy logic'
         });
         buyCount++;
       }
     }
     
-    console.log(`✅ Time-based signals: ${sellCount} sell (9:30 AM), ${buyCount} buy (8:00 PM)`);
+    console.log(`✅ Clean slate signals: ${sellCount} sell, ${buyCount} buy (no triggers until requirements defined)`);
     console.log(`📊 DEBUG: Total candles processed: ${candleBuckets.size}`);
     console.log(`📊 DEBUG: Sell signals stored: ${this.sellSignals.size}`);
     console.log(`📊 DEBUG: Buy signals stored: ${this.buySignals.size}`);
