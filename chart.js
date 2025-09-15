@@ -45,6 +45,10 @@ const TRIGGER_CONFIG = {
     // Trigger requirements
     conditions: {
       l50ma50_threshold: 0.035  // L50MA50 >= 0.035
+    },
+    cooldown: {
+      enabled: true,
+      durationMinutes: 60  // 1 hour cooldown after trigger
     }
   },
   
@@ -60,6 +64,10 @@ const TRIGGER_CONFIG = {
       size: 2,
       previewColor: '#66FF66',
       previewSize: 1
+    },
+    cooldown: {
+      enabled: true,
+      durationMinutes: 60  // 1 hour cooldown after trigger
     }
     // Trigger conditions will be added here
   }
