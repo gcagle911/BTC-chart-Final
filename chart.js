@@ -7,7 +7,7 @@
 const TRIGGER_CONFIG = {
   sell: {
     enabled: true,
-    sustainedPercent: 0.7  // Require conditions for 70% of candle duration
+    sustainedPercent: 0.5  // Require conditions for 50% of candle duration
     // TODO: Add sell trigger requirements here
   },
   buy: {
@@ -741,10 +741,14 @@ class TimeframeManager {
     // Signal Indicator System
     this.sellIndicatorEnabled = false;
     this.buyIndicatorEnabled = false;
-    this.sellSignals = new Map(); // time -> signal data
-    this.buySignals = new Map(); // time -> signal data
+    this.sellSignals = new Map(); // time -> confirmed signal data (candle closed)
+    this.buySignals = new Map(); // time -> confirmed signal data (candle closed)
     this.signalsCalculated = false;
     this.signalSystemEnabled = false;
+    
+    // Real-time signal tracking
+    this.currentCandleSignals = new Map(); // time -> {sell: boolean, buy: boolean} (preview)
+    this.lastCandleTime = 0;
     
     // Skull Trigger System
     this.spreadThresholds = new Map(); // asset_exchange -> {top5Percent: value}
@@ -2696,6 +2700,11 @@ class TimeframeManager {
     // Enable the signal system when any signal indicator is on
     this.signalSystemEnabled = this.sellIndicatorEnabled || this.buyIndicatorEnabled;
     
+    // Start real-time checking if any signal is enabled
+    if (this.signalSystemEnabled) {
+      this.startRealTimeSignalChecking();
+    }
+    
     // Update display
     this.updateSignalDisplay();
   }
@@ -2714,6 +2723,11 @@ class TimeframeManager {
     }
     // Enable the signal system when any signal indicator is on
     this.signalSystemEnabled = this.sellIndicatorEnabled || this.buyIndicatorEnabled;
+    
+    // Start real-time checking if any signal is enabled
+    if (this.signalSystemEnabled) {
+      this.startRealTimeSignalChecking();
+    }
     
     // Update display
     this.updateSignalDisplay();
@@ -2784,6 +2798,116 @@ class TimeframeManager {
     console.log(`📊 DEBUG: Total candles processed: ${candleBuckets.size}`);
     console.log(`📊 DEBUG: Sell signals stored: ${this.sellSignals.size}`);
     console.log(`📊 DEBUG: Buy signals stored: ${this.buySignals.size}`);
+  }
+
+  // Check current candle for real-time signal preview
+  checkCurrentCandleSignals() {
+    if (!this.rawData || this.rawData.length === 0) return;
+    
+    // Get current candle time
+    const currentTime = this.getCurrentCandleTime();
+    if (!currentTime) return;
+    
+    // Get current candle data
+    const currentCandleData = this.getCurrentCandleData(currentTime);
+    if (!currentCandleData || currentCandleData.length === 0) return;
+    
+    // Check if current candle meets trigger conditions (real-time preview)
+    const sellMeeting = checkSellTrigger(currentCandleData, currentTime, this.rawData, this.currentSymbol, API_EXCHANGE, this.currentTimeframe);
+    const buyMeeting = checkBuyTrigger(currentCandleData, currentTime, this.rawData, this.currentSymbol, API_EXCHANGE, this.currentTimeframe);
+    
+    // Store current candle signal state (preview)
+    this.currentCandleSignals.set(currentTime, {
+      sell: sellMeeting,
+      buy: buyMeeting,
+      isPreview: true
+    });
+    
+    // Check if previous candle closed and should be confirmed
+    if (this.lastCandleTime && this.lastCandleTime !== currentTime) {
+      this.confirmPreviousCandleSignals();
+    }
+    
+    this.lastCandleTime = currentTime;
+    
+    // Update display to show both confirmed and preview signals
+    this.updateSignalDisplay();
+  }
+
+  // Confirm previous candle signals if they met the 50% threshold
+  confirmPreviousCandleSignals() {
+    const previousCandleData = this.currentCandleSignals.get(this.lastCandleTime);
+    if (!previousCandleData) return;
+    
+    console.log(`🕯️ Candle closed at ${new Date(this.lastCandleTime * 1000).toISOString()}`);
+    
+    // Get the actual previous candle data to verify 50% threshold was met
+    const candleData = this.getCurrentCandleData(this.lastCandleTime);
+    if (!candleData) return;
+    
+    // Re-check with full candle data to confirm
+    const sellConfirmed = checkSellTrigger(candleData, this.lastCandleTime, this.rawData, this.currentSymbol, API_EXCHANGE, this.currentTimeframe);
+    const buyConfirmed = checkBuyTrigger(candleData, this.lastCandleTime, this.rawData, this.currentSymbol, API_EXCHANGE, this.currentTimeframe);
+    
+    // Add confirmed signals to permanent storage
+    if (sellConfirmed) {
+      const price = candleData[candleData.length - 1]?.price || 50000;
+      this.sellSignals.set(this.lastCandleTime, {
+        type: 'sell',
+        price: price * 1.02,
+        active: true,
+        timeframe: this.currentTimeframe,
+        confirmed: true
+      });
+      console.log(`❌ SELL signal CONFIRMED for closed candle`);
+    }
+    
+    if (buyConfirmed) {
+      const price = candleData[candleData.length - 1]?.price || 50000;
+      this.buySignals.set(this.lastCandleTime, {
+        type: 'buy',
+        price: price * 1.02,
+        active: true,
+        timeframe: this.currentTimeframe,
+        confirmed: true
+      });
+      console.log(`🟢 BUY signal CONFIRMED for closed candle`);
+    }
+    
+    // Remove from preview tracking
+    this.currentCandleSignals.delete(this.lastCandleTime);
+  }
+
+  // Get current candle data for real-time checking
+  getCurrentCandleData(candleTime) {
+    const timeframeSeconds = this.timeframes[this.currentTimeframe].seconds;
+    const candleData = [];
+    
+    for (const item of this.rawData) {
+      const timestamp = this.toUnixTimestamp(item.time);
+      const itemCandleTime = Math.floor(timestamp / timeframeSeconds) * timeframeSeconds;
+      
+      if (itemCandleTime === candleTime) {
+        candleData.push(item);
+      }
+    }
+    
+    return candleData;
+  }
+
+  // Start real-time signal checking cycle
+  startRealTimeSignalChecking() {
+    if (this.realTimeSignalInterval) {
+      clearInterval(this.realTimeSignalInterval);
+    }
+    
+    this.realTimeSignalInterval = setInterval(() => {
+      if (this.signalSystemEnabled) {
+        this.checkCurrentCandleSignals();
+      }
+    }, 5000); // Check every 5 seconds
+    
+    console.log('🔄 Real-time signal checking started');
   }
 
   // Simple data grouping
@@ -2881,7 +3005,7 @@ class TimeframeManager {
     
     const markers = [];
     
-    // Add sell markers if enabled (Red X above candles)
+    // Add confirmed sell markers if enabled (Red X above candles)
     if (this.sellIndicatorEnabled) {
       for (const [time, signal] of this.sellSignals) {
         markers.push({
@@ -2893,10 +3017,10 @@ class TimeframeManager {
           size: 2,
         });
       }
-      console.log(`❌ Added ${this.sellSignals.size} sell markers`);
+      console.log(`❌ Added ${this.sellSignals.size} confirmed sell markers`);
     }
     
-    // Add buy markers if enabled (Green Circle below candles)
+    // Add confirmed buy markers if enabled (Green Circle below candles)
     if (this.buyIndicatorEnabled) {
       for (const [time, signal] of this.buySignals) {
         markers.push({
@@ -2908,7 +3032,32 @@ class TimeframeManager {
           size: 2,
         });
       }
-      console.log(`🟢 Added ${this.buySignals.size} buy markers`);
+      console.log(`🟢 Added ${this.buySignals.size} confirmed buy markers`);
+    }
+    
+    // Add real-time preview markers (dimmed)
+    for (const [time, signalState] of this.currentCandleSignals) {
+      if (this.sellIndicatorEnabled && signalState.sell) {
+        markers.push({
+          time: time,
+          position: 'aboveBar',
+          color: '#FF6666', // Dimmed red for preview
+          shape: 'text',
+          text: '❌',
+          size: 1, // Smaller for preview
+        });
+      }
+      
+      if (this.buyIndicatorEnabled && signalState.buy) {
+        markers.push({
+          time: time,
+          position: 'belowBar',
+          color: '#66FF66', // Dimmed green for preview
+          shape: 'text',
+          text: '🟢',
+          size: 1, // Smaller for preview
+        });
+      }
     }
     
     console.log(`📍 Setting ${markers.length} total markers on chart`);
