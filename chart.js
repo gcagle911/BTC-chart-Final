@@ -28,47 +28,99 @@ const EARLIEST_DATA_DATE = new Date('2025-09-09T00:00:00Z');
 // CLEAN SLATE - SIMPLE TIME-BASED TRIGGERS
 // =============================================================================
 
-// Check if current time matches skull trigger time (9:30 AM EST)
-function checkSkullTrigger(candleTime) {
+// Check if skull trigger time (9:30 AM EST) falls within this candle's timeframe
+function checkSkullTrigger(candleTime, timeframeSeconds) {
   if (!TRIGGER_CONFIG.skull.enabled) return false;
   
-  // Convert candle timestamp to EST time
-  const candleDate = new Date(candleTime * 1000);
-  const estTime = new Intl.DateTimeFormat('en-US', {
-    timeZone: TRIGGER_CONFIG.skull.timezone,
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  }).format(candleDate);
+  // Parse target time
+  const [targetHour, targetMinute] = TRIGGER_CONFIG.skull.triggerTime.split(':').map(Number);
   
-  const targetTime = TRIGGER_CONFIG.skull.triggerTime;
-  const matches = estTime === targetTime;
+  // Convert candle time to EST and get hour/minute
+  const candleDate = new Date(candleTime * 1000);
+  const estFormatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: TRIGGER_CONFIG.skull.timezone,
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false
+  });
+  
+  const estParts = estFormatter.formatToParts(candleDate);
+  const candleHour = parseInt(estParts.find(part => part.type === 'hour').value);
+  const candleMinute = parseInt(estParts.find(part => part.type === 'minute').value);
+  
+  // For different timeframes, check if target time would fall within this candle
+  const candleEndTime = candleTime + timeframeSeconds;
+  const candleEndDate = new Date(candleEndTime * 1000);
+  const candleEndParts = estFormatter.formatToParts(candleEndDate);
+  const candleEndHour = parseInt(candleEndParts.find(part => part.type === 'hour').value);
+  const candleEndMinute = parseInt(candleEndParts.find(part => part.type === 'minute').value);
+  
+  // Convert times to minutes for easier comparison
+  const targetMinutes = targetHour * 60 + targetMinute;
+  const candleStartMinutes = candleHour * 60 + candleMinute;
+  const candleEndMinutes = candleEndHour * 60 + candleEndMinute;
+  
+  // Handle day boundary crossing
+  let matches = false;
+  if (candleEndMinutes > candleStartMinutes) {
+    // Normal case - candle doesn't cross day boundary
+    matches = targetMinutes >= candleStartMinutes && targetMinutes < candleEndMinutes;
+  } else {
+    // Candle crosses midnight
+    matches = targetMinutes >= candleStartMinutes || targetMinutes < candleEndMinutes;
+  }
   
   if (matches) {
-    console.log(`💀 SKULL TRIGGER: ${estTime} EST matches target ${targetTime}`);
+    console.log(`💀 SKULL TRIGGER: Target ${TRIGGER_CONFIG.skull.triggerTime} EST falls within candle ${candleHour.toString().padStart(2,'0')}:${candleMinute.toString().padStart(2,'0')} - ${candleEndHour.toString().padStart(2,'0')}:${candleEndMinute.toString().padStart(2,'0')}`);
   }
   
   return matches;
 }
 
-// Check if current time matches Gold X trigger time (8:00 PM EST)
-function checkGoldXTrigger(candleTime) {
+// Check if Gold X trigger time (8:00 PM EST) falls within this candle's timeframe
+function checkGoldXTrigger(candleTime, timeframeSeconds) {
   if (!TRIGGER_CONFIG.goldX.enabled) return false;
   
-  // Convert candle timestamp to EST time
-  const candleDate = new Date(candleTime * 1000);
-  const estTime = new Intl.DateTimeFormat('en-US', {
-    timeZone: TRIGGER_CONFIG.goldX.timezone,
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  }).format(candleDate);
+  // Parse target time
+  const [targetHour, targetMinute] = TRIGGER_CONFIG.goldX.triggerTime.split(':').map(Number);
   
-  const targetTime = TRIGGER_CONFIG.goldX.triggerTime;
-  const matches = estTime === targetTime;
+  // Convert candle time to EST and get hour/minute
+  const candleDate = new Date(candleTime * 1000);
+  const estFormatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: TRIGGER_CONFIG.goldX.timezone,
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false
+  });
+  
+  const estParts = estFormatter.formatToParts(candleDate);
+  const candleHour = parseInt(estParts.find(part => part.type === 'hour').value);
+  const candleMinute = parseInt(estParts.find(part => part.type === 'minute').value);
+  
+  // For different timeframes, check if target time would fall within this candle
+  const candleEndTime = candleTime + timeframeSeconds;
+  const candleEndDate = new Date(candleEndTime * 1000);
+  const candleEndParts = estFormatter.formatToParts(candleEndDate);
+  const candleEndHour = parseInt(candleEndParts.find(part => part.type === 'hour').value);
+  const candleEndMinute = parseInt(candleEndParts.find(part => part.type === 'minute').value);
+  
+  // Convert times to minutes for easier comparison
+  const targetMinutes = targetHour * 60 + targetMinute;
+  const candleStartMinutes = candleHour * 60 + candleMinute;
+  const candleEndMinutes = candleEndHour * 60 + candleEndMinute;
+  
+  // Handle day boundary crossing
+  let matches = false;
+  if (candleEndMinutes > candleStartMinutes) {
+    // Normal case - candle doesn't cross day boundary
+    matches = targetMinutes >= candleStartMinutes && targetMinutes < candleEndMinutes;
+  } else {
+    // Candle crosses midnight
+    matches = targetMinutes >= candleStartMinutes || targetMinutes < candleEndMinutes;
+  }
   
   if (matches) {
-    console.log(`✖️ GOLD X TRIGGER: ${estTime} EST matches target ${targetTime}`);
+    console.log(`✖️ GOLD X TRIGGER: Target ${TRIGGER_CONFIG.goldX.triggerTime} EST falls within candle ${candleHour.toString().padStart(2,'0')}:${candleMinute.toString().padStart(2,'0')} - ${candleEndHour.toString().padStart(2,'0')}:${candleEndMinute.toString().padStart(2,'0')}`);
   }
   
   return matches;
@@ -2733,6 +2785,7 @@ class TimeframeManager {
     
     // Group data into candles
     const candleBuckets = this.groupDataIntoCandleBuckets();
+    const timeframeSeconds = this.timeframes[this.currentTimeframe].seconds;
     
     let skullCount = 0;
     let goldXCount = 0;
@@ -2740,8 +2793,8 @@ class TimeframeManager {
     // Check each candle for time-based triggers
     for (const [candleTime, candleData] of candleBuckets) {
       
-      // Check skull trigger (9:30 AM EST)
-      if (checkSkullTrigger(candleTime)) {
+      // Check skull trigger (9:30 AM EST) - pass timeframe seconds
+      if (checkSkullTrigger(candleTime, timeframeSeconds)) {
         const price = candleData[candleData.length - 1]?.price || 50000;
         this.skullSignals.set(candleTime, {
           type: 'skull',
@@ -2753,8 +2806,8 @@ class TimeframeManager {
         skullCount++;
       }
       
-      // Check Gold X trigger (8:00 PM EST)
-      if (checkGoldXTrigger(candleTime)) {
+      // Check Gold X trigger (8:00 PM EST) - pass timeframe seconds
+      if (checkGoldXTrigger(candleTime, timeframeSeconds)) {
         const price = candleData[candleData.length - 1]?.price || 50000;
         this.goldXSignals.set(candleTime, {
           type: 'goldx',
