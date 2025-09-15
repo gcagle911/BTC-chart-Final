@@ -12,17 +12,24 @@
 
 | Requirement | Condition | Value | Status |
 |-------------|-----------|-------|--------|
-| **L50MA50 Threshold** | L50MA50 >= threshold | `0.035` | ✅ **ACTIVE** |
+| **Layer Qualification** | ANY layer (L5, L50, L100) qualifies | At least 1 layer | ✅ **ACTIVE** |
+| **MA Requirements per Layer** | ALL MAs (20, 50, 100, 200) in top 25% | 4 out of 4 MAs | ✅ **ACTIVE** |
+| **Percentile Window** | Rolling window for top 25% calculation | 48 hours | ✅ **ACTIVE** |
+| **Asset/Exchange Isolation** | Independent calculations per pair | Strict separation | ✅ **ACTIVE** |
 
 **Detailed Logic:**
-- **Condition**: 50-period moving average of `spread_L50_pct_avg` must be >= 0.035
+- **Layer Check**: Check L5, L50, and L100 layers independently
+- **MA Requirement**: For a layer to qualify, ALL 4 MAs (20, 50, 100, 200 period) must be in their top 25%
+- **Top 25% Calculation**: Based on rolling 48-hour window for THIS asset/exchange only
+- **Trigger Condition**: If ANY layer qualifies (L5 OR L50 OR L100), trigger sell signal
 - **Sustain**: Must be true for 50% of candle duration
-- **Cooldown**: 1 hour after trigger (60 minutes)
-- **Timeframe Scaling**: 
-  - 1m: Need ~30 seconds sustained
-  - 5m: Need ~2.5 minutes sustained  
-  - 1h: Need ~30 minutes sustained
-  - 4h: Need ~2 hours sustained
+- **Cooldown**: 1 hour after trigger (60 minutes) per asset/exchange
+- **Isolation**: BTC_coinbase calculations NEVER affect BTC_kraken, ETH_upbit, etc.
+
+**Examples:**
+- **L50 Qualifies**: L50MA20, L50MA50, L50MA100, L50MA200 all >= their 48h 75th percentile → TRIGGER
+- **L5 Qualifies**: L5MA20, L5MA50, L5MA100, L5MA200 all >= their 48h 75th percentile → TRIGGER  
+- **None Qualify**: No layer has all 4 MAs in top 25% → NO TRIGGER
 
 ---
 

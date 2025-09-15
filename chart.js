@@ -44,7 +44,10 @@ const TRIGGER_CONFIG = {
     },
     // Trigger requirements
     conditions: {
-      l50ma50_threshold: 0.035  // L50MA50 >= 0.035
+      layers: ['L5', 'L50', 'L100'],  // Check these layers (ANY can trigger)
+      maPeriods: [20, 50, 100, 200],  // ALL periods must be in top 25% for layer to qualify
+      percentileThreshold: 0.75,      // Top 25% = 75th percentile
+      lookbackHours: 48               // Rolling 48-hour window for percentile calculation
     },
     cooldown: {
       enabled: true,
@@ -161,6 +164,9 @@ function evaluateTrigger(signalType, candleData, candleTime, rawData, currentSym
  */
 function checkMinuteTriggerConditions(signalType, minuteData, minuteIndex, candleData, rawData, currentSymbol, exchange, timeframe) {
   
+  // CRITICAL: Create asset/exchange isolation key
+  const assetExchangeKey = `${currentSymbol}_${exchange}`;
+  
   // Find current data index in rawData for MA calculation
   let currentIndex = -1;
   for (let i = 0; i < rawData.length; i++) {
@@ -175,30 +181,73 @@ function checkMinuteTriggerConditions(signalType, minuteData, minuteIndex, candl
   }
   
   if (signalType === 'sell') {
-    // SELL TRIGGER: L50MA50 >= 0.035
-    const config = TRIGGER_CONFIG.sell;
-    const l50ma50 = calculateTriggerMA(rawData, currentIndex, 'spread_L50_pct_avg', 50);
+    // SELL TRIGGER: ANY layer (L5, L50, L100) with ALL MAs in top 25% of 48h window
+    const config = TRIGGER_CONFIG.sell.conditions;
+    const qualifyingLayers = [];
+    const layerResults = {};
     
-    if (l50ma50 === null) {
-      return { 
-        met: false, 
-        reason: 'Insufficient data for L50MA50 calculation', 
-        values: { currentIndex, requiredPeriod: 50 }
+    // Check each layer independently
+    for (const layer of config.layers) {
+      const fieldName = `spread_${layer}_pct_avg`;
+      const layerQualified = true; // Will be set to false if any MA fails
+      const maResults = {};
+      
+      // Check ALL MA periods for this layer
+      let allMAsQualify = true;
+      for (const period of config.maPeriods) {
+        // Calculate current MA value
+        const maValue = calculateTriggerMA(rawData, currentIndex, fieldName, period);
+        
+        if (maValue === null) {
+          allMAsQualify = false;
+          maResults[`${layer}MA${period}`] = { value: null, qualified: false, reason: 'Insufficient data' };
+          continue;
+        }
+        
+        // Calculate 48-hour percentile threshold for this specific asset/exchange and MA
+        const maFieldKey = `${fieldName}_MA${period}`;
+        const threshold = calculateAssetExchangePercentile(rawData, fieldName, config.percentileThreshold, assetExchangeKey, config.lookbackHours);
+        
+        // Check if current MA is in top 25% (>= 75th percentile)
+        const qualified = maValue >= threshold;
+        
+        maResults[`${layer}MA${period}`] = {
+          value: maValue,
+          threshold: threshold,
+          qualified: qualified,
+          reason: qualified ? 'In top 25%' : 'Below top 25%'
+        };
+        
+        if (!qualified) {
+          allMAsQualify = false;
+        }
+      }
+      
+      layerResults[layer] = {
+        qualified: allMAsQualify,
+        maResults: maResults,
+        reason: allMAsQualify ? 'ALL MAs in top 25%' : 'Some MAs below top 25%'
       };
+      
+      if (allMAsQualify) {
+        qualifyingLayers.push(layer);
+      }
     }
     
-    const conditionMet = l50ma50 >= config.conditions.l50ma50_threshold;
+    // Trigger if ANY layer qualifies
+    const triggered = qualifyingLayers.length > 0;
     
     return {
-      met: conditionMet,
-      reason: conditionMet 
-        ? `L50MA50 (${l50ma50.toFixed(6)}) >= threshold (${config.conditions.l50ma50_threshold})`
-        : `L50MA50 (${l50ma50.toFixed(6)}) < threshold (${config.conditions.l50ma50_threshold})`,
+      met: triggered,
+      reason: triggered 
+        ? `Layers qualifying: ${qualifyingLayers.join(', ')} (${assetExchangeKey})`
+        : `No layers qualify for ${assetExchangeKey}`,
       values: {
-        l50ma50: l50ma50,
-        threshold: config.conditions.l50ma50_threshold,
-        spread_L50_current: minuteData.spread_L50_pct_avg,
-        timestamp: minuteData.time
+        assetExchangeKey,
+        qualifyingLayers,
+        layerResults,
+        timestamp: minuteData.time,
+        lookbackHours: config.lookbackHours
       }
     };
     
@@ -208,9 +257,9 @@ function checkMinuteTriggerConditions(signalType, minuteData, minuteIndex, candl
       met: false, 
       reason: 'No buy trigger conditions implemented yet', 
       values: {
+        assetExchangeKey: `${currentSymbol}_${exchange}`,
         price: minuteData.price,
-        timestamp: minuteData.time,
-        spread_L50: minuteData.spread_L50_pct_avg
+        timestamp: minuteData.time
       }
     };
   }
@@ -238,31 +287,65 @@ function checkBuyTrigger(candleData, candleTime, rawData, currentSymbol, exchang
 // =============================================================================
 
 /**
- * Calculate dynamic threshold from historical data (for percentile-based triggers)
+ * Calculate asset/exchange-specific percentile threshold from 48-hour rolling window
+ * CRITICAL: Each asset/exchange pair has completely independent calculations
  * @param {Array} rawData - Full historical data
- * @param {string} fieldName - Field to analyze (e.g., 'price', 'spread_L50_pct_avg')
- * @param {number} percentile - Percentile threshold (0.05 = 5th percentile, 0.95 = 95th percentile)
- * @returns {number} - Threshold value
+ * @param {string} fieldName - Field to analyze (e.g., 'spread_L50_pct_avg')
+ * @param {number} percentile - Percentile threshold (0.75 = 75th percentile = top 25%)
+ * @param {string} assetExchangeKey - Asset/exchange identifier (e.g., "BTC_coinbase")
+ * @param {number} lookbackHours - Hours to look back (48 for rolling window)
+ * @returns {number} - Threshold value specific to this asset/exchange
  */
-function calculateDynamicThreshold(rawData, fieldName, percentile) {
-  if (!rawData || rawData.length === 0) return 0;
+function calculateAssetExchangePercentile(rawData, fieldName, percentile, assetExchangeKey, lookbackHours = 48) {
+  if (!rawData || rawData.length === 0) {
+    console.warn(`⚠️ No data for ${assetExchangeKey} percentile calculation`);
+    return 0;
+  }
   
-  const values = rawData
+  // Get cutoff time for 48-hour window
+  const now = Date.now();
+  const cutoffTime = new Date(now - (lookbackHours * 60 * 60 * 1000));
+  
+  // Filter to last 48 hours only - ASSET/EXCHANGE SPECIFIC
+  const recentData = rawData.filter(item => {
+    const itemTime = new Date(item.time);
+    return itemTime >= cutoffTime;
+  });
+  
+  if (recentData.length === 0) {
+    console.warn(`⚠️ No recent data for ${assetExchangeKey} in last ${lookbackHours} hours`);
+    return 0;
+  }
+  
+  // Extract values for this specific field
+  const values = recentData
     .map(item => item[fieldName])
     .filter(val => val !== null && val !== undefined && isFinite(val))
     .sort((a, b) => a - b);
     
-  if (values.length === 0) return 0;
+  if (values.length === 0) {
+    console.warn(`⚠️ No valid ${fieldName} values for ${assetExchangeKey}`);
+    return 0;
+  }
   
   const index = Math.floor(values.length * percentile);
   const threshold = values[Math.min(index, values.length - 1)];
   
   if (TRIGGER_CONFIG.global.debugMode) {
-    console.log(`📊 Dynamic threshold ${fieldName} (${(percentile*100).toFixed(1)}th percentile): ${threshold.toFixed(6)} from ${values.length} values`);
+    console.log(`📊 ${assetExchangeKey} ${fieldName} (${(percentile*100).toFixed(1)}th percentile): ${threshold.toFixed(6)} from ${values.length} values (${lookbackHours}h window)`);
   }
   
   return threshold;
 }
+
+/**
+ * Calculate MA value for specific asset/exchange data
+ * @param {Array} rawData - Historical data for this asset/exchange only
+ * @param {number} currentIndex - Current data index
+ * @param {string} fieldName - Field to calculate MA for
+ * @param {number} period - MA period
+ * @returns {number|null} - MA value or null if insufficient data
+ */
 
 /**
  * Calculate moving average for trigger conditions
@@ -1095,6 +1178,11 @@ class TimeframeManager {
     // Real-time signal tracking
     this.currentCandleSignals = new Map(); // time -> {sell: boolean, buy: boolean} (preview)
     this.lastCandleTime = 0;
+    
+    // Asset/Exchange isolation - CRITICAL for trading bot accuracy
+    this.assetExchangeKey = null; // Will be set to "BTC_coinbase", "ETH_kraken", etc.
+    this.percentileCache = new Map(); // assetExchangeKey -> {field_period: threshold}
+    this.lastCooldownTimes = new Map(); // assetExchangeKey -> {sell: timestamp, buy: timestamp}
     
     // Skull Trigger System
     this.spreadThresholds = new Map(); // asset_exchange -> {top5Percent: value}
@@ -3107,19 +3195,23 @@ class TimeframeManager {
     const candleBuckets = this.groupDataIntoCandleBuckets();
     const timeframeSeconds = this.timeframes[this.currentTimeframe].seconds;
     
+    // CRITICAL: Asset/Exchange isolation
+    const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
+    
+    // Get asset/exchange-specific cooldown times
+    const cooldownTimes = this.lastCooldownTimes.get(assetExchangeKey) || { sell: 0, buy: 0 };
+    
     let sellCount = 0;
     let buyCount = 0;
-    let lastSellTime = 0;
-    let lastBuyTime = 0;
     
-    // Check each candle for triggers (with cooldown)
+    // Check each candle for triggers (with asset/exchange-specific cooldown)
     for (const [candleTime, candleData] of candleBuckets) {
       
-      // Check sell trigger (Red X above candles) with cooldown
+      // Check sell trigger with asset/exchange-specific cooldown
       const sellCooldownSeconds = TRIGGER_CONFIG.sell.cooldown.enabled ? 
         (TRIGGER_CONFIG.sell.cooldown.durationMinutes * 60) : 0;
         
-      if (candleTime - lastSellTime >= sellCooldownSeconds) {
+      if (candleTime - cooldownTimes.sell >= sellCooldownSeconds) {
         if (checkSellTrigger(candleData, candleTime, this.rawData, this.currentSymbol, API_EXCHANGE, this.currentTimeframe)) {
           const price = candleData[candleData.length - 1]?.price || 50000;
           this.sellSignals.set(candleTime, {
@@ -3127,20 +3219,21 @@ class TimeframeManager {
             price: price * 1.02,
             active: true,
             timeframe: this.currentTimeframe,
-            triggerReason: 'L50MA50 >= 0.035',
+            assetExchangeKey: assetExchangeKey,
+            triggerReason: 'Layer MAs in top 25% (48h window)',
             cooldownUntil: candleTime + sellCooldownSeconds
           });
           sellCount++;
-          lastSellTime = candleTime;
-          console.log(`❌ SELL triggered at ${new Date(candleTime * 1000).toISOString()}, next available: ${new Date((candleTime + sellCooldownSeconds) * 1000).toISOString()}`);
+          cooldownTimes.sell = candleTime;
+          console.log(`❌ SELL triggered for ${assetExchangeKey} at ${new Date(candleTime * 1000).toISOString()}, next available: ${new Date((candleTime + sellCooldownSeconds) * 1000).toISOString()}`);
         }
       }
       
-      // Check buy trigger (Green Circle below candles) with cooldown
+      // Check buy trigger with asset/exchange-specific cooldown
       const buyCooldownSeconds = TRIGGER_CONFIG.buy.cooldown.enabled ? 
         (TRIGGER_CONFIG.buy.cooldown.durationMinutes * 60) : 0;
         
-      if (candleTime - lastBuyTime >= buyCooldownSeconds) {
+      if (candleTime - cooldownTimes.buy >= buyCooldownSeconds) {
         if (checkBuyTrigger(candleData, candleTime, this.rawData, this.currentSymbol, API_EXCHANGE, this.currentTimeframe)) {
           const price = candleData[candleData.length - 1]?.price || 50000;
           this.buySignals.set(candleTime, {
@@ -3148,15 +3241,19 @@ class TimeframeManager {
             price: price * 1.02,
             active: true,
             timeframe: this.currentTimeframe,
+            assetExchangeKey: assetExchangeKey,
             triggerReason: 'Custom buy logic',
             cooldownUntil: candleTime + buyCooldownSeconds
           });
           buyCount++;
-          lastBuyTime = candleTime;
-          console.log(`🟢 BUY triggered at ${new Date(candleTime * 1000).toISOString()}, next available: ${new Date((candleTime + buyCooldownSeconds) * 1000).toISOString()}`);
+          cooldownTimes.buy = candleTime;
+          console.log(`🟢 BUY triggered for ${assetExchangeKey} at ${new Date(candleTime * 1000).toISOString()}, next available: ${new Date((candleTime + buyCooldownSeconds) * 1000).toISOString()}`);
         }
       }
     }
+    
+    // Store updated cooldown times for this asset/exchange
+    this.lastCooldownTimes.set(assetExchangeKey, cooldownTimes);
     
     console.log(`✅ Signals with cooldown: ${sellCount} sell, ${buyCount} buy`);
     console.log(`📊 DEBUG: Total candles processed: ${candleBuckets.size}`);
