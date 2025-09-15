@@ -26,7 +26,9 @@ const TRIGGER_CONFIG = {
   global: {
     sustainedPercent: 0.5,        // 50% of candle must meet conditions
     realTimeCheckInterval: 5000,  // Check every 5 seconds
-    debugMode: true               // Enable detailed logging
+    debugMode: false,             // Disable heavy logging for performance
+    cacheThresholds: true,        // Cache percentile calculations
+    thresholdUpdateInterval: 3600 // Update thresholds every hour (seconds)
   },
   
   // Sell signal configuration (Red X above candles)
@@ -244,9 +246,15 @@ function checkMinuteTriggerConditions(signalType, minuteData, minuteIndex, candl
           continue;
         }
         
-        // Calculate 48-hour percentile threshold for this specific asset/exchange and MA
-        const maFieldKey = `${fieldName}_MA${period}`;
-        const threshold = calculateAssetExchangePercentile(rawData, fieldName, config.percentileThreshold, assetExchangeKey, config.lookbackHours);
+        // Get cached 48-hour percentile threshold for this specific asset/exchange and MA
+        const threshold = getCachedAssetExchangePercentile(
+          window.manager, // Pass manager for cache access
+          rawData, 
+          fieldName, 
+          config.percentileThreshold, 
+          assetExchangeKey, 
+          config.lookbackHours
+        );
         
         // Check if current MA is in top 25% (>= 75th percentile)
         const qualified = maValue >= threshold;
@@ -361,8 +369,8 @@ function checkIndicatorBTrigger(candleData, candleTime, rawData, currentSymbol, 
 // =============================================================================
 
 /**
- * Calculate asset/exchange-specific percentile threshold from 48-hour rolling window
- * CRITICAL: Each asset/exchange pair has completely independent calculations
+ * Get cached or calculate asset/exchange-specific percentile threshold (PERFORMANCE OPTIMIZED)
+ * @param {Object} manager - Chart manager instance for cache access
  * @param {Array} rawData - Full historical data
  * @param {string} fieldName - Field to analyze (e.g., 'spread_L50_pct_avg')
  * @param {number} percentile - Percentile threshold (0.75 = 75th percentile = top 25%)
@@ -370,14 +378,23 @@ function checkIndicatorBTrigger(candleData, candleTime, rawData, currentSymbol, 
  * @param {number} lookbackHours - Hours to look back (48 for rolling window)
  * @returns {number} - Threshold value specific to this asset/exchange
  */
-function calculateAssetExchangePercentile(rawData, fieldName, percentile, assetExchangeKey, lookbackHours = 48) {
+function getCachedAssetExchangePercentile(manager, rawData, fieldName, percentile, assetExchangeKey, lookbackHours = 48) {
+  const cacheKey = `${assetExchangeKey}_${fieldName}_${percentile}`;
+  const now = Date.now();
+  
+  // Check if we have cached value and it's still fresh
+  const cached = manager.percentileCache.get(cacheKey);
+  if (cached && (now - cached.lastUpdate) < (TRIGGER_CONFIG.global.thresholdUpdateInterval * 1000)) {
+    return cached.threshold;
+  }
+  
+  // Calculate new threshold (expensive operation)
   if (!rawData || rawData.length === 0) {
     console.warn(`⚠️ No data for ${assetExchangeKey} percentile calculation`);
     return 0;
   }
   
   // Get cutoff time for 48-hour window
-  const now = Date.now();
   const cutoffTime = new Date(now - (lookbackHours * 60 * 60 * 1000));
   
   // Filter to last 48 hours only - ASSET/EXCHANGE SPECIFIC
@@ -405,9 +422,14 @@ function calculateAssetExchangePercentile(rawData, fieldName, percentile, assetE
   const index = Math.floor(values.length * percentile);
   const threshold = values[Math.min(index, values.length - 1)];
   
-  if (TRIGGER_CONFIG.global.debugMode) {
-    console.log(`📊 ${assetExchangeKey} ${fieldName} (${(percentile*100).toFixed(1)}th percentile): ${threshold.toFixed(6)} from ${values.length} values (${lookbackHours}h window)`);
-  }
+  // Cache the result
+  manager.percentileCache.set(cacheKey, {
+    threshold: threshold,
+    lastUpdate: now,
+    dataPoints: values.length
+  });
+  
+  console.log(`📊 CALCULATED ${assetExchangeKey} ${fieldName} threshold: ${threshold.toFixed(6)} (cached for 1h)`);
   
   return threshold;
 }
@@ -1259,8 +1281,9 @@ class TimeframeManager {
     
     // Asset/Exchange isolation - CRITICAL for trading bot accuracy
     this.assetExchangeKey = null; // Will be set to "BTC_coinbase", "ETH_kraken", etc.
-    this.percentileCache = new Map(); // assetExchangeKey -> {field_period: threshold}
+    this.percentileCache = new Map(); // assetExchangeKey -> {field_period: threshold, lastUpdate: timestamp}
     this.lastCooldownTimes = new Map(); // assetExchangeKey -> {sell: timestamp, buy: timestamp, indicatorA: timestamp, indicatorB: timestamp}
+    this.lastThresholdUpdate = 0; // Timestamp of last threshold calculation
     
     // Skull Trigger System
     this.spreadThresholds = new Map(); // asset_exchange -> {top5Percent: value}
@@ -3206,6 +3229,9 @@ class TimeframeManager {
     console.log(`❌ Sell indicator ${enabled ? 'enabled' : 'disabled'}`);
     
     if (enabled) {
+      // Pre-calculate thresholds for performance
+      this.preCalculateThresholds();
+      
       // Calculate signals if not already done
       if (!this.signalsCalculated) {
         this.calculateAllSignals();
@@ -3230,6 +3256,9 @@ class TimeframeManager {
     console.log(`🟢 Buy indicator ${enabled ? 'enabled' : 'disabled'}`);
     
     if (enabled) {
+      // Pre-calculate thresholds for performance
+      this.preCalculateThresholds();
+      
       // Calculate signals if not already done
       if (!this.signalsCalculated) {
         this.calculateAllSignals();
@@ -3254,6 +3283,9 @@ class TimeframeManager {
     console.log(`🔷 Indicator A ${enabled ? 'enabled' : 'disabled'}`);
     
     if (enabled) {
+      // Pre-calculate thresholds for performance
+      this.preCalculateThresholds();
+      
       // Calculate signals if not already done
       if (!this.signalsCalculated) {
         this.calculateAllSignals();
@@ -3278,6 +3310,9 @@ class TimeframeManager {
     console.log(`🟪 Indicator B ${enabled ? 'enabled' : 'disabled'}`);
     
     if (enabled) {
+      // Pre-calculate thresholds for performance
+      this.preCalculateThresholds();
+      
       // Calculate signals if not already done
       if (!this.signalsCalculated) {
         this.calculateAllSignals();
@@ -3432,8 +3467,27 @@ class TimeframeManager {
     this.lastCooldownTimes.set(assetExchangeKey, cooldownTimes);
     
     console.log(`✅ Signals with cooldown: ${sellCount} sell, ${buyCount} buy, ${indicatorACount} A, ${indicatorBCount} B`);
-    console.log(`📊 DEBUG: Total candles processed: ${candleBuckets.size}`);
-    console.log(`📊 DEBUG: Signals stored - Sell: ${this.sellSignals.size}, Buy: ${this.buySignals.size}, A: ${this.indicatorASignals.size}, B: ${this.indicatorBSignals.size}`);
+    console.log(`📊 Processed ${candleBuckets.size} candles for ${assetExchangeKey}`);
+  }
+
+  // Pre-calculate all thresholds for performance (called when indicator is enabled)
+  preCalculateThresholds() {
+    if (!this.rawData || this.rawData.length === 0) return;
+    
+    const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
+    console.log(`⚡ Pre-calculating thresholds for ${assetExchangeKey}...`);
+    
+    // Pre-calculate all sell trigger thresholds
+    if (TRIGGER_CONFIG.sell.enabled && TRIGGER_CONFIG.sell.conditions) {
+      const config = TRIGGER_CONFIG.sell.conditions;
+      for (const layer of config.layers) {
+        const fieldName = `spread_${layer}_pct_avg`;
+        // Pre-calculate threshold (will be cached)
+        getCachedAssetExchangePercentile(this, this.rawData, fieldName, config.percentileThreshold, assetExchangeKey, config.lookbackHours);
+      }
+    }
+    
+    console.log(`✅ Thresholds pre-calculated for ${assetExchangeKey}`);
   }
 
   // Check current candle for real-time signal preview
