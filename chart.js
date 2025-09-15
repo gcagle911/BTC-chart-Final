@@ -2953,6 +2953,7 @@ class TimeframeManager {
     }
     
     console.log(`📍 Setting ${markers.length} total markers on chart`);
+    console.log(`📊 MARKER DEBUG:`, markers.map(m => `${m.text} at ${new Date(m.time * 1000).toLocaleString()}`));
     
     try {
       if (priceSeries) {
