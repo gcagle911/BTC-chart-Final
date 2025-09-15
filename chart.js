@@ -1,12 +1,143 @@
 // Simplified Bitcoin Chart - Clean Interface   
 // Main price chart with Bid Spread MAs on LEFT y-axis and enhanced zoom capability
 
+// =============================================================================
+// TRIGGER CONFIGURATION - EASY TO EDIT
+// =============================================================================
+const TRIGGER_CONFIG = {
+  skull: {
+    enabled: true,
+    cooloffMinutes: 60,
+    spreadThreshold: 0.85,  // Top 15% (1 - 0.15)
+    slopeThreshold: 0.95,   // Top 5% (1 - 0.05)
+    requiredLayers: 2,      // 2 of 3 layers must trigger
+    sustainedPercent: 0.7   // 70% of candle duration
+  },
+  goldX: {
+    enabled: true,
+    priceDropPercent: 1.75, // 1.75% price drop required
+    priceDropWindowMinutes: 120, // 2 hours
+    sustainedPercent: 0.5   // 50% of candle duration
+  }
+};
+
 // Data sources mapped by symbol
 const API_BASE = 'https://storage.googleapis.com/bananazone';
 let API_EXCHANGE = 'coinbase';
 
 // Earliest available data date
 const EARLIEST_DATA_DATE = new Date('2025-09-09T00:00:00Z');
+
+// =============================================================================
+// SIMPLE TRIGGER FUNCTIONS - EASY TO MODIFY
+// =============================================================================
+
+// Simple skull trigger check - modify this function to change skull logic
+function checkSkullTrigger(candleData, spreadThresholds, slopeThreshold) {
+  if (!candleData || candleData.length === 0) return false;
+  
+  const config = TRIGGER_CONFIG.skull;
+  const layers = ['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg'];
+  
+  let sustainedCount = 0;
+  
+  for (let i = 0; i < candleData.length; i++) {
+    const minuteData = candleData[i];
+    
+    // Check how many layers meet threshold
+    let layersMet = 0;
+    for (const layer of layers) {
+      const value = minuteData[layer];
+      const threshold = spreadThresholds[layer];
+      if (threshold && value !== null && value >= threshold) {
+        layersMet++;
+      }
+    }
+    
+    // Check if enough layers met threshold
+    if (layersMet >= config.requiredLayers) {
+      sustainedCount++;
+    }
+  }
+  
+  // Check if sustained for required percentage of candle
+  const requiredMinutes = Math.ceil(candleData.length * config.sustainedPercent);
+  return sustainedCount >= requiredMinutes;
+}
+
+// Simple Gold X trigger check - modify this function to change Gold X logic
+function checkGoldXTrigger(candleData, rawData, cumulativeAvg) {
+  if (!candleData || candleData.length === 0) return false;
+  
+  const config = TRIGGER_CONFIG.goldX;
+  let conditionsMetCount = 0;
+  
+  for (let i = 0; i < candleData.length; i++) {
+    const minuteData = candleData[i];
+    
+    // Find data index
+    let dataIndex = -1;
+    for (let j = 0; j < rawData.length; j++) {
+      if (rawData[j].time === minuteData.time) {
+        dataIndex = j;
+        break;
+      }
+    }
+    
+    if (dataIndex === -1 || dataIndex < config.priceDropWindowMinutes) continue;
+    
+    // Check price drop condition
+    const currentPrice = minuteData.price;
+    if (!currentPrice) continue;
+    
+    let maxPrice = currentPrice;
+    for (let k = 0; k < config.priceDropWindowMinutes && (dataIndex - k) >= 0; k++) {
+      const pastData = rawData[dataIndex - k];
+      if (pastData && pastData.price) {
+        maxPrice = Math.max(maxPrice, pastData.price);
+      }
+    }
+    
+    const priceDrop = ((currentPrice - maxPrice) / maxPrice) * 100;
+    const priceDropMet = priceDrop <= -config.priceDropPercent;
+    
+    // Simple MA check (simplified version)
+    const ma20 = calculateSimpleMA(rawData, dataIndex, 'spread_L50_pct_avg', 20);
+    const ma50 = calculateSimpleMA(rawData, dataIndex, 'spread_L50_pct_avg', 50);
+    const ma100 = calculateSimpleMA(rawData, dataIndex, 'spread_L50_pct_avg', 100);
+    
+    const maConditionMet = ma20 && ma50 && ma100 && 
+                          ma20 < cumulativeAvg && 
+                          ma50 < cumulativeAvg && 
+                          ma100 < cumulativeAvg;
+    
+    if (priceDropMet && maConditionMet) {
+      conditionsMetCount++;
+    }
+  }
+  
+  // Check if sustained for required percentage of candle
+  const requiredMinutes = Math.ceil(candleData.length * config.sustainedPercent);
+  return conditionsMetCount >= requiredMinutes;
+}
+
+// Helper function for simple moving average
+function calculateSimpleMA(rawData, currentIndex, fieldName, period) {
+  if (!rawData || rawData.length < period || currentIndex < period - 1) return null;
+  
+  let sum = 0;
+  let count = 0;
+  
+  for (let i = currentIndex - period + 1; i <= currentIndex; i++) {
+    const value = rawData[i][fieldName];
+    if (value !== null && value !== undefined && isFinite(value)) {
+      sum += value;
+      count++;
+    }
+  }
+  
+  return count > 0 ? sum / count : null;
+}
 
 function formatDateYYYYMMDD(date) {
   const year = date.getUTCFullYear();
@@ -2650,11 +2781,116 @@ class TimeframeManager {
       return;
     }
     
-    this.calculateSkullSignals();
-    this.calculateGoldXSignals();
+    // Use simple, clean trigger system
+    this.calculateSimpleSignals();
     this.signalsCalculated = true;
+  }
+
+  // =============================================================================
+  // SIMPLE SIGNAL CALCULATION - EASY TO MODIFY
+  // =============================================================================
+  calculateSimpleSignals() {
+    console.log(`🔄 Calculating simple signals for ${this.currentSymbol}_${API_EXCHANGE} on ${this.currentTimeframe}`);
     
-    console.log(`✅ RESULTS: ${this.skullSignals.size} skulls, ${this.goldXSignals.size} gold X on ${this.currentTimeframe}`);
+    // Clear existing signals
+    this.skullSignals.clear();
+    this.goldXSignals.clear();
+    
+    // Calculate simple thresholds
+    const spreadThresholds = this.calculateSimpleSpreadThresholds();
+    const goldXAvg = this.calculateSimpleGoldXAverage();
+    
+    // Group data into candles
+    const candleBuckets = this.groupDataIntoCandleBuckets();
+    
+    let skullCount = 0;
+    let goldXCount = 0;
+    let lastSkullTime = 0;
+    
+    // Check each candle
+    for (const [candleTime, candleData] of candleBuckets) {
+      // Skull signals (with cooloff)
+      if (TRIGGER_CONFIG.skull.enabled && 
+          candleTime - lastSkullTime >= (TRIGGER_CONFIG.skull.cooloffMinutes * 60)) {
+        
+        if (checkSkullTrigger(candleData, spreadThresholds)) {
+          const price = candleData[candleData.length - 1]?.price || 50000;
+          this.skullSignals.set(candleTime, {
+            type: 'skull',
+            price: price * 1.02,
+            active: true,
+            timeframe: this.currentTimeframe
+          });
+          skullCount++;
+          lastSkullTime = candleTime;
+        }
+      }
+      
+      // Gold X signals
+      if (TRIGGER_CONFIG.goldX.enabled) {
+        if (checkGoldXTrigger(candleData, this.rawData, goldXAvg)) {
+          const price = candleData[candleData.length - 1]?.price || 50000;
+          this.goldXSignals.set(candleTime, {
+            type: 'goldx',
+            price: price * 1.02,
+            active: true,
+            timeframe: this.currentTimeframe
+          });
+          goldXCount++;
+        }
+      }
+    }
+    
+    console.log(`✅ Simple signals: ${skullCount} skulls, ${goldXCount} gold X`);
+  }
+
+  // Simple threshold calculation
+  calculateSimpleSpreadThresholds() {
+    const layers = ['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg'];
+    const thresholds = {};
+    
+    for (const layer of layers) {
+      const values = this.rawData
+        .map(item => item[layer])
+        .filter(val => val !== null && val !== undefined && isFinite(val))
+        .sort((a, b) => a - b);
+      
+      if (values.length > 0) {
+        const thresholdIndex = Math.floor(values.length * TRIGGER_CONFIG.skull.spreadThreshold);
+        thresholds[layer] = values[thresholdIndex];
+      }
+    }
+    
+    return thresholds;
+  }
+
+  // Simple Gold X average calculation
+  calculateSimpleGoldXAverage() {
+    const l50Values = this.rawData
+      .map(item => item.spread_L50_pct_avg)
+      .filter(val => val !== null && val !== undefined && isFinite(val));
+    
+    return l50Values.length > 0 
+      ? l50Values.reduce((sum, val) => sum + val, 0) / l50Values.length 
+      : 0;
+  }
+
+  // Simple data grouping
+  groupDataIntoCandleBuckets() {
+    const timeframeSeconds = this.timeframes[this.currentTimeframe].seconds;
+    const candleBuckets = new Map();
+    
+    for (const item of this.rawData) {
+      const timestamp = this.toUnixTimestamp(item.time);
+      const candleTime = Math.floor(timestamp / timeframeSeconds) * timeframeSeconds;
+      
+      if (!candleBuckets.has(candleTime)) {
+        candleBuckets.set(candleTime, []);
+      }
+      candleBuckets.get(candleTime).push(item);
+    }
+    
+    return candleBuckets;
   }
 
   // External trigger function - call this when your condition is met
