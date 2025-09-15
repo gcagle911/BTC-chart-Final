@@ -2932,8 +2932,7 @@ class TimeframeManager {
           time: time,
           position: 'aboveBar',
           color: '#FF0000',
-          shape: 'text',
-          text: 'S', // Simple text instead of emoji
+          shape: 'arrowUp', // Different shape instead of text
           size: 2,
         });
       }
@@ -2945,10 +2944,9 @@ class TimeframeManager {
       for (const [time, signal] of this.goldXSignals) {
         markers.push({
           time: time,
-          position: 'belowBar', // Back to belowBar - different from skulls
+          position: 'belowBar', // Back to different position
           color: '#FFD700',
-          shape: 'text',
-          text: 'X', // Simple text instead of emoji
+          shape: 'arrowDown', // Different shape instead of text
           size: 2,
         });
       }
