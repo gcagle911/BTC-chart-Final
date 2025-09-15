@@ -3109,38 +3109,56 @@ class TimeframeManager {
     
     let sellCount = 0;
     let buyCount = 0;
+    let lastSellTime = 0;
+    let lastBuyTime = 0;
     
-    // Check each candle for time-based triggers
+    // Check each candle for triggers (with cooldown)
     for (const [candleTime, candleData] of candleBuckets) {
       
-      // Check sell trigger (Red X above candles)
-      if (checkSellTrigger(candleData, candleTime, this.rawData, this.currentSymbol, API_EXCHANGE, this.currentTimeframe)) {
-        const price = candleData[candleData.length - 1]?.price || 50000;
-        this.sellSignals.set(candleTime, {
-          type: 'sell',
-          price: price * 1.02,
-          active: true,
-          timeframe: this.currentTimeframe,
-          triggerReason: 'Custom sell logic'
-        });
-        sellCount++;
+      // Check sell trigger (Red X above candles) with cooldown
+      const sellCooldownSeconds = TRIGGER_CONFIG.sell.cooldown.enabled ? 
+        (TRIGGER_CONFIG.sell.cooldown.durationMinutes * 60) : 0;
+        
+      if (candleTime - lastSellTime >= sellCooldownSeconds) {
+        if (checkSellTrigger(candleData, candleTime, this.rawData, this.currentSymbol, API_EXCHANGE, this.currentTimeframe)) {
+          const price = candleData[candleData.length - 1]?.price || 50000;
+          this.sellSignals.set(candleTime, {
+            type: 'sell',
+            price: price * 1.02,
+            active: true,
+            timeframe: this.currentTimeframe,
+            triggerReason: 'L50MA50 >= 0.035',
+            cooldownUntil: candleTime + sellCooldownSeconds
+          });
+          sellCount++;
+          lastSellTime = candleTime;
+          console.log(`❌ SELL triggered at ${new Date(candleTime * 1000).toISOString()}, next available: ${new Date((candleTime + sellCooldownSeconds) * 1000).toISOString()}`);
+        }
       }
       
-      // Check buy trigger (Green Circle below candles)
-      if (checkBuyTrigger(candleData, candleTime, this.rawData, this.currentSymbol, API_EXCHANGE, this.currentTimeframe)) {
-        const price = candleData[candleData.length - 1]?.price || 50000;
-        this.buySignals.set(candleTime, {
-          type: 'buy',
-          price: price * 1.02,
-          active: true,
-          timeframe: this.currentTimeframe,
-          triggerReason: 'Custom buy logic'
-        });
-        buyCount++;
+      // Check buy trigger (Green Circle below candles) with cooldown
+      const buyCooldownSeconds = TRIGGER_CONFIG.buy.cooldown.enabled ? 
+        (TRIGGER_CONFIG.buy.cooldown.durationMinutes * 60) : 0;
+        
+      if (candleTime - lastBuyTime >= buyCooldownSeconds) {
+        if (checkBuyTrigger(candleData, candleTime, this.rawData, this.currentSymbol, API_EXCHANGE, this.currentTimeframe)) {
+          const price = candleData[candleData.length - 1]?.price || 50000;
+          this.buySignals.set(candleTime, {
+            type: 'buy',
+            price: price * 1.02,
+            active: true,
+            timeframe: this.currentTimeframe,
+            triggerReason: 'Custom buy logic',
+            cooldownUntil: candleTime + buyCooldownSeconds
+          });
+          buyCount++;
+          lastBuyTime = candleTime;
+          console.log(`🟢 BUY triggered at ${new Date(candleTime * 1000).toISOString()}, next available: ${new Date((candleTime + buyCooldownSeconds) * 1000).toISOString()}`);
+        }
       }
     }
     
-    console.log(`✅ Clean slate signals: ${sellCount} sell, ${buyCount} buy (no triggers until requirements defined)`);
+    console.log(`✅ Signals with cooldown: ${sellCount} sell, ${buyCount} buy`);
     console.log(`📊 DEBUG: Total candles processed: ${candleBuckets.size}`);
     console.log(`📊 DEBUG: Sell signals stored: ${this.sellSignals.size}`);
     console.log(`📊 DEBUG: Buy signals stored: ${this.buySignals.size}`);
