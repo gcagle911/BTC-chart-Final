@@ -73,6 +73,46 @@ const TRIGGER_CONFIG = {
       durationMinutes: 60  // 1 hour cooldown after trigger
     }
     // Trigger conditions will be added here
+  },
+  
+  // Indicator A configuration (Blue Diamond above candles)
+  indicatorA: {
+    enabled: true,
+    signalType: 'INDICATOR_A',
+    displayName: 'A',
+    marker: {
+      emoji: '🔷',
+      color: '#0080FF',
+      position: 'aboveBar',
+      size: 2,
+      previewColor: '#6699FF',
+      previewSize: 1
+    },
+    cooldown: {
+      enabled: true,
+      durationMinutes: 60  // 1 hour cooldown after trigger
+    }
+    // Trigger conditions ready to be added
+  },
+  
+  // Indicator B configuration (Purple Square below candles)
+  indicatorB: {
+    enabled: true,
+    signalType: 'INDICATOR_B',
+    displayName: 'B',
+    marker: {
+      emoji: '🟪',
+      color: '#8000FF',
+      position: 'belowBar',
+      size: 2,
+      previewColor: '#9966FF',
+      previewSize: 1
+    },
+    cooldown: {
+      enabled: true,
+      durationMinutes: 60  // 1 hour cooldown after trigger
+    }
+    // Trigger conditions ready to be added
   }
 };
 
@@ -262,6 +302,30 @@ function checkMinuteTriggerConditions(signalType, minuteData, minuteIndex, candl
         timestamp: minuteData.time
       }
     };
+    
+  } else if (signalType === 'indicatorA') {
+    // INDICATOR A: No conditions implemented yet
+    return { 
+      met: false, 
+      reason: 'No indicator A conditions implemented yet', 
+      values: {
+        assetExchangeKey: `${currentSymbol}_${exchange}`,
+        price: minuteData.price,
+        timestamp: minuteData.time
+      }
+    };
+    
+  } else if (signalType === 'indicatorB') {
+    // INDICATOR B: No conditions implemented yet
+    return { 
+      met: false, 
+      reason: 'No indicator B conditions implemented yet', 
+      values: {
+        assetExchangeKey: `${currentSymbol}_${exchange}`,
+        price: minuteData.price,
+        timestamp: minuteData.time
+      }
+    };
   }
   
   return { 
@@ -279,6 +343,16 @@ function checkSellTrigger(candleData, candleTime, rawData, currentSymbol, exchan
 
 function checkBuyTrigger(candleData, candleTime, rawData, currentSymbol, exchange, timeframe) {
   const result = evaluateTrigger('buy', candleData, candleTime, rawData, currentSymbol, exchange, timeframe);
+  return result.triggered;
+}
+
+function checkIndicatorATrigger(candleData, candleTime, rawData, currentSymbol, exchange, timeframe) {
+  const result = evaluateTrigger('indicatorA', candleData, candleTime, rawData, currentSymbol, exchange, timeframe);
+  return result.triggered;
+}
+
+function checkIndicatorBTrigger(candleData, candleTime, rawData, currentSymbol, exchange, timeframe) {
+  const result = evaluateTrigger('indicatorB', candleData, candleTime, rawData, currentSymbol, exchange, timeframe);
   return result.triggered;
 }
 
@@ -1170,19 +1244,23 @@ class TimeframeManager {
     // Signal Indicator System
     this.sellIndicatorEnabled = false;
     this.buyIndicatorEnabled = false;
+    this.indicatorAEnabled = false;
+    this.indicatorBEnabled = false;
     this.sellSignals = new Map(); // time -> confirmed signal data (candle closed)
     this.buySignals = new Map(); // time -> confirmed signal data (candle closed)
+    this.indicatorASignals = new Map(); // time -> confirmed signal data (candle closed)
+    this.indicatorBSignals = new Map(); // time -> confirmed signal data (candle closed)
     this.signalsCalculated = false;
     this.signalSystemEnabled = false;
     
     // Real-time signal tracking
-    this.currentCandleSignals = new Map(); // time -> {sell: boolean, buy: boolean} (preview)
+    this.currentCandleSignals = new Map(); // time -> {sell: boolean, buy: boolean, indicatorA: boolean, indicatorB: boolean} (preview)
     this.lastCandleTime = 0;
     
     // Asset/Exchange isolation - CRITICAL for trading bot accuracy
     this.assetExchangeKey = null; // Will be set to "BTC_coinbase", "ETH_kraken", etc.
     this.percentileCache = new Map(); // assetExchangeKey -> {field_period: threshold}
-    this.lastCooldownTimes = new Map(); // assetExchangeKey -> {sell: timestamp, buy: timestamp}
+    this.lastCooldownTimes = new Map(); // assetExchangeKey -> {sell: timestamp, buy: timestamp, indicatorA: timestamp, indicatorB: timestamp}
     
     // Skull Trigger System
     this.spreadThresholds = new Map(); // asset_exchange -> {top5Percent: value}
@@ -2048,6 +2126,8 @@ class TimeframeManager {
     // Clear all signals - they're specific to the previous asset/exchange
     this.sellSignals.clear();
     this.buySignals.clear();
+    this.indicatorASignals.clear();
+    this.indicatorBSignals.clear();
     this.signalsCalculated = false;
     
     // Reset cooloff for new asset/exchange
@@ -2080,6 +2160,8 @@ class TimeframeManager {
     // Clear all signals - they're specific to the previous timeframe
     this.sellSignals.clear();
     this.buySignals.clear();
+    this.indicatorASignals.clear();
+    this.indicatorBSignals.clear();
     this.signalsCalculated = false;
     
     // Clear signal markers from chart
@@ -3132,7 +3214,7 @@ class TimeframeManager {
       createSignalMarkerSeries();
     }
     // Enable the signal system when any signal indicator is on
-    this.signalSystemEnabled = this.sellIndicatorEnabled || this.buyIndicatorEnabled;
+    this.signalSystemEnabled = this.sellIndicatorEnabled || this.buyIndicatorEnabled || this.indicatorAEnabled || this.indicatorBEnabled;
     
     // Start real-time checking if any signal is enabled
     if (this.signalSystemEnabled) {
@@ -3156,7 +3238,55 @@ class TimeframeManager {
       createSignalMarkerSeries();
     }
     // Enable the signal system when any signal indicator is on
-    this.signalSystemEnabled = this.sellIndicatorEnabled || this.buyIndicatorEnabled;
+    this.signalSystemEnabled = this.sellIndicatorEnabled || this.buyIndicatorEnabled || this.indicatorAEnabled || this.indicatorBEnabled;
+    
+    // Start real-time checking if any signal is enabled
+    if (this.signalSystemEnabled) {
+      this.startRealTimeSignalChecking();
+    }
+    
+    // Update display
+    this.updateSignalDisplay();
+  }
+  
+  toggleIndicatorA(enabled) {
+    this.indicatorAEnabled = enabled;
+    console.log(`🔷 Indicator A ${enabled ? 'enabled' : 'disabled'}`);
+    
+    if (enabled) {
+      // Calculate signals if not already done
+      if (!this.signalsCalculated) {
+        this.calculateAllSignals();
+      }
+      // Create signal series if needed
+      createSignalMarkerSeries();
+    }
+    // Enable the signal system when any signal indicator is on
+    this.signalSystemEnabled = this.sellIndicatorEnabled || this.buyIndicatorEnabled || this.indicatorAEnabled || this.indicatorBEnabled;
+    
+    // Start real-time checking if any signal is enabled
+    if (this.signalSystemEnabled) {
+      this.startRealTimeSignalChecking();
+    }
+    
+    // Update display
+    this.updateSignalDisplay();
+  }
+  
+  toggleIndicatorB(enabled) {
+    this.indicatorBEnabled = enabled;
+    console.log(`🟪 Indicator B ${enabled ? 'enabled' : 'disabled'}`);
+    
+    if (enabled) {
+      // Calculate signals if not already done
+      if (!this.signalsCalculated) {
+        this.calculateAllSignals();
+      }
+      // Create signal series if needed
+      createSignalMarkerSeries();
+    }
+    // Enable the signal system when any signal indicator is on
+    this.signalSystemEnabled = this.sellIndicatorEnabled || this.buyIndicatorEnabled || this.indicatorAEnabled || this.indicatorBEnabled;
     
     // Start real-time checking if any signal is enabled
     if (this.signalSystemEnabled) {
@@ -3199,10 +3329,12 @@ class TimeframeManager {
     const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
     
     // Get asset/exchange-specific cooldown times
-    const cooldownTimes = this.lastCooldownTimes.get(assetExchangeKey) || { sell: 0, buy: 0 };
+    const cooldownTimes = this.lastCooldownTimes.get(assetExchangeKey) || { sell: 0, buy: 0, indicatorA: 0, indicatorB: 0 };
     
     let sellCount = 0;
     let buyCount = 0;
+    let indicatorACount = 0;
+    let indicatorBCount = 0;
     
     // Check each candle for triggers (with asset/exchange-specific cooldown)
     for (const [candleTime, candleData] of candleBuckets) {
@@ -3250,15 +3382,58 @@ class TimeframeManager {
           console.log(`🟢 BUY triggered for ${assetExchangeKey} at ${new Date(candleTime * 1000).toISOString()}, next available: ${new Date((candleTime + buyCooldownSeconds) * 1000).toISOString()}`);
         }
       }
+      
+      // Check indicator A trigger with asset/exchange-specific cooldown
+      const indicatorACooldownSeconds = TRIGGER_CONFIG.indicatorA.cooldown.enabled ? 
+        (TRIGGER_CONFIG.indicatorA.cooldown.durationMinutes * 60) : 0;
+        
+      if (candleTime - cooldownTimes.indicatorA >= indicatorACooldownSeconds) {
+        if (checkIndicatorATrigger(candleData, candleTime, this.rawData, this.currentSymbol, API_EXCHANGE, this.currentTimeframe)) {
+          const price = candleData[candleData.length - 1]?.price || 50000;
+          this.indicatorASignals.set(candleTime, {
+            type: 'indicatorA',
+            price: price * 1.02,
+            active: true,
+            timeframe: this.currentTimeframe,
+            assetExchangeKey: assetExchangeKey,
+            triggerReason: 'Indicator A logic',
+            cooldownUntil: candleTime + indicatorACooldownSeconds
+          });
+          indicatorACount++;
+          cooldownTimes.indicatorA = candleTime;
+          console.log(`🔷 INDICATOR A triggered for ${assetExchangeKey} at ${new Date(candleTime * 1000).toISOString()}, next available: ${new Date((candleTime + indicatorACooldownSeconds) * 1000).toISOString()}`);
+        }
+      }
+      
+      // Check indicator B trigger with asset/exchange-specific cooldown
+      const indicatorBCooldownSeconds = TRIGGER_CONFIG.indicatorB.cooldown.enabled ? 
+        (TRIGGER_CONFIG.indicatorB.cooldown.durationMinutes * 60) : 0;
+        
+      if (candleTime - cooldownTimes.indicatorB >= indicatorBCooldownSeconds) {
+        if (checkIndicatorBTrigger(candleData, candleTime, this.rawData, this.currentSymbol, API_EXCHANGE, this.currentTimeframe)) {
+          const price = candleData[candleData.length - 1]?.price || 50000;
+          this.indicatorBSignals.set(candleTime, {
+            type: 'indicatorB',
+            price: price * 1.02,
+            active: true,
+            timeframe: this.currentTimeframe,
+            assetExchangeKey: assetExchangeKey,
+            triggerReason: 'Indicator B logic',
+            cooldownUntil: candleTime + indicatorBCooldownSeconds
+          });
+          indicatorBCount++;
+          cooldownTimes.indicatorB = candleTime;
+          console.log(`🟪 INDICATOR B triggered for ${assetExchangeKey} at ${new Date(candleTime * 1000).toISOString()}, next available: ${new Date((candleTime + indicatorBCooldownSeconds) * 1000).toISOString()}`);
+        }
+      }
     }
     
     // Store updated cooldown times for this asset/exchange
     this.lastCooldownTimes.set(assetExchangeKey, cooldownTimes);
     
-    console.log(`✅ Signals with cooldown: ${sellCount} sell, ${buyCount} buy`);
+    console.log(`✅ Signals with cooldown: ${sellCount} sell, ${buyCount} buy, ${indicatorACount} A, ${indicatorBCount} B`);
     console.log(`📊 DEBUG: Total candles processed: ${candleBuckets.size}`);
-    console.log(`📊 DEBUG: Sell signals stored: ${this.sellSignals.size}`);
-    console.log(`📊 DEBUG: Buy signals stored: ${this.buySignals.size}`);
+    console.log(`📊 DEBUG: Signals stored - Sell: ${this.sellSignals.size}, Buy: ${this.buySignals.size}, A: ${this.indicatorASignals.size}, B: ${this.indicatorBSignals.size}`);
   }
 
   // Check current candle for real-time signal preview
@@ -3306,9 +3481,11 @@ class TimeframeManager {
     const candleData = this.getCurrentCandleData(this.lastCandleTime);
     if (!candleData) return;
     
-    // Re-check with full candle data to confirm
+    // Re-check with full candle data to confirm all indicators
     const sellConfirmed = checkSellTrigger(candleData, this.lastCandleTime, this.rawData, this.currentSymbol, API_EXCHANGE, this.currentTimeframe);
     const buyConfirmed = checkBuyTrigger(candleData, this.lastCandleTime, this.rawData, this.currentSymbol, API_EXCHANGE, this.currentTimeframe);
+    const indicatorAConfirmed = checkIndicatorATrigger(candleData, this.lastCandleTime, this.rawData, this.currentSymbol, API_EXCHANGE, this.currentTimeframe);
+    const indicatorBConfirmed = checkIndicatorBTrigger(candleData, this.lastCandleTime, this.rawData, this.currentSymbol, API_EXCHANGE, this.currentTimeframe);
     
     // Add confirmed signals to permanent storage
     if (sellConfirmed) {
@@ -3333,6 +3510,30 @@ class TimeframeManager {
         confirmed: true
       });
       console.log(`🟢 BUY signal CONFIRMED for closed candle`);
+    }
+    
+    if (indicatorAConfirmed) {
+      const price = candleData[candleData.length - 1]?.price || 50000;
+      this.indicatorASignals.set(this.lastCandleTime, {
+        type: 'indicatorA',
+        price: price * 1.02,
+        active: true,
+        timeframe: this.currentTimeframe,
+        confirmed: true
+      });
+      console.log(`🔷 INDICATOR A signal CONFIRMED for closed candle`);
+    }
+    
+    if (indicatorBConfirmed) {
+      const price = candleData[candleData.length - 1]?.price || 50000;
+      this.indicatorBSignals.set(this.lastCandleTime, {
+        type: 'indicatorB',
+        price: price * 1.02,
+        active: true,
+        timeframe: this.currentTimeframe,
+        confirmed: true
+      });
+      console.log(`🟪 INDICATOR B signal CONFIRMED for closed candle`);
     }
     
     // Remove from preview tracking
@@ -3498,6 +3699,38 @@ class TimeframeManager {
       console.log(`${buyConfig.marker.emoji} Added ${this.buySignals.size} confirmed ${buyConfig.displayName} markers`);
     }
     
+    // Add confirmed indicator A markers if enabled
+    if (this.indicatorAEnabled) {
+      const indicatorAConfig = TRIGGER_CONFIG.indicatorA;
+      for (const [time, signal] of this.indicatorASignals) {
+        markers.push({
+          time: time,
+          position: indicatorAConfig.marker.position,
+          color: indicatorAConfig.marker.color,
+          shape: 'text',
+          text: indicatorAConfig.marker.emoji,
+          size: indicatorAConfig.marker.size,
+        });
+      }
+      console.log(`${indicatorAConfig.marker.emoji} Added ${this.indicatorASignals.size} confirmed ${indicatorAConfig.displayName} markers`);
+    }
+    
+    // Add confirmed indicator B markers if enabled
+    if (this.indicatorBEnabled) {
+      const indicatorBConfig = TRIGGER_CONFIG.indicatorB;
+      for (const [time, signal] of this.indicatorBSignals) {
+        markers.push({
+          time: time,
+          position: indicatorBConfig.marker.position,
+          color: indicatorBConfig.marker.color,
+          shape: 'text',
+          text: indicatorBConfig.marker.emoji,
+          size: indicatorBConfig.marker.size,
+        });
+      }
+      console.log(`${indicatorBConfig.marker.emoji} Added ${this.indicatorBSignals.size} confirmed ${indicatorBConfig.displayName} markers`);
+    }
+    
     // Add real-time preview markers (dimmed)
     for (const [time, signalState] of this.currentCandleSignals) {
       if (this.sellIndicatorEnabled && signalState.sell) {
@@ -3523,6 +3756,30 @@ class TimeframeManager {
           size: buyConfig.marker.previewSize,
         });
       }
+      
+      if (this.indicatorAEnabled && signalState.indicatorA) {
+        const indicatorAConfig = TRIGGER_CONFIG.indicatorA;
+        markers.push({
+          time: time,
+          position: indicatorAConfig.marker.position,
+          color: indicatorAConfig.marker.previewColor,
+          shape: 'text',
+          text: indicatorAConfig.marker.emoji,
+          size: indicatorAConfig.marker.previewSize,
+        });
+      }
+      
+      if (this.indicatorBEnabled && signalState.indicatorB) {
+        const indicatorBConfig = TRIGGER_CONFIG.indicatorB;
+        markers.push({
+          time: time,
+          position: indicatorBConfig.marker.position,
+          color: indicatorBConfig.marker.previewColor,
+          shape: 'text',
+          text: indicatorBConfig.marker.emoji,
+          size: indicatorBConfig.marker.previewSize,
+        });
+      }
     }
     
     console.log(`📍 Setting ${markers.length} total markers on chart`);
@@ -3537,7 +3794,9 @@ class TimeframeManager {
         if (statusEl) {
           const sellCount = this.sellIndicatorEnabled ? this.sellSignals.size : 0;
           const buyCount = this.buyIndicatorEnabled ? this.buySignals.size : 0;
-          statusEl.textContent = `Showing: ${sellCount} sell, ${buyCount} buy`;
+          const indicatorACount = this.indicatorAEnabled ? this.indicatorASignals.size : 0;
+          const indicatorBCount = this.indicatorBEnabled ? this.indicatorBSignals.size : 0;
+          statusEl.textContent = `Showing: ${sellCount} sell, ${buyCount} buy, ${indicatorACount} A, ${indicatorBCount} B`;
         }
       } else {
         console.warn('⚠️ Price series not available');
@@ -4342,10 +4601,18 @@ function toggleBuyIndicator(enabled) {
   manager.toggleBuyIndicator(enabled);
 }
 
+function toggleIndicatorA(enabled) {
+  manager.toggleIndicatorA(enabled);
+}
+
+function toggleIndicatorB(enabled) {
+  manager.toggleIndicatorB(enabled);
+}
+
 function calculateAllSignals() {
   manager.calculateAllSignals();
   // Update display if any indicators are enabled
-  if (manager.sellIndicatorEnabled || manager.buyIndicatorEnabled) {
+  if (manager.sellIndicatorEnabled || manager.buyIndicatorEnabled || manager.indicatorAEnabled || manager.indicatorBEnabled) {
     manager.updateSignalDisplay();
   }
 }

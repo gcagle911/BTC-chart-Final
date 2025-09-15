@@ -43,6 +43,26 @@
 
 ---
 
+### 🔷 **INDICATOR A** (Blue Diamond above candles)
+
+| Requirement | Condition | Value | Status |
+|-------------|-----------|-------|--------|
+| *No requirements yet* | - | - | ⏳ **PENDING** |
+
+**Ready for indicator A trigger requirements...**
+
+---
+
+### 🟪 **INDICATOR B** (Purple Square below candles)
+
+| Requirement | Condition | Value | Status |
+|-------------|-----------|-------|--------|
+| *No requirements yet* | - | - | ⏳ **PENDING** |
+
+**Ready for indicator B trigger requirements...**
+
+---
+
 ## ⚙️ **SYSTEM CONFIGURATION**
 
 ### Global Settings
