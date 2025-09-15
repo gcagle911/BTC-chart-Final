@@ -2,22 +2,18 @@
 // Main price chart with Bid Spread MAs on LEFT y-axis and enhanced zoom capability
 
 // =============================================================================
-// TRIGGER CONFIGURATION - EASY TO EDIT
+// TRIGGER CONFIGURATION - CLEAN SLATE
 // =============================================================================
 const TRIGGER_CONFIG = {
   skull: {
     enabled: true,
-    cooloffMinutes: 60,
-    spreadThreshold: 0.85,  // Top 15% (1 - 0.15)
-    slopeThreshold: 0.95,   // Top 5% (1 - 0.05)
-    requiredLayers: 2,      // 2 of 3 layers must trigger
-    sustainedPercent: 0.7   // 70% of candle duration
+    triggerTime: "09:30",  // 9:30 AM EST
+    timezone: "America/New_York"
   },
   goldX: {
     enabled: true,
-    priceDropPercent: 1.75, // 1.75% price drop required
-    priceDropWindowMinutes: 120, // 2 hours
-    sustainedPercent: 0.5   // 50% of candle duration
+    triggerTime: "20:00",  // 8:00 PM EST
+    timezone: "America/New_York"
   }
 };
 
@@ -29,114 +25,53 @@ let API_EXCHANGE = 'coinbase';
 const EARLIEST_DATA_DATE = new Date('2025-09-09T00:00:00Z');
 
 // =============================================================================
-// SIMPLE TRIGGER FUNCTIONS - EASY TO MODIFY
+// CLEAN SLATE - SIMPLE TIME-BASED TRIGGERS
 // =============================================================================
 
-// Simple skull trigger check - modify this function to change skull logic
-function checkSkullTrigger(candleData, spreadThresholds, slopeThreshold) {
-  if (!candleData || candleData.length === 0) return false;
+// Check if current time matches skull trigger time (9:30 AM EST)
+function checkSkullTrigger(candleTime) {
+  if (!TRIGGER_CONFIG.skull.enabled) return false;
   
-  const config = TRIGGER_CONFIG.skull;
-  const layers = ['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg'];
+  // Convert candle timestamp to EST time
+  const candleDate = new Date(candleTime * 1000);
+  const estTime = new Intl.DateTimeFormat('en-US', {
+    timeZone: TRIGGER_CONFIG.skull.timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).format(candleDate);
   
-  let sustainedCount = 0;
+  const targetTime = TRIGGER_CONFIG.skull.triggerTime;
+  const matches = estTime === targetTime;
   
-  for (let i = 0; i < candleData.length; i++) {
-    const minuteData = candleData[i];
-    
-    // Check how many layers meet threshold
-    let layersMet = 0;
-    for (const layer of layers) {
-      const value = minuteData[layer];
-      const threshold = spreadThresholds[layer];
-      if (threshold && value !== null && value >= threshold) {
-        layersMet++;
-      }
-    }
-    
-    // Check if enough layers met threshold
-    if (layersMet >= config.requiredLayers) {
-      sustainedCount++;
-    }
+  if (matches) {
+    console.log(`💀 SKULL TRIGGER: ${estTime} EST matches target ${targetTime}`);
   }
   
-  // Check if sustained for required percentage of candle
-  const requiredMinutes = Math.ceil(candleData.length * config.sustainedPercent);
-  return sustainedCount >= requiredMinutes;
+  return matches;
 }
 
-// Simple Gold X trigger check - modify this function to change Gold X logic
-function checkGoldXTrigger(candleData, rawData, cumulativeAvg) {
-  if (!candleData || candleData.length === 0) return false;
+// Check if current time matches Gold X trigger time (8:00 PM EST)
+function checkGoldXTrigger(candleTime) {
+  if (!TRIGGER_CONFIG.goldX.enabled) return false;
   
-  const config = TRIGGER_CONFIG.goldX;
-  let conditionsMetCount = 0;
+  // Convert candle timestamp to EST time
+  const candleDate = new Date(candleTime * 1000);
+  const estTime = new Intl.DateTimeFormat('en-US', {
+    timeZone: TRIGGER_CONFIG.goldX.timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).format(candleDate);
   
-  for (let i = 0; i < candleData.length; i++) {
-    const minuteData = candleData[i];
-    
-    // Find data index
-    let dataIndex = -1;
-    for (let j = 0; j < rawData.length; j++) {
-      if (rawData[j].time === minuteData.time) {
-        dataIndex = j;
-        break;
-      }
-    }
-    
-    if (dataIndex === -1 || dataIndex < config.priceDropWindowMinutes) continue;
-    
-    // Check price drop condition
-    const currentPrice = minuteData.price;
-    if (!currentPrice) continue;
-    
-    let maxPrice = currentPrice;
-    for (let k = 0; k < config.priceDropWindowMinutes && (dataIndex - k) >= 0; k++) {
-      const pastData = rawData[dataIndex - k];
-      if (pastData && pastData.price) {
-        maxPrice = Math.max(maxPrice, pastData.price);
-      }
-    }
-    
-    const priceDrop = ((currentPrice - maxPrice) / maxPrice) * 100;
-    const priceDropMet = priceDrop <= -config.priceDropPercent;
-    
-    // Simple MA check (simplified version)
-    const ma20 = calculateSimpleMA(rawData, dataIndex, 'spread_L50_pct_avg', 20);
-    const ma50 = calculateSimpleMA(rawData, dataIndex, 'spread_L50_pct_avg', 50);
-    const ma100 = calculateSimpleMA(rawData, dataIndex, 'spread_L50_pct_avg', 100);
-    
-    const maConditionMet = ma20 && ma50 && ma100 && 
-                          ma20 < cumulativeAvg && 
-                          ma50 < cumulativeAvg && 
-                          ma100 < cumulativeAvg;
-    
-    if (priceDropMet && maConditionMet) {
-      conditionsMetCount++;
-    }
+  const targetTime = TRIGGER_CONFIG.goldX.triggerTime;
+  const matches = estTime === targetTime;
+  
+  if (matches) {
+    console.log(`✖️ GOLD X TRIGGER: ${estTime} EST matches target ${targetTime}`);
   }
   
-  // Check if sustained for required percentage of candle
-  const requiredMinutes = Math.ceil(candleData.length * config.sustainedPercent);
-  return conditionsMetCount >= requiredMinutes;
-}
-
-// Helper function for simple moving average
-function calculateSimpleMA(rawData, currentIndex, fieldName, period) {
-  if (!rawData || rawData.length < period || currentIndex < period - 1) return null;
-  
-  let sum = 0;
-  let count = 0;
-  
-  for (let i = currentIndex - period + 1; i <= currentIndex; i++) {
-    const value = rawData[i][fieldName];
-    if (value !== null && value !== undefined && isFinite(value)) {
-      sum += value;
-      count++;
-    }
-  }
-  
-  return count > 0 ? sum / count : null;
+  return matches;
 }
 
 function formatDateYYYYMMDD(date) {
@@ -2787,92 +2722,52 @@ class TimeframeManager {
   }
 
   // =============================================================================
-  // SIMPLE SIGNAL CALCULATION - EASY TO MODIFY
+  // CLEAN SLATE - TIME-BASED SIGNAL CALCULATION
   // =============================================================================
   calculateSimpleSignals() {
-    console.log(`🔄 Calculating simple signals for ${this.currentSymbol}_${API_EXCHANGE} on ${this.currentTimeframe}`);
+    console.log(`🔄 Calculating time-based signals for ${this.currentSymbol}_${API_EXCHANGE} on ${this.currentTimeframe}`);
     
     // Clear existing signals
     this.skullSignals.clear();
     this.goldXSignals.clear();
-    
-    // Calculate simple thresholds
-    const spreadThresholds = this.calculateSimpleSpreadThresholds();
-    const goldXAvg = this.calculateSimpleGoldXAverage();
     
     // Group data into candles
     const candleBuckets = this.groupDataIntoCandleBuckets();
     
     let skullCount = 0;
     let goldXCount = 0;
-    let lastSkullTime = 0;
     
-    // Check each candle
+    // Check each candle for time-based triggers
     for (const [candleTime, candleData] of candleBuckets) {
-      // Skull signals (with cooloff)
-      if (TRIGGER_CONFIG.skull.enabled && 
-          candleTime - lastSkullTime >= (TRIGGER_CONFIG.skull.cooloffMinutes * 60)) {
-        
-        if (checkSkullTrigger(candleData, spreadThresholds)) {
-          const price = candleData[candleData.length - 1]?.price || 50000;
-          this.skullSignals.set(candleTime, {
-            type: 'skull',
-            price: price * 1.02,
-            active: true,
-            timeframe: this.currentTimeframe
-          });
-          skullCount++;
-          lastSkullTime = candleTime;
-        }
+      
+      // Check skull trigger (9:30 AM EST)
+      if (checkSkullTrigger(candleTime)) {
+        const price = candleData[candleData.length - 1]?.price || 50000;
+        this.skullSignals.set(candleTime, {
+          type: 'skull',
+          price: price * 1.02,
+          active: true,
+          timeframe: this.currentTimeframe,
+          triggerReason: '9:30 AM EST'
+        });
+        skullCount++;
       }
       
-      // Gold X signals
-      if (TRIGGER_CONFIG.goldX.enabled) {
-        if (checkGoldXTrigger(candleData, this.rawData, goldXAvg)) {
-          const price = candleData[candleData.length - 1]?.price || 50000;
-          this.goldXSignals.set(candleTime, {
-            type: 'goldx',
-            price: price * 1.02,
-            active: true,
-            timeframe: this.currentTimeframe
-          });
-          goldXCount++;
-        }
+      // Check Gold X trigger (8:00 PM EST)
+      if (checkGoldXTrigger(candleTime)) {
+        const price = candleData[candleData.length - 1]?.price || 50000;
+        this.goldXSignals.set(candleTime, {
+          type: 'goldx',
+          price: price * 1.02,
+          active: true,
+          timeframe: this.currentTimeframe,
+          triggerReason: '8:00 PM EST'
+        });
+        goldXCount++;
       }
     }
     
-    console.log(`✅ Simple signals: ${skullCount} skulls, ${goldXCount} gold X`);
-  }
-
-  // Simple threshold calculation
-  calculateSimpleSpreadThresholds() {
-    const layers = ['spread_L5_pct_avg', 'spread_L50_pct_avg', 'spread_L100_pct_avg'];
-    const thresholds = {};
-    
-    for (const layer of layers) {
-      const values = this.rawData
-        .map(item => item[layer])
-        .filter(val => val !== null && val !== undefined && isFinite(val))
-        .sort((a, b) => a - b);
-      
-      if (values.length > 0) {
-        const thresholdIndex = Math.floor(values.length * TRIGGER_CONFIG.skull.spreadThreshold);
-        thresholds[layer] = values[thresholdIndex];
-      }
-    }
-    
-    return thresholds;
-  }
-
-  // Simple Gold X average calculation
-  calculateSimpleGoldXAverage() {
-    const l50Values = this.rawData
-      .map(item => item.spread_L50_pct_avg)
-      .filter(val => val !== null && val !== undefined && isFinite(val));
-    
-    return l50Values.length > 0 
-      ? l50Values.reduce((sum, val) => sum + val, 0) / l50Values.length 
-      : 0;
+    console.log(`✅ Time-based signals: ${skullCount} skulls (9:30 AM), ${goldXCount} gold X (8:00 PM)`);
   }
 
   // Simple data grouping
