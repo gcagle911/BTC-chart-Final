@@ -26,8 +26,8 @@ const TRIGGER_CONFIG = {
   global: {
     sustainedPercent: 0.5,        // 50% of candle must meet conditions
     realTimeCheckInterval: 5000,  // Check every 5 seconds
-    debugMode: true,              // Enable debug to see what's happening
-    cacheThresholds: true,        // Cache percentile calculations
+    debugMode: false,             // Minimal logging
+    cacheThresholds: false,       // Disable caching for now - calculate fresh each time
     thresholdUpdateInterval: 3600 // Update thresholds every hour (seconds)
   },
   
@@ -293,7 +293,9 @@ function checkMinuteTriggerConditions(signalType, minuteData, minuteIndex, candl
     // Trigger if ANY layer qualifies
     const triggered = qualifyingLayers.length > 0;
     
-    console.log(`🔍 SELL EVALUATION: ${assetExchangeKey} - Qualifying layers: [${qualifyingLayers.join(', ')}] = ${triggered}`);
+    if (TRIGGER_CONFIG.global.debugMode) {
+      console.log(`🔍 SELL EVALUATION: ${assetExchangeKey} - Qualifying layers: [${qualifyingLayers.join(', ')}] = ${triggered}`);
+    }
     
     return {
       met: triggered,
@@ -389,23 +391,8 @@ function checkIndicatorBTrigger(candleData, candleTime, rawData, currentSymbol, 
  * @returns {number} - Threshold value specific to this asset/exchange
  */
 function getCachedAssetExchangePercentile(manager, rawData, fieldName, percentile, assetExchangeKey, lookbackHours = 48) {
-  const cacheKey = `${assetExchangeKey}_${fieldName}_${percentile}`;
-  const now = Date.now();
-  
-  console.log(`🔍 Getting percentile for ${cacheKey}`);
-  
-  // Check if we have cached value and it's still fresh (if manager available)
-  if (manager && manager.percentileCache) {
-    const cached = manager.percentileCache.get(cacheKey);
-    if (cached && (now - cached.lastUpdate) < (TRIGGER_CONFIG.global.thresholdUpdateInterval * 1000)) {
-      console.log(`✅ Using cached threshold: ${cached.threshold.toFixed(6)}`);
-      return cached.threshold;
-    } else {
-      console.log(`🔄 Cache miss or expired, calculating...`);
-    }
-  } else {
-    console.log(`⚠️ No manager or cache available, calculating directly...`);
-  }
+  // SIMPLIFIED: Always calculate fresh for reliability
+  // TODO: Re-enable caching once we verify the logic works consistently
   
   // Calculate new threshold (expensive operation)
   if (!rawData || rawData.length === 0) {
@@ -441,16 +428,10 @@ function getCachedAssetExchangePercentile(manager, rawData, fieldName, percentil
   const index = Math.floor(values.length * percentile);
   const threshold = values[Math.min(index, values.length - 1)];
   
-  // Cache the result (if manager available)
-  if (manager && manager.percentileCache) {
-    manager.percentileCache.set(cacheKey, {
-      threshold: threshold,
-      lastUpdate: now,
-      dataPoints: values.length
-    });
+  // Skip caching for now - just return the calculated value
+  if (TRIGGER_CONFIG.global.debugMode) {
+    console.log(`📊 ${assetExchangeKey} ${fieldName} threshold: ${threshold.toFixed(6)} from ${values.length} values`);
   }
-  
-  console.log(`📊 CALCULATED ${assetExchangeKey} ${fieldName} threshold: ${threshold.toFixed(6)} (cached for 1h)`);
   
   return threshold;
 }
