@@ -12,7 +12,7 @@ const TRIGGER_CONFIG = {
   },
   goldX: {
     enabled: true,
-    triggerTime: "20:00",  // 8:00 PM EST
+    triggerTime: "10:30",  // 10:30 AM EST (TEST - changed from 8 PM)
     timezone: "America/New_York"
   }
 };
