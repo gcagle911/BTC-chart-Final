@@ -228,13 +228,23 @@ function checkMinuteTriggerConditions(signalType, minuteData, minuteIndex, candl
     const config = TRIGGER_CONFIG.sell.conditions;
     
     // Get pre-calculated thresholds for this asset/exchange
-    const thresholds = window.manager?.preCalculatedThresholds?.get(assetExchangeKey);
+    const managerInstance = window.manager || manager;
+    const thresholds = managerInstance?.preCalculatedThresholds?.get(assetExchangeKey);
+    
     if (!thresholds) {
-      return { 
-        met: false, 
-        reason: 'Thresholds not calculated yet', 
-        values: { assetExchangeKey }
-      };
+      if (managerInstance?.backgroundCalculationInProgress) {
+        return { 
+          met: false, 
+          reason: 'Background calculation in progress...', 
+          values: { assetExchangeKey, status: 'calculating' }
+        };
+      } else {
+        return { 
+          met: false, 
+          reason: 'Thresholds not ready - background calculation needed', 
+          values: { assetExchangeKey, status: 'not_started' }
+        };
+      }
     }
     
     const fieldName = `spread_${config.layer}_pct_avg`;
@@ -1195,6 +1205,11 @@ class TimeframeManager {
     this.preCalculatedThresholds = new Map(); // assetExchangeKey -> {L5MA20: threshold, L5MA50: threshold, etc.}
     this.lastCooldownTimes = new Map(); // assetExchangeKey -> {sell: timestamp, buy: timestamp, indicatorA: timestamp, indicatorB: timestamp}
     this.thresholdsReady = false; // Flag to track if thresholds are calculated
+    
+    // Background calculation system
+    this.backgroundWorker = null;
+    this.backgroundCalculationInProgress = false;
+    this.backgroundResults = new Map(); // assetExchangeKey -> calculation results
     
     // Skull Trigger System
     this.spreadThresholds = new Map(); // asset_exchange -> {top5Percent: value}
@@ -3381,37 +3396,67 @@ class TimeframeManager {
     console.log(`📊 Processed ${candleBuckets.size} candles for ${assetExchangeKey}`);
   }
 
-  // Pre-calculate thresholds once for performance (SIMPLIFIED)
-  preCalculateThresholds() {
-    if (!this.rawData || this.rawData.length === 0) return;
+  // Start background calculation (non-blocking)
+  startBackgroundCalculation() {
+    if (this.backgroundCalculationInProgress) return;
     
     const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
-    console.log(`⚡ Pre-calculating thresholds for ${assetExchangeKey}...`);
+    console.log(`🔄 Starting background calculation for ${assetExchangeKey}...`);
     
-    // Calculate 24-hour window (half the data for speed)
-    const now = Date.now();
-    const cutoffTime = new Date(now - (24 * 60 * 60 * 1000));
-    const recentData = this.rawData.filter(item => {
-      const itemTime = new Date(item.time);
-      return itemTime >= cutoffTime;
-    });
+    this.backgroundCalculationInProgress = true;
     
-    if (recentData.length === 0) {
-      console.warn(`⚠️ No recent data for ${assetExchangeKey}`);
-      return;
-    }
-    
-    const thresholds = {};
-    
-    // Pre-calculate just 2 thresholds for L50 layer (much faster)
-    if (TRIGGER_CONFIG.sell.enabled && TRIGGER_CONFIG.sell.conditions) {
+    // Use setTimeout to break up the calculation into chunks (non-blocking)
+    setTimeout(() => {
+      this.calculateThresholdsInBackground(assetExchangeKey);
+    }, 100);
+  }
+  
+  // Calculate thresholds in background without blocking UI
+  calculateThresholdsInBackground(assetExchangeKey) {
+    try {
+      if (!this.rawData || this.rawData.length === 0) {
+        this.backgroundCalculationInProgress = false;
+        return;
+      }
+      
+      console.log(`⚡ Background calculating for ${assetExchangeKey}...`);
+      
+      // Calculate 24-hour window
+      const now = Date.now();
+      const cutoffTime = new Date(now - (24 * 60 * 60 * 1000));
+      const recentData = this.rawData.filter(item => {
+        const itemTime = new Date(item.time);
+        return itemTime >= cutoffTime;
+      });
+      
+      if (recentData.length === 0) {
+        console.warn(`⚠️ No recent data for ${assetExchangeKey}`);
+        this.backgroundCalculationInProgress = false;
+        return;
+      }
+      
+      const thresholds = {};
+      
+      // Calculate thresholds in chunks to avoid blocking
       const config = TRIGGER_CONFIG.sell.conditions;
       const fieldName = `spread_${config.layer}_pct_avg`;
       
-      for (const period of config.maPeriods) {
+      let periodIndex = 0;
+      const calculateNextPeriod = () => {
+        if (periodIndex >= config.maPeriods.length) {
+          // All done - store results
+          this.preCalculatedThresholds.set(assetExchangeKey, thresholds);
+          this.thresholdsReady = true;
+          this.backgroundCalculationInProgress = false;
+          
+          console.log(`✅ Background calculation complete for ${assetExchangeKey}: ${Object.keys(thresholds).length} thresholds`);
+          return;
+        }
+        
+        const period = config.maPeriods[periodIndex];
+        
         // Calculate MA values for this period
         const maValues = [];
-        
         for (let i = period - 1; i < recentData.length; i++) {
           const ma = this.calculateMAFromData(recentData, i, fieldName, period);
           if (ma !== null) {
@@ -3425,16 +3470,26 @@ class TimeframeManager {
           const threshold = maValues[Math.min(index, maValues.length - 1)];
           
           thresholds[`${config.layer}MA${period}`] = threshold;
-          console.log(`📊 ${config.layer}MA${period} threshold: ${threshold.toFixed(6)}`);
+          console.log(`📊 Background: ${config.layer}MA${period} = ${threshold.toFixed(6)}`);
         }
-      }
+        
+        periodIndex++;
+        
+        // Schedule next period calculation (non-blocking)
+        setTimeout(calculateNextPeriod, 50);
+      };
+      
+      calculateNextPeriod();
+      
+    } catch (error) {
+      console.error('❌ Background calculation error:', error);
+      this.backgroundCalculationInProgress = false;
     }
-    
-    // Store thresholds for this asset/exchange
-    this.preCalculatedThresholds.set(assetExchangeKey, thresholds);
-    this.thresholdsReady = true;
-    
-    console.log(`✅ Pre-calculated ${Object.keys(thresholds).length} thresholds for ${assetExchangeKey} (FAST)`);
+  }
+  
+  // Simple pre-calculate method that starts background process
+  preCalculateThresholds() {
+    this.startBackgroundCalculation();
   }
   
   // Calculate MA from specific dataset (helper for pre-calculation)
