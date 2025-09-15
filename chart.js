@@ -41,8 +41,11 @@ const TRIGGER_CONFIG = {
       size: 2,
       previewColor: '#FF6666',
       previewSize: 1
+    },
+    // Trigger requirements
+    conditions: {
+      l50ma50_threshold: 0.035  // L50MA50 >= 0.035
     }
-    // Trigger conditions will be added here
   },
   
   // Buy signal configuration (Green Circle below candles)
@@ -149,38 +152,65 @@ function evaluateTrigger(signalType, candleData, candleTime, rawData, currentSym
  * @returns {Object} - {met: boolean, reason: string, values: Object}
  */
 function checkMinuteTriggerConditions(signalType, minuteData, minuteIndex, candleData, rawData, currentSymbol, exchange, timeframe) {
-  // CLEAN SLATE - No trigger logic implemented yet
-  // TODO: Add specific trigger conditions here
   
-  // Template for future trigger logic:
-  /*
-  if (signalType === 'sell') {
-    // Add sell trigger conditions
-    // Example: 
-    // const priceThreshold = calculateDynamicThreshold(rawData, 'price', 0.95);
-    // if (minuteData.price > priceThreshold) {
-    //   return {met: true, reason: 'Price above 95th percentile', values: {price: minuteData.price, threshold: priceThreshold}};
-    // }
-  } else if (signalType === 'buy') {
-    // Add buy trigger conditions  
-    // Example:
-    // const spreadThreshold = calculateDynamicThreshold(rawData, 'spread_L50_pct_avg', 0.05);
-    // if (minuteData.spread_L50_pct_avg < spreadThreshold) {
-    //   return {met: true, reason: 'Spread below 5th percentile', values: {spread: minuteData.spread_L50_pct_avg, threshold: spreadThreshold}};
-    // }
+  // Find current data index in rawData for MA calculation
+  let currentIndex = -1;
+  for (let i = 0; i < rawData.length; i++) {
+    if (rawData[i].time === minuteData.time) {
+      currentIndex = i;
+      break;
+    }
   }
-  */
+  
+  if (currentIndex === -1) {
+    return { met: false, reason: 'Data index not found', values: {} };
+  }
+  
+  if (signalType === 'sell') {
+    // SELL TRIGGER: L50MA50 >= 0.035
+    const config = TRIGGER_CONFIG.sell;
+    const l50ma50 = calculateTriggerMA(rawData, currentIndex, 'spread_L50_pct_avg', 50);
+    
+    if (l50ma50 === null) {
+      return { 
+        met: false, 
+        reason: 'Insufficient data for L50MA50 calculation', 
+        values: { currentIndex, requiredPeriod: 50 }
+      };
+    }
+    
+    const conditionMet = l50ma50 >= config.conditions.l50ma50_threshold;
+    
+    return {
+      met: conditionMet,
+      reason: conditionMet 
+        ? `L50MA50 (${l50ma50.toFixed(6)}) >= threshold (${config.conditions.l50ma50_threshold})`
+        : `L50MA50 (${l50ma50.toFixed(6)}) < threshold (${config.conditions.l50ma50_threshold})`,
+      values: {
+        l50ma50: l50ma50,
+        threshold: config.conditions.l50ma50_threshold,
+        spread_L50_current: minuteData.spread_L50_pct_avg,
+        timestamp: minuteData.time
+      }
+    };
+    
+  } else if (signalType === 'buy') {
+    // BUY TRIGGER: No conditions implemented yet
+    return { 
+      met: false, 
+      reason: 'No buy trigger conditions implemented yet', 
+      values: {
+        price: minuteData.price,
+        timestamp: minuteData.time,
+        spread_L50: minuteData.spread_L50_pct_avg
+      }
+    };
+  }
   
   return { 
     met: false, 
-    reason: 'No trigger logic implemented yet', 
-    values: {
-      price: minuteData.price,
-      timestamp: minuteData.time,
-      spread_L5: minuteData.spread_L5_pct_avg,
-      spread_L50: minuteData.spread_L50_pct_avg,
-      spread_L100: minuteData.spread_L100_pct_avg
-    }
+    reason: 'Unknown signal type', 
+    values: {}
   };
 }
 
