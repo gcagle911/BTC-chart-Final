@@ -3937,7 +3937,7 @@ function handlePinchZoom(scaleChange) {
   
   try {
     const timeScale = window.chart.timeScale();
-    const visibleRange = timeScale.getVisibleTimeRange();
+    const visibleRange = timeScale.getVisibleLogicalRange();
     
     if (visibleRange) {
       const center = (visibleRange.from + visibleRange.to) / 2;
@@ -3949,7 +3949,7 @@ function handlePinchZoom(scaleChange) {
       const maxSize = 86400 * 365 * 25; // Up to 25 years
       const clampedSize = Math.max(minSize, Math.min(maxSize, newSize));
       
-      timeScale.setVisibleTimeRange({
+      timeScale.setVisibleLogicalRange({
         from: center - clampedSize / 2,
         to: center + clampedSize / 2
       });
