@@ -3858,3 +3858,21 @@ function addScaleResetButton() {
   }
 }
 
+// CRITICAL: Export functions to global scope for HTML access
+// When using ES6 modules, functions need to be explicitly added to window object
+window.setExchange = setExchange;
+window.setSymbol = setSymbol; 
+window.setTimeframe = setTimeframe;
+window.toggleMALayer = toggleMALayer;
+window.toggleCumulativeAvg = toggleCumulativeAvg;
+window.toggleNormalize = toggleNormalize;
+window.toggleMADuration = toggleMADuration;
+window.toggleEMADuration = toggleEMADuration;
+window.toggleVolumeIndicator = toggleVolumeIndicator;
+window.toggleIndicator2 = toggleIndicator2;
+window.toggleIndicator3 = toggleIndicator3;
+window.toggleSkullIndicator = toggleSkullIndicator;
+window.toggleGoldXIndicator = toggleGoldXIndicator;
+window.calculateAllSignals = calculateAllSignals;
+window.setYAxisControl = setYAxisControl;
+
