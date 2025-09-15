@@ -247,8 +247,16 @@ function checkMinuteTriggerConditions(signalType, minuteData, minuteIndex, candl
         }
         
         // Get cached 48-hour percentile threshold for this specific asset/exchange and MA
+        // Find manager instance from global scope
+        let managerInstance = null;
+        if (typeof manager !== 'undefined') {
+          managerInstance = manager;
+        } else if (typeof window !== 'undefined' && window.manager) {
+          managerInstance = window.manager;
+        }
+        
         const threshold = getCachedAssetExchangePercentile(
-          window.manager, // Pass manager for cache access
+          managerInstance,
           rawData, 
           fieldName, 
           config.percentileThreshold, 
@@ -382,10 +390,12 @@ function getCachedAssetExchangePercentile(manager, rawData, fieldName, percentil
   const cacheKey = `${assetExchangeKey}_${fieldName}_${percentile}`;
   const now = Date.now();
   
-  // Check if we have cached value and it's still fresh
-  const cached = manager.percentileCache.get(cacheKey);
-  if (cached && (now - cached.lastUpdate) < (TRIGGER_CONFIG.global.thresholdUpdateInterval * 1000)) {
-    return cached.threshold;
+  // Check if we have cached value and it's still fresh (if manager available)
+  if (manager && manager.percentileCache) {
+    const cached = manager.percentileCache.get(cacheKey);
+    if (cached && (now - cached.lastUpdate) < (TRIGGER_CONFIG.global.thresholdUpdateInterval * 1000)) {
+      return cached.threshold;
+    }
   }
   
   // Calculate new threshold (expensive operation)
@@ -422,12 +432,14 @@ function getCachedAssetExchangePercentile(manager, rawData, fieldName, percentil
   const index = Math.floor(values.length * percentile);
   const threshold = values[Math.min(index, values.length - 1)];
   
-  // Cache the result
-  manager.percentileCache.set(cacheKey, {
-    threshold: threshold,
-    lastUpdate: now,
-    dataPoints: values.length
-  });
+  // Cache the result (if manager available)
+  if (manager && manager.percentileCache) {
+    manager.percentileCache.set(cacheKey, {
+      threshold: threshold,
+      lastUpdate: now,
+      dataPoints: values.length
+    });
+  }
   
   console.log(`📊 CALCULATED ${assetExchangeKey} ${fieldName} threshold: ${threshold.toFixed(6)} (cached for 1h)`);
   
