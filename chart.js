@@ -5,14 +5,14 @@
 // TRIGGER CONFIGURATION - CLEAN SLATE
 // =============================================================================
 const TRIGGER_CONFIG = {
-  skull: {
+  sell: {
     enabled: true,
     triggerTime: "09:30",  // 9:30 AM EST
     timezone: "America/New_York"
   },
-  goldX: {
+  buy: {
     enabled: true,
-    triggerTime: "20:00",  // 8:00 PM EST (back to original)
+    triggerTime: "20:00",  // 8:00 PM EST
     timezone: "America/New_York"
   }
 };
@@ -28,17 +28,17 @@ const EARLIEST_DATA_DATE = new Date('2025-09-09T00:00:00Z');
 // CLEAN SLATE - SIMPLE TIME-BASED TRIGGERS
 // =============================================================================
 
-// Check if skull trigger time (9:30 AM EST) falls within this candle's timeframe
-function checkSkullTrigger(candleTime, timeframeSeconds) {
-  if (!TRIGGER_CONFIG.skull.enabled) return false;
+// Check if sell trigger time (Red X above candles) falls within this candle's timeframe
+function checkSellTrigger(candleTime, timeframeSeconds) {
+  if (!TRIGGER_CONFIG.sell.enabled) return false;
   
   // Parse target time
-  const [targetHour, targetMinute] = TRIGGER_CONFIG.skull.triggerTime.split(':').map(Number);
+  const [targetHour, targetMinute] = TRIGGER_CONFIG.sell.triggerTime.split(':').map(Number);
   
   // Convert candle time to EST and get hour/minute
   const candleDate = new Date(candleTime * 1000);
   const estFormatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: TRIGGER_CONFIG.skull.timezone,
+    timeZone: TRIGGER_CONFIG.sell.timezone,
     hour: 'numeric',
     minute: 'numeric',
     hour12: false
@@ -71,23 +71,23 @@ function checkSkullTrigger(candleTime, timeframeSeconds) {
   }
   
   if (matches) {
-    console.log(`💀 SKULL TRIGGER: Target ${TRIGGER_CONFIG.skull.triggerTime} EST falls within candle ${candleHour.toString().padStart(2,'0')}:${candleMinute.toString().padStart(2,'0')} - ${candleEndHour.toString().padStart(2,'0')}:${candleEndMinute.toString().padStart(2,'0')}`);
+    console.log(`❌ SELL TRIGGER: Target ${TRIGGER_CONFIG.sell.triggerTime} EST falls within candle ${candleHour.toString().padStart(2,'0')}:${candleMinute.toString().padStart(2,'0')} - ${candleEndHour.toString().padStart(2,'0')}:${candleEndMinute.toString().padStart(2,'0')}`);
   }
   
   return matches;
 }
 
-// Check if Gold X trigger time (8:00 PM EST) falls within this candle's timeframe
-function checkGoldXTrigger(candleTime, timeframeSeconds) {
-  if (!TRIGGER_CONFIG.goldX.enabled) return false;
+// Check if buy trigger time (Green Circle below candles) falls within this candle's timeframe
+function checkBuyTrigger(candleTime, timeframeSeconds) {
+  if (!TRIGGER_CONFIG.buy.enabled) return false;
   
   // Parse target time
-  const [targetHour, targetMinute] = TRIGGER_CONFIG.goldX.triggerTime.split(':').map(Number);
+  const [targetHour, targetMinute] = TRIGGER_CONFIG.buy.triggerTime.split(':').map(Number);
   
   // Convert candle time to EST and get hour/minute
   const candleDate = new Date(candleTime * 1000);
   const estFormatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: TRIGGER_CONFIG.goldX.timezone,
+    timeZone: TRIGGER_CONFIG.buy.timezone,
     hour: 'numeric',
     minute: 'numeric',
     hour12: false
@@ -120,7 +120,7 @@ function checkGoldXTrigger(candleTime, timeframeSeconds) {
   }
   
   if (matches) {
-    console.log(`✖️ GOLD X TRIGGER: Target ${TRIGGER_CONFIG.goldX.triggerTime} EST falls within candle ${candleHour.toString().padStart(2,'0')}:${candleMinute.toString().padStart(2,'0')} - ${candleEndHour.toString().padStart(2,'0')}:${candleEndMinute.toString().padStart(2,'0')}`);
+    console.log(`🟢 BUY TRIGGER: Target ${TRIGGER_CONFIG.buy.triggerTime} EST falls within candle ${candleHour.toString().padStart(2,'0')}:${candleMinute.toString().padStart(2,'0')} - ${candleEndHour.toString().padStart(2,'0')}:${candleEndMinute.toString().padStart(2,'0')}`);
   }
   
   return matches;
@@ -781,10 +781,10 @@ class TimeframeManager {
     this.yAxisControl = 'Right'; // Default to right axis for horizontal lines
     
     // Signal Indicator System
-    this.skullIndicatorEnabled = false;
-    this.goldXIndicatorEnabled = false;
-    this.skullSignals = new Map(); // time -> signal data
-    this.goldXSignals = new Map(); // time -> signal data
+    this.sellIndicatorEnabled = false;
+    this.buyIndicatorEnabled = false;
+    this.sellSignals = new Map(); // time -> signal data
+    this.buySignals = new Map(); // time -> signal data
     this.signalsCalculated = false;
     this.signalSystemEnabled = false;
     
@@ -1400,7 +1400,7 @@ class TimeframeManager {
     }
     
     // CRITICAL: Recalculate signals for new timeframe if indicators are enabled
-    if (this.skullIndicatorEnabled || this.goldXIndicatorEnabled) {
+    if (this.sellIndicatorEnabled || this.buyIndicatorEnabled) {
       setTimeout(() => {
         console.log('🔄 Recalculating signals for new timeframe...');
         this.calculateAllSignals();
@@ -1650,8 +1650,8 @@ class TimeframeManager {
     console.log(`🧹 Clearing signals for asset/exchange switch to ${this.currentSymbol}_${API_EXCHANGE}`);
     
     // Clear all signals - they're specific to the previous asset/exchange
-    this.skullSignals.clear();
-    this.goldXSignals.clear();
+    this.sellSignals.clear();
+    this.buySignals.clear();
     this.signalsCalculated = false;
     
     // Reset cooloff for new asset/exchange
@@ -1682,8 +1682,8 @@ class TimeframeManager {
     console.log(`🧹 [${timestamp}] CLEARING SIGNALS for timeframe change to ${this.currentTimeframe}`);
     
     // Clear all signals - they're specific to the previous timeframe
-    this.skullSignals.clear();
-    this.goldXSignals.clear();
+    this.sellSignals.clear();
+    this.buySignals.clear();
     this.signalsCalculated = false;
     
     // Clear signal markers from chart
@@ -2691,7 +2691,7 @@ class TimeframeManager {
       console.log('🔄 Manual signal calculation triggered');
       
       // Update display if any indicators are enabled
-      if (this.skullIndicatorEnabled || this.goldXIndicatorEnabled) {
+      if (this.sellIndicatorEnabled || this.buyIndicatorEnabled) {
         this.updateSignalDisplay();
       }
     });
@@ -2723,9 +2723,9 @@ class TimeframeManager {
 
   // SIGNAL INDICATOR SYSTEM
   
-  toggleSkullIndicator(enabled) {
-    this.skullIndicatorEnabled = enabled;
-    console.log(`💀 Skull indicator ${enabled ? 'enabled' : 'disabled'}`);
+  toggleSellIndicator(enabled) {
+    this.sellIndicatorEnabled = enabled;
+    console.log(`❌ Sell indicator ${enabled ? 'enabled' : 'disabled'}`);
     
     if (enabled) {
       // Calculate signals if not already done
@@ -2736,15 +2736,15 @@ class TimeframeManager {
       createSignalMarkerSeries();
     }
     // Enable the signal system when any signal indicator is on
-    this.signalSystemEnabled = this.skullIndicatorEnabled || this.goldXIndicatorEnabled;
+    this.signalSystemEnabled = this.sellIndicatorEnabled || this.buyIndicatorEnabled;
     
     // Update display
     this.updateSignalDisplay();
   }
   
-  toggleGoldXIndicator(enabled) {
-    this.goldXIndicatorEnabled = enabled;
-    console.log(`✖️ Gold X indicator ${enabled ? 'enabled' : 'disabled'}`);
+  toggleBuyIndicator(enabled) {
+    this.buyIndicatorEnabled = enabled;
+    console.log(`🟢 Buy indicator ${enabled ? 'enabled' : 'disabled'}`);
     
     if (enabled) {
       // Calculate signals if not already done
@@ -2755,7 +2755,7 @@ class TimeframeManager {
       createSignalMarkerSeries();
     }
     // Enable the signal system when any signal indicator is on
-    this.signalSystemEnabled = this.skullIndicatorEnabled || this.goldXIndicatorEnabled;
+    this.signalSystemEnabled = this.sellIndicatorEnabled || this.buyIndicatorEnabled;
     
     // Update display
     this.updateSignalDisplay();
@@ -2782,50 +2782,50 @@ class TimeframeManager {
     console.log(`🔄 Calculating time-based signals for ${this.currentSymbol}_${API_EXCHANGE} on ${this.currentTimeframe}`);
     
     // Clear existing signals
-    this.skullSignals.clear();
-    this.goldXSignals.clear();
+    this.sellSignals.clear();
+    this.buySignals.clear();
     
     // Group data into candles
     const candleBuckets = this.groupDataIntoCandleBuckets();
     const timeframeSeconds = this.timeframes[this.currentTimeframe].seconds;
     
-    let skullCount = 0;
-    let goldXCount = 0;
+    let sellCount = 0;
+    let buyCount = 0;
     
     // Check each candle for time-based triggers
     for (const [candleTime, candleData] of candleBuckets) {
       
-      // Check skull trigger (9:30 AM EST) - pass timeframe seconds
-      if (checkSkullTrigger(candleTime, timeframeSeconds)) {
+      // Check sell trigger (Red X above candles) - pass timeframe seconds
+      if (checkSellTrigger(candleTime, timeframeSeconds)) {
         const price = candleData[candleData.length - 1]?.price || 50000;
-        this.skullSignals.set(candleTime, {
-          type: 'skull',
+        this.sellSignals.set(candleTime, {
+          type: 'sell',
           price: price * 1.02,
           active: true,
           timeframe: this.currentTimeframe,
           triggerReason: '9:30 AM EST'
         });
-        skullCount++;
+        sellCount++;
       }
       
-      // Check Gold X trigger (8:00 PM EST) - pass timeframe seconds
-      if (checkGoldXTrigger(candleTime, timeframeSeconds)) {
+      // Check buy trigger (Green Circle below candles) - pass timeframe seconds
+      if (checkBuyTrigger(candleTime, timeframeSeconds)) {
         const price = candleData[candleData.length - 1]?.price || 50000;
-        this.goldXSignals.set(candleTime, {
-          type: 'goldx',
+        this.buySignals.set(candleTime, {
+          type: 'buy',
           price: price * 1.02,
           active: true,
           timeframe: this.currentTimeframe,
           triggerReason: '8:00 PM EST'
         });
-        goldXCount++;
+        buyCount++;
       }
     }
     
-    console.log(`✅ Time-based signals: ${skullCount} skulls (9:30 AM), ${goldXCount} gold X (8:00 PM)`);
+    console.log(`✅ Time-based signals: ${sellCount} sell (9:30 AM), ${buyCount} buy (8:00 PM)`);
     console.log(`📊 DEBUG: Total candles processed: ${candleBuckets.size}`);
-    console.log(`📊 DEBUG: Skull signals stored: ${this.skullSignals.size}`);
-    console.log(`📊 DEBUG: Gold X signals stored: ${this.goldXSignals.size}`);
+    console.log(`📊 DEBUG: Sell signals stored: ${this.sellSignals.size}`);
+    console.log(`📊 DEBUG: Buy signals stored: ${this.buySignals.size}`);
   }
 
   // Simple data grouping
@@ -2919,38 +2919,38 @@ class TimeframeManager {
   }
 
   updateSignalDisplay() {
-    console.log(`🔍 Updating signal display: skull=${this.skullIndicatorEnabled}, goldX=${this.goldXIndicatorEnabled}`);
+    console.log(`🔍 Updating signal display: sell=${this.sellIndicatorEnabled}, buy=${this.buyIndicatorEnabled}`);
     
     const markers = [];
     
-    // Add skull markers if enabled
-    if (this.skullIndicatorEnabled) {
-      for (const [time, signal] of this.skullSignals) {
+    // Add sell markers if enabled (Red X above candles)
+    if (this.sellIndicatorEnabled) {
+      for (const [time, signal] of this.sellSignals) {
         markers.push({
           time: time,
           position: 'aboveBar',
           color: '#FF0000',
           shape: 'text',
-          text: '💀',
+          text: '❌',
           size: 2,
         });
       }
-      console.log(`💀 Added ${this.skullSignals.size} skull markers`);
+      console.log(`❌ Added ${this.sellSignals.size} sell markers`);
     }
     
-    // Add Gold X markers if enabled
-    if (this.goldXIndicatorEnabled) {
-      for (const [time, signal] of this.goldXSignals) {
+    // Add buy markers if enabled (Green Circle below candles)
+    if (this.buyIndicatorEnabled) {
+      for (const [time, signal] of this.buySignals) {
         markers.push({
           time: time,
           position: 'belowBar',
-          color: '#FFD700',
+          color: '#00FF00',
           shape: 'text',
-          text: '✖️',
+          text: '🟢',
           size: 2,
         });
       }
-      console.log(`✖️ Added ${this.goldXSignals.size} Gold X markers`);
+      console.log(`🟢 Added ${this.buySignals.size} buy markers`);
     }
     
     console.log(`📍 Setting ${markers.length} total markers on chart`);
@@ -2963,9 +2963,9 @@ class TimeframeManager {
         // Update status
         const statusEl = document.getElementById('signal-status');
         if (statusEl) {
-          const skullCount = this.skullIndicatorEnabled ? this.skullSignals.size : 0;
-          const goldXCount = this.goldXIndicatorEnabled ? this.goldXSignals.size : 0;
-          statusEl.textContent = `Showing: ${skullCount} skulls, ${goldXCount} gold X`;
+          const sellCount = this.sellIndicatorEnabled ? this.sellSignals.size : 0;
+          const buyCount = this.buyIndicatorEnabled ? this.buySignals.size : 0;
+          statusEl.textContent = `Showing: ${sellCount} sell, ${buyCount} buy`;
         }
       } else {
         console.warn('⚠️ Price series not available');
@@ -3762,18 +3762,18 @@ function setYAxisControl(mode) {
 }
 
 // Signal Indicator Toggle Functions
-function toggleSkullIndicator(enabled) {
-  manager.toggleSkullIndicator(enabled);
+function toggleSellIndicator(enabled) {
+  manager.toggleSellIndicator(enabled);
 }
 
-function toggleGoldXIndicator(enabled) {
-  manager.toggleGoldXIndicator(enabled);
+function toggleBuyIndicator(enabled) {
+  manager.toggleBuyIndicator(enabled);
 }
 
 function calculateAllSignals() {
   manager.calculateAllSignals();
   // Update display if any indicators are enabled
-  if (manager.skullIndicatorEnabled || manager.goldXIndicatorEnabled) {
+  if (manager.sellIndicatorEnabled || manager.buyIndicatorEnabled) {
     manager.updateSignalDisplay();
   }
 }
