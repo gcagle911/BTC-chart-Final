@@ -2919,9 +2919,7 @@ class TimeframeManager {
   }
 
   updateSignalDisplay() {
-    const timestamp = new Date().toLocaleTimeString();
-    console.log(`🔍 [${timestamp}] Updating signal display: skull=${this.skullIndicatorEnabled}, goldX=${this.goldXIndicatorEnabled}`);
-    console.log(`🔍 [${timestamp}] DEBUG: skullSignals.size = ${this.skullSignals.size}, goldXSignals.size = ${this.goldXSignals.size}`);
+    console.log(`🔍 Updating signal display: skull=${this.skullIndicatorEnabled}, goldX=${this.goldXIndicatorEnabled}`);
     
     const markers = [];
     
@@ -2932,7 +2930,8 @@ class TimeframeManager {
           time: time,
           position: 'aboveBar',
           color: '#FF0000',
-          shape: 'arrowUp', // Different shape instead of text
+          shape: 'text',
+          text: '💀',
           size: 2,
         });
       }
@@ -2944,9 +2943,10 @@ class TimeframeManager {
       for (const [time, signal] of this.goldXSignals) {
         markers.push({
           time: time,
-          position: 'belowBar', // Back to different position
+          position: 'belowBar',
           color: '#FFD700',
-          shape: 'arrowDown', // Different shape instead of text
+          shape: 'text',
+          text: '✖️',
           size: 2,
         });
       }
@@ -2954,7 +2954,6 @@ class TimeframeManager {
     }
     
     console.log(`📍 Setting ${markers.length} total markers on chart`);
-    console.log(`📊 MARKER DEBUG:`, markers.map(m => `${m.text} at ${new Date(m.time * 1000).toLocaleString()}`));
     
     try {
       if (priceSeries) {
