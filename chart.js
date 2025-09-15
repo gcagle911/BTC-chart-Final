@@ -44,11 +44,12 @@ const TRIGGER_CONFIG = {
       previewColor: '#FF6666',
       previewSize: 1
     },
-    // SIMPLIFIED TRIGGER (TradingView style)
+    // YOUR ORIGINAL REQUIREMENTS (optimized for performance)
     conditions: {
-      // Simple threshold - much faster than percentile calculations
-      l50_ma50_threshold: 0.025,  // L50MA50 > 0.025
-      enabled: true
+      layers: ['L5', 'L50', 'L100'],  // Check these layers (ANY can trigger)
+      maPeriods: [20, 50, 100, 200],  // ALL periods must be in top 25% for layer to qualify
+      percentileThreshold: 0.75,      // Top 25% = 75th percentile
+      lookbackHours: 48               // Rolling 48-hour window for percentile calculation
     },
     cooldown: {
       enabled: true,
@@ -222,31 +223,54 @@ function checkMinuteTriggerConditions(signalType, minuteData, minuteIndex, candl
   }
   
   if (signalType === 'sell') {
-    // SIMPLIFIED SELL TRIGGER (TradingView style - FAST)
+    // YOUR ORIGINAL REQUIREMENTS (optimized - use pre-calculated thresholds)
     const config = TRIGGER_CONFIG.sell.conditions;
     
-    // Simple condition: L50MA50 > threshold (no complex percentile calculations)
-    const l50ma50 = calculateTriggerMA(rawData, currentIndex, 'spread_L50_pct_avg', 50);
-    
-    if (l50ma50 === null) {
+    // Get pre-calculated thresholds for this asset/exchange
+    const thresholds = window.manager?.preCalculatedThresholds?.get(assetExchangeKey);
+    if (!thresholds) {
       return { 
         met: false, 
-        reason: 'Insufficient data for L50MA50', 
-        values: { assetExchangeKey, currentIndex }
+        reason: 'Thresholds not calculated yet - enable indicator first', 
+        values: { assetExchangeKey }
       };
     }
     
-    const conditionMet = l50ma50 > config.l50_ma50_threshold;
+    const qualifyingLayers = [];
+    
+    // Check each layer independently (YOUR ORIGINAL LOGIC)
+    for (const layer of config.layers) {
+      const fieldName = `spread_${layer}_pct_avg`;
+      let allMAsQualify = true;
+      
+      // Check ALL MA periods for this layer (YOUR ORIGINAL LOGIC)
+      for (const period of config.maPeriods) {
+        const maValue = calculateTriggerMA(rawData, currentIndex, fieldName, period);
+        const thresholdKey = `${layer}MA${period}`;
+        const threshold = thresholds[thresholdKey];
+        
+        if (maValue === null || threshold === undefined || maValue < threshold) {
+          allMAsQualify = false;
+          break; // No need to check other periods for this layer
+        }
+      }
+      
+      if (allMAsQualify) {
+        qualifyingLayers.push(layer);
+      }
+    }
+    
+    // Trigger if ANY layer qualifies (YOUR ORIGINAL LOGIC)
+    const triggered = qualifyingLayers.length > 0;
     
     return {
-      met: conditionMet,
-      reason: conditionMet 
-        ? `L50MA50 (${l50ma50.toFixed(6)}) > ${config.l50_ma50_threshold} (${assetExchangeKey})`
-        : `L50MA50 (${l50ma50.toFixed(6)}) <= ${config.l50_ma50_threshold} (${assetExchangeKey})`,
+      met: triggered,
+      reason: triggered 
+        ? `Layers qualifying: ${qualifyingLayers.join(', ')} (${assetExchangeKey})`
+        : `No layers qualify for ${assetExchangeKey}`,
       values: {
         assetExchangeKey,
-        l50ma50: l50ma50,
-        threshold: config.l50_ma50_threshold,
+        qualifyingLayers,
         timestamp: minuteData.time
       }
     };
@@ -1170,9 +1194,9 @@ class TimeframeManager {
     
     // Asset/Exchange isolation - CRITICAL for trading bot accuracy
     this.assetExchangeKey = null; // Will be set to "BTC_coinbase", "ETH_kraken", etc.
-    this.percentileCache = new Map(); // assetExchangeKey -> {field_period: threshold, lastUpdate: timestamp}
+    this.preCalculatedThresholds = new Map(); // assetExchangeKey -> {L5MA20: threshold, L5MA50: threshold, etc.}
     this.lastCooldownTimes = new Map(); // assetExchangeKey -> {sell: timestamp, buy: timestamp, indicatorA: timestamp, indicatorB: timestamp}
-    this.lastThresholdUpdate = 0; // Timestamp of last threshold calculation
+    this.thresholdsReady = false; // Flag to track if thresholds are calculated
     
     // Skull Trigger System
     this.spreadThresholds = new Map(); // asset_exchange -> {top5Percent: value}
@@ -3359,24 +3383,80 @@ class TimeframeManager {
     console.log(`📊 Processed ${candleBuckets.size} candles for ${assetExchangeKey}`);
   }
 
-  // Pre-calculate all thresholds for performance (called when indicator is enabled)
+  // Pre-calculate ALL thresholds once for performance (YOUR ORIGINAL REQUIREMENTS)
   preCalculateThresholds() {
     if (!this.rawData || this.rawData.length === 0) return;
     
     const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
     console.log(`⚡ Pre-calculating thresholds for ${assetExchangeKey}...`);
     
-    // Pre-calculate all sell trigger thresholds
+    // Calculate 48-hour window once
+    const now = Date.now();
+    const cutoffTime = new Date(now - (48 * 60 * 60 * 1000));
+    const recentData = this.rawData.filter(item => {
+      const itemTime = new Date(item.time);
+      return itemTime >= cutoffTime;
+    });
+    
+    if (recentData.length === 0) {
+      console.warn(`⚠️ No recent data for ${assetExchangeKey}`);
+      return;
+    }
+    
+    const thresholds = {};
+    
+    // Pre-calculate ALL thresholds for sell trigger (YOUR ORIGINAL REQUIREMENTS)
     if (TRIGGER_CONFIG.sell.enabled && TRIGGER_CONFIG.sell.conditions) {
       const config = TRIGGER_CONFIG.sell.conditions;
+      
       for (const layer of config.layers) {
         const fieldName = `spread_${layer}_pct_avg`;
-        // Pre-calculate threshold (will be cached)
-        getCachedAssetExchangePercentile(this, this.rawData, fieldName, config.percentileThreshold, assetExchangeKey, config.lookbackHours);
+        
+        for (const period of config.maPeriods) {
+          // Calculate all MA values for this field
+          const maValues = [];
+          
+          for (let i = period - 1; i < recentData.length; i++) {
+            const ma = this.calculateMAFromData(recentData, i, fieldName, period);
+            if (ma !== null) {
+              maValues.push(ma);
+            }
+          }
+          
+          if (maValues.length > 0) {
+            maValues.sort((a, b) => a - b);
+            const index = Math.floor(maValues.length * config.percentileThreshold);
+            const threshold = maValues[Math.min(index, maValues.length - 1)];
+            
+            thresholds[`${layer}MA${period}`] = threshold;
+          }
+        }
       }
     }
     
-    console.log(`✅ Thresholds pre-calculated for ${assetExchangeKey}`);
+    // Store all thresholds for this asset/exchange
+    this.preCalculatedThresholds.set(assetExchangeKey, thresholds);
+    this.thresholdsReady = true;
+    
+    console.log(`✅ Pre-calculated ${Object.keys(thresholds).length} thresholds for ${assetExchangeKey}`);
+  }
+  
+  // Calculate MA from specific dataset (helper for pre-calculation)
+  calculateMAFromData(data, currentIndex, fieldName, period) {
+    if (!data || data.length < period || currentIndex < period - 1) return null;
+    
+    let sum = 0;
+    let count = 0;
+    
+    for (let i = currentIndex - period + 1; i <= currentIndex; i++) {
+      const value = data[i][fieldName];
+      if (value !== null && value !== undefined && isFinite(value)) {
+        sum += value;
+        count++;
+      }
+    }
+    
+    return count > 0 ? sum / count : null;
   }
 
   // Check current candle for real-time signal preview
