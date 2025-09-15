@@ -1,9 +1,6 @@
 // Simplified Bitcoin Chart - Clean Interface   
 // Main price chart with Bid Spread MAs on LEFT y-axis and enhanced zoom capability
 
-// Import modular signal system
-import { SignalManager } from './signals/SignalManager.js';
-
 // Data sources mapped by symbol
 const API_BASE = 'https://storage.googleapis.com/bananazone';
 let API_EXCHANGE = 'coinbase';
@@ -668,13 +665,10 @@ class TimeframeManager {
     // Signal Indicator System
     this.skullIndicatorEnabled = false;
     this.goldXIndicatorEnabled = false;
-    this.skullSignals = new Map(); // time -> signal data (legacy - will be replaced)
-    this.goldXSignals = new Map(); // time -> signal data (legacy - will be replaced)
+    this.skullSignals = new Map(); // time -> signal data
+    this.goldXSignals = new Map(); // time -> signal data
     this.signalsCalculated = false;
     this.signalSystemEnabled = false;
-    
-    // NEW: Modular Signal System
-    this.signalManager = new SignalManager();
     
     // Skull Trigger System
     this.spreadThresholds = new Map(); // asset_exchange -> {top5Percent: value}
@@ -1537,10 +1531,7 @@ class TimeframeManager {
   clearSignalsForAssetSwitch() {
     console.log(`🧹 Clearing signals for asset/exchange switch to ${this.currentSymbol}_${API_EXCHANGE}`);
     
-    // Clear new modular signal system
-    this.signalManager.clearAllSignals();
-    
-    // Clear legacy signals - they're specific to the previous asset/exchange
+    // Clear all signals - they're specific to the previous asset/exchange
     this.skullSignals.clear();
     this.goldXSignals.clear();
     this.signalsCalculated = false;
@@ -1571,10 +1562,7 @@ class TimeframeManager {
   clearSignalsForTimeframeChange() {
     console.log(`🧹 Clearing signals for timeframe change to ${this.currentTimeframe}`);
     
-    // Clear new modular signal system
-    this.signalManager.clearAllSignals();
-    
-    // Clear legacy signals - they're specific to the previous timeframe
+    // Clear all signals - they're specific to the previous timeframe
     this.skullSignals.clear();
     this.goldXSignals.clear();
     this.signalsCalculated = false;
@@ -2618,7 +2606,6 @@ class TimeframeManager {
   
   toggleSkullIndicator(enabled) {
     this.skullIndicatorEnabled = enabled;
-    this.signalManager.toggleSkullIndicator(enabled);
     console.log(`💀 Skull indicator ${enabled ? 'enabled' : 'disabled'}`);
     
     if (enabled) {
@@ -2638,7 +2625,6 @@ class TimeframeManager {
   
   toggleGoldXIndicator(enabled) {
     this.goldXIndicatorEnabled = enabled;
-    this.signalManager.toggleGoldXIndicator(enabled);
     console.log(`✖️ Gold X indicator ${enabled ? 'enabled' : 'disabled'}`);
     
     if (enabled) {
@@ -2664,16 +2650,11 @@ class TimeframeManager {
       return;
     }
     
-    // Use new modular signal system
-    this.signalManager.calculateAllSignals(this.rawData, this.currentSymbol, API_EXCHANGE, this.currentTimeframe);
-    
-    // LEGACY: Keep old system as backup for now
     this.calculateSkullSignals();
     this.calculateGoldXSignals();
     this.signalsCalculated = true;
     
     console.log(`✅ RESULTS: ${this.skullSignals.size} skulls, ${this.goldXSignals.size} gold X on ${this.currentTimeframe}`);
-    console.log(`✅ NEW SYSTEM: ${this.signalManager.getSignalCounts().skull} skulls, ${this.signalManager.getSignalCounts().goldX} gold X`);
   }
 
   // External trigger function - call this when your condition is met
@@ -2751,46 +2732,36 @@ class TimeframeManager {
   updateSignalDisplay() {
     console.log(`🔍 Updating signal display: skull=${this.skullIndicatorEnabled}, goldX=${this.goldXIndicatorEnabled}`);
     
-    // Use new modular system for markers (with fallback to legacy)
-    let markers = [];
+    const markers = [];
     
-    // Try new system first
-    try {
-      markers = this.signalManager.getAllMarkers();
-      console.log(`🆕 Using new signal system: ${markers.length} markers`);
-    } catch (error) {
-      console.warn(`⚠️ New signal system failed, falling back to legacy:`, error);
-      
-      // Fallback to legacy system
-      // Add skull markers if enabled
-      if (this.skullIndicatorEnabled) {
-        for (const [time, signal] of this.skullSignals) {
-          markers.push({
-            time: time,
-            position: 'aboveBar',
-            color: '#FF0000',
-            shape: 'text',
-            text: '💀',
-            size: 2,
-          });
-        }
-        console.log(`💀 Added ${this.skullSignals.size} skull markers (legacy)`);
+    // Add skull markers if enabled
+    if (this.skullIndicatorEnabled) {
+      for (const [time, signal] of this.skullSignals) {
+        markers.push({
+          time: time,
+          position: 'aboveBar',
+          color: '#FF0000',
+          shape: 'text',
+          text: '💀',
+          size: 2,
+        });
       }
-      
-      // Add Gold X markers if enabled
-      if (this.goldXIndicatorEnabled) {
-        for (const [time, signal] of this.goldXSignals) {
-          markers.push({
-            time: time,
-            position: 'belowBar',
-            color: '#FFD700',
-            shape: 'text',
-            text: '✖',
-            size: 2,
-          });
-        }
-        console.log(`✖️ Added ${this.goldXSignals.size} Gold X markers (legacy)`);
+      console.log(`💀 Added ${this.skullSignals.size} skull markers`);
+    }
+    
+    // Add Gold X markers if enabled
+    if (this.goldXIndicatorEnabled) {
+      for (const [time, signal] of this.goldXSignals) {
+        markers.push({
+          time: time,
+          position: 'belowBar',
+          color: '#FFD700',
+          shape: 'text',
+          text: '✖',
+          size: 2,
+        });
       }
+      console.log(`✖️ Added ${this.goldXSignals.size} Gold X markers`);
     }
     
     console.log(`📍 Setting ${markers.length} total markers on chart`);
@@ -2800,18 +2771,12 @@ class TimeframeManager {
         priceSeries.setMarkers(markers);
         console.log(`✅ Signal display updated successfully`);
         
-        // Update status using new system (with fallback)
+        // Update status
         const statusEl = document.getElementById('signal-status');
         if (statusEl) {
-          try {
-            const counts = this.signalManager.getSignalCounts();
-            statusEl.textContent = `Showing: ${counts.skull} skulls, ${counts.goldX} gold X`;
-          } catch (error) {
-            // Fallback to legacy counts
-            const skullCount = this.skullIndicatorEnabled ? this.skullSignals.size : 0;
-            const goldXCount = this.goldXIndicatorEnabled ? this.goldXSignals.size : 0;
-            statusEl.textContent = `Showing: ${skullCount} skulls, ${goldXCount} gold X (legacy)`;
-          }
+          const skullCount = this.skullIndicatorEnabled ? this.skullSignals.size : 0;
+          const goldXCount = this.goldXIndicatorEnabled ? this.goldXSignals.size : 0;
+          statusEl.textContent = `Showing: ${skullCount} skulls, ${goldXCount} gold X`;
         }
       } else {
         console.warn('⚠️ Price series not available');
@@ -3858,21 +3823,4 @@ function addScaleResetButton() {
   }
 }
 
-// CRITICAL: Export functions to global scope for HTML access
-// When using ES6 modules, functions need to be explicitly added to window object
-window.setExchange = setExchange;
-window.setSymbol = setSymbol; 
-window.setTimeframe = setTimeframe;
-window.toggleMALayer = toggleMALayer;
-window.toggleCumulativeAvg = toggleCumulativeAvg;
-window.toggleNormalize = toggleNormalize;
-window.toggleMADuration = toggleMADuration;
-window.toggleEMADuration = toggleEMADuration;
-window.toggleVolumeIndicator = toggleVolumeIndicator;
-window.toggleIndicator2 = toggleIndicator2;
-window.toggleIndicator3 = toggleIndicator3;
-window.toggleSkullIndicator = toggleSkullIndicator;
-window.toggleGoldXIndicator = toggleGoldXIndicator;
-window.calculateAllSignals = calculateAllSignals;
-window.setYAxisControl = setYAxisControl;
 
