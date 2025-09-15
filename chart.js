@@ -401,6 +401,7 @@ function getCachedAssetExchangePercentile(manager, rawData, fieldName, percentil
   }
   
   // Get cutoff time for 48-hour window
+  const now = Date.now();
   const cutoffTime = new Date(now - (lookbackHours * 60 * 60 * 1000));
   
   // Filter to last 48 hours only - ASSET/EXCHANGE SPECIFIC
