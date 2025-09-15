@@ -26,7 +26,7 @@ const TRIGGER_CONFIG = {
   global: {
     sustainedPercent: 0.5,        // 50% of candle must meet conditions
     realTimeCheckInterval: 5000,  // Check every 5 seconds
-    debugMode: false,             // Disable heavy logging for performance
+    debugMode: true,              // Enable debug to see what's happening
     cacheThresholds: true,        // Cache percentile calculations
     thresholdUpdateInterval: 3600 // Update thresholds every hour (seconds)
   },
@@ -293,6 +293,8 @@ function checkMinuteTriggerConditions(signalType, minuteData, minuteIndex, candl
     // Trigger if ANY layer qualifies
     const triggered = qualifyingLayers.length > 0;
     
+    console.log(`🔍 SELL EVALUATION: ${assetExchangeKey} - Qualifying layers: [${qualifyingLayers.join(', ')}] = ${triggered}`);
+    
     return {
       met: triggered,
       reason: triggered 
@@ -390,12 +392,19 @@ function getCachedAssetExchangePercentile(manager, rawData, fieldName, percentil
   const cacheKey = `${assetExchangeKey}_${fieldName}_${percentile}`;
   const now = Date.now();
   
+  console.log(`🔍 Getting percentile for ${cacheKey}`);
+  
   // Check if we have cached value and it's still fresh (if manager available)
   if (manager && manager.percentileCache) {
     const cached = manager.percentileCache.get(cacheKey);
     if (cached && (now - cached.lastUpdate) < (TRIGGER_CONFIG.global.thresholdUpdateInterval * 1000)) {
+      console.log(`✅ Using cached threshold: ${cached.threshold.toFixed(6)}`);
       return cached.threshold;
+    } else {
+      console.log(`🔄 Cache miss or expired, calculating...`);
     }
+  } else {
+    console.log(`⚠️ No manager or cache available, calculating directly...`);
   }
   
   // Calculate new threshold (expensive operation)
