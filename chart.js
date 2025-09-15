@@ -2821,6 +2821,9 @@ class TimeframeManager {
     }
     
     console.log(`✅ Time-based signals: ${skullCount} skulls (9:30 AM), ${goldXCount} gold X (8:00 PM)`);
+    console.log(`📊 DEBUG: Total candles processed: ${candleBuckets.size}`);
+    console.log(`📊 DEBUG: Skull signals stored: ${this.skullSignals.size}`);
+    console.log(`📊 DEBUG: Gold X signals stored: ${this.goldXSignals.size}`);
   }
 
   // Simple data grouping
@@ -2915,6 +2918,7 @@ class TimeframeManager {
 
   updateSignalDisplay() {
     console.log(`🔍 Updating signal display: skull=${this.skullIndicatorEnabled}, goldX=${this.goldXIndicatorEnabled}`);
+    console.log(`🔍 DEBUG: skullSignals.size = ${this.skullSignals.size}, goldXSignals.size = ${this.goldXSignals.size}`);
     
     const markers = [];
     
@@ -2938,10 +2942,10 @@ class TimeframeManager {
       for (const [time, signal] of this.goldXSignals) {
         markers.push({
           time: time,
-          position: 'belowBar',
+          position: 'aboveBar', // TEMP: Same as skulls to test
           color: '#FFD700',
           shape: 'text',
-          text: '✖',
+          text: '✖️', // Use full emoji
           size: 2,
         });
       }
