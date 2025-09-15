@@ -6,12 +6,14 @@
 // =============================================================================
 const TRIGGER_CONFIG = {
   sell: {
-    enabled: true
-    // Clean slate - no trigger requirements yet
+    enabled: true,
+    sustainedPercent: 0.7  // Require conditions for 70% of candle duration
+    // TODO: Add sell trigger requirements here
   },
   buy: {
-    enabled: true
-    // Clean slate - no trigger requirements yet
+    enabled: true,
+    sustainedPercent: 0.5  // Require conditions for 50% of candle duration  
+    // TODO: Add buy trigger requirements here
   }
 };
 
@@ -28,22 +30,58 @@ const EARLIEST_DATA_DATE = new Date('2025-09-09T00:00:00Z');
 
 // Check sell trigger conditions (Red X above candles)
 function checkSellTrigger(candleData, candleTime, rawData, currentSymbol, exchange, timeframe) {
-  if (!TRIGGER_CONFIG.sell.enabled) return false;
+  if (!TRIGGER_CONFIG.sell.enabled || !candleData || candleData.length === 0) return false;
   
-  // Clean slate - no trigger logic yet
-  // TODO: Add sell trigger requirements here
+  let conditionsMetCount = 0;
   
-  return false; // No triggers until requirements are defined
+  // Check each minute within the candle
+  for (let i = 0; i < candleData.length; i++) {
+    const minuteData = candleData[i];
+    
+    // TODO: Add your sell trigger conditions here
+    // Example: if (minuteData.price > someThreshold) { conditionsMetCount++; }
+    
+    // Clean slate - no conditions yet, so skip
+    continue;
+  }
+  
+  // Require conditions to be sustained for specified percentage of candle
+  const requiredMinutes = Math.ceil(candleData.length * TRIGGER_CONFIG.sell.sustainedPercent);
+  const conditionsMet = conditionsMetCount >= requiredMinutes;
+  
+  if (conditionsMet) {
+    console.log(`❌ SELL: Conditions met ${conditionsMetCount}/${candleData.length} minutes (${(conditionsMetCount/candleData.length*100).toFixed(1)}%, required ${(TRIGGER_CONFIG.sell.sustainedPercent*100).toFixed(0)}%)`);
+  }
+  
+  return conditionsMet;
 }
 
 // Check buy trigger conditions (Green Circle below candles)
 function checkBuyTrigger(candleData, candleTime, rawData, currentSymbol, exchange, timeframe) {
-  if (!TRIGGER_CONFIG.buy.enabled) return false;
+  if (!TRIGGER_CONFIG.buy.enabled || !candleData || candleData.length === 0) return false;
   
-  // Clean slate - no trigger logic yet
-  // TODO: Add buy trigger requirements here
+  let conditionsMetCount = 0;
   
-  return false; // No triggers until requirements are defined
+  // Check each minute within the candle
+  for (let i = 0; i < candleData.length; i++) {
+    const minuteData = candleData[i];
+    
+    // TODO: Add your buy trigger conditions here
+    // Example: if (minuteData.price < someThreshold) { conditionsMetCount++; }
+    
+    // Clean slate - no conditions yet, so skip
+    continue;
+  }
+  
+  // Require conditions to be sustained for specified percentage of candle
+  const requiredMinutes = Math.ceil(candleData.length * TRIGGER_CONFIG.buy.sustainedPercent);
+  const conditionsMet = conditionsMetCount >= requiredMinutes;
+  
+  if (conditionsMet) {
+    console.log(`🟢 BUY: Conditions met ${conditionsMetCount}/${candleData.length} minutes (${(conditionsMetCount/candleData.length*100).toFixed(1)}%, required ${(TRIGGER_CONFIG.buy.sustainedPercent*100).toFixed(0)}%)`);
+  }
+  
+  return conditionsMet;
 }
 
 function formatDateYYYYMMDD(date) {
