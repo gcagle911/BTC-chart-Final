@@ -2933,7 +2933,7 @@ class TimeframeManager {
           position: 'aboveBar',
           color: '#FF0000',
           shape: 'text',
-          text: '💀',
+          text: 'S', // Simple text instead of emoji
           size: 2,
         });
       }
@@ -2948,7 +2948,7 @@ class TimeframeManager {
           position: 'belowBar', // Back to belowBar - different from skulls
           color: '#FFD700',
           shape: 'text',
-          text: '✖️',
+          text: 'X', // Simple text instead of emoji
           size: 2,
         });
       }
