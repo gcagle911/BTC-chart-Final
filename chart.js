@@ -44,12 +44,11 @@ const TRIGGER_CONFIG = {
       previewColor: '#FF6666',
       previewSize: 1
     },
-    // Trigger requirements
+    // SIMPLIFIED TRIGGER (TradingView style)
     conditions: {
-      layers: ['L5', 'L50', 'L100'],  // Check these layers (ANY can trigger)
-      maPeriods: [20, 50, 100, 200],  // ALL periods must be in top 25% for layer to qualify
-      percentileThreshold: 0.75,      // Top 25% = 75th percentile
-      lookbackHours: 48               // Rolling 48-hour window for percentile calculation
+      // Simple threshold - much faster than percentile calculations
+      l50_ma50_threshold: 0.025,  // L50MA50 > 0.025
+      enabled: true
     },
     cooldown: {
       enabled: true,
@@ -223,91 +222,32 @@ function checkMinuteTriggerConditions(signalType, minuteData, minuteIndex, candl
   }
   
   if (signalType === 'sell') {
-    // SELL TRIGGER: ANY layer (L5, L50, L100) with ALL MAs in top 25% of 48h window
+    // SIMPLIFIED SELL TRIGGER (TradingView style - FAST)
     const config = TRIGGER_CONFIG.sell.conditions;
-    const qualifyingLayers = [];
-    const layerResults = {};
     
-    // Check each layer independently
-    for (const layer of config.layers) {
-      const fieldName = `spread_${layer}_pct_avg`;
-      const layerQualified = true; // Will be set to false if any MA fails
-      const maResults = {};
-      
-      // Check ALL MA periods for this layer
-      let allMAsQualify = true;
-      for (const period of config.maPeriods) {
-        // Calculate current MA value
-        const maValue = calculateTriggerMA(rawData, currentIndex, fieldName, period);
-        
-        if (maValue === null) {
-          allMAsQualify = false;
-          maResults[`${layer}MA${period}`] = { value: null, qualified: false, reason: 'Insufficient data' };
-          continue;
-        }
-        
-        // Get cached 48-hour percentile threshold for this specific asset/exchange and MA
-        // Find manager instance from global scope
-        let managerInstance = null;
-        if (typeof manager !== 'undefined') {
-          managerInstance = manager;
-        } else if (typeof window !== 'undefined' && window.manager) {
-          managerInstance = window.manager;
-        }
-        
-        const threshold = getCachedAssetExchangePercentile(
-          managerInstance,
-          rawData, 
-          fieldName, 
-          config.percentileThreshold, 
-          assetExchangeKey, 
-          config.lookbackHours
-        );
-        
-        // Check if current MA is in top 25% (>= 75th percentile)
-        const qualified = maValue >= threshold;
-        
-        maResults[`${layer}MA${period}`] = {
-          value: maValue,
-          threshold: threshold,
-          qualified: qualified,
-          reason: qualified ? 'In top 25%' : 'Below top 25%'
-        };
-        
-        if (!qualified) {
-          allMAsQualify = false;
-        }
-      }
-      
-      layerResults[layer] = {
-        qualified: allMAsQualify,
-        maResults: maResults,
-        reason: allMAsQualify ? 'ALL MAs in top 25%' : 'Some MAs below top 25%'
+    // Simple condition: L50MA50 > threshold (no complex percentile calculations)
+    const l50ma50 = calculateTriggerMA(rawData, currentIndex, 'spread_L50_pct_avg', 50);
+    
+    if (l50ma50 === null) {
+      return { 
+        met: false, 
+        reason: 'Insufficient data for L50MA50', 
+        values: { assetExchangeKey, currentIndex }
       };
-      
-      if (allMAsQualify) {
-        qualifyingLayers.push(layer);
-      }
     }
     
-    // Trigger if ANY layer qualifies
-    const triggered = qualifyingLayers.length > 0;
-    
-    if (TRIGGER_CONFIG.global.debugMode) {
-      console.log(`🔍 SELL EVALUATION: ${assetExchangeKey} - Qualifying layers: [${qualifyingLayers.join(', ')}] = ${triggered}`);
-    }
+    const conditionMet = l50ma50 > config.l50_ma50_threshold;
     
     return {
-      met: triggered,
-      reason: triggered 
-        ? `Layers qualifying: ${qualifyingLayers.join(', ')} (${assetExchangeKey})`
-        : `No layers qualify for ${assetExchangeKey}`,
+      met: conditionMet,
+      reason: conditionMet 
+        ? `L50MA50 (${l50ma50.toFixed(6)}) > ${config.l50_ma50_threshold} (${assetExchangeKey})`
+        : `L50MA50 (${l50ma50.toFixed(6)}) <= ${config.l50_ma50_threshold} (${assetExchangeKey})`,
       values: {
         assetExchangeKey,
-        qualifyingLayers,
-        layerResults,
-        timestamp: minuteData.time,
-        lookbackHours: config.lookbackHours
+        l50ma50: l50ma50,
+        threshold: config.l50_ma50_threshold,
+        timestamp: minuteData.time
       }
     };
     
@@ -380,62 +320,8 @@ function checkIndicatorBTrigger(candleData, candleTime, rawData, currentSymbol, 
 // TRADING BOT UTILITY FUNCTIONS
 // =============================================================================
 
-/**
- * Get cached or calculate asset/exchange-specific percentile threshold (PERFORMANCE OPTIMIZED)
- * @param {Object} manager - Chart manager instance for cache access
- * @param {Array} rawData - Full historical data
- * @param {string} fieldName - Field to analyze (e.g., 'spread_L50_pct_avg')
- * @param {number} percentile - Percentile threshold (0.75 = 75th percentile = top 25%)
- * @param {string} assetExchangeKey - Asset/exchange identifier (e.g., "BTC_coinbase")
- * @param {number} lookbackHours - Hours to look back (48 for rolling window)
- * @returns {number} - Threshold value specific to this asset/exchange
- */
-function getCachedAssetExchangePercentile(manager, rawData, fieldName, percentile, assetExchangeKey, lookbackHours = 48) {
-  // SIMPLIFIED: Always calculate fresh for reliability
-  // TODO: Re-enable caching once we verify the logic works consistently
-  
-  // Calculate new threshold (expensive operation)
-  if (!rawData || rawData.length === 0) {
-    console.warn(`⚠️ No data for ${assetExchangeKey} percentile calculation`);
-    return 0;
-  }
-  
-  // Get cutoff time for 48-hour window
-  const now = Date.now();
-  const cutoffTime = new Date(now - (lookbackHours * 60 * 60 * 1000));
-  
-  // Filter to last 48 hours only - ASSET/EXCHANGE SPECIFIC
-  const recentData = rawData.filter(item => {
-    const itemTime = new Date(item.time);
-    return itemTime >= cutoffTime;
-  });
-  
-  if (recentData.length === 0) {
-    console.warn(`⚠️ No recent data for ${assetExchangeKey} in last ${lookbackHours} hours`);
-    return 0;
-  }
-  
-  // Extract values for this specific field
-  const values = recentData
-    .map(item => item[fieldName])
-    .filter(val => val !== null && val !== undefined && isFinite(val))
-    .sort((a, b) => a - b);
-    
-  if (values.length === 0) {
-    console.warn(`⚠️ No valid ${fieldName} values for ${assetExchangeKey}`);
-    return 0;
-  }
-  
-  const index = Math.floor(values.length * percentile);
-  const threshold = values[Math.min(index, values.length - 1)];
-  
-  // Skip caching for now - just return the calculated value
-  if (TRIGGER_CONFIG.global.debugMode) {
-    console.log(`📊 ${assetExchangeKey} ${fieldName} threshold: ${threshold.toFixed(6)} from ${values.length} values`);
-  }
-  
-  return threshold;
-}
+// REMOVED: Complex percentile calculation function
+// Using simple thresholds instead for TradingView-style performance
 
 /**
  * Calculate MA value for specific asset/exchange data
