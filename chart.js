@@ -324,6 +324,12 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
     borderVisible: true,
     autoScale: false, // Keep manual control but allow scaling
     mode: LightweightCharts.PriceScaleMode.Normal,
+    minimumWidth: 80, // More space for detailed numbers
+    priceFormat: {
+      type: 'price',
+      precision: 6, // Show 6 decimal places (.012345)
+      minMove: 0.000001, // Allow very fine increments
+    },
   },
   timeScale: { 
     timeVisible: true, 
@@ -623,6 +629,11 @@ function createMASeries(color, title) {
     lastValueVisible: true, // Show value on hover
     priceLineVisible: false,
     crosshairMarkerVisible: true, // Show crosshair marker for identification
+    priceFormat: {
+      type: 'price',
+      precision: 6, // Show 6 decimal places (.012345)
+      minMove: 0.000001, // Allow very fine increments
+    },
   });
 }
 
@@ -637,6 +648,11 @@ function createEMASeries(color, title) {
     lastValueVisible: true, // Show value on hover
     priceLineVisible: false,
     crosshairMarkerVisible: true, // Show crosshair marker for identification
+    priceFormat: {
+      type: 'price',
+      precision: 6, // Show 6 decimal places (.012345)
+      minMove: 0.000001, // Allow very fine increments
+    },
   });
 }
 
@@ -677,6 +693,11 @@ function createAvgSeries(title) {
     lastValueVisible: true, // Show value on hover
     priceLineVisible: false,
     crosshairMarkerVisible: true, // Show crosshair marker for identification
+    priceFormat: {
+      type: 'price',
+      precision: 6, // Show 6 decimal places (.012345)
+      minMove: 0.000001, // Allow very fine increments
+    },
   });
 }
 
