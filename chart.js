@@ -1678,7 +1678,8 @@ class TimeframeManager {
 
   // Clear signals when changing timeframes
   clearSignalsForTimeframeChange() {
-    console.log(`🧹 Clearing signals for timeframe change to ${this.currentTimeframe}`);
+    const timestamp = new Date().toLocaleTimeString();
+    console.log(`🧹 [${timestamp}] CLEARING SIGNALS for timeframe change to ${this.currentTimeframe}`);
     
     // Clear all signals - they're specific to the previous timeframe
     this.skullSignals.clear();
@@ -2761,7 +2762,8 @@ class TimeframeManager {
   }
   
   calculateAllSignals() {
-    console.log(`🔄 CALCULATING SIGNALS: ${this.currentSymbol}_${API_EXCHANGE} on ${this.currentTimeframe} (${this.rawData?.length || 0} points)`);
+    const timestamp = new Date().toLocaleTimeString();
+    console.log(`🔄 [${timestamp}] CALCULATING SIGNALS: ${this.currentSymbol}_${API_EXCHANGE} on ${this.currentTimeframe} (${this.rawData?.length || 0} points)`);
     
     if (!this.rawData || this.rawData.length < 50) {
       console.warn(`⚠️ Insufficient data: ${this.rawData?.length || 0} points`);
@@ -2917,8 +2919,9 @@ class TimeframeManager {
   }
 
   updateSignalDisplay() {
-    console.log(`🔍 Updating signal display: skull=${this.skullIndicatorEnabled}, goldX=${this.goldXIndicatorEnabled}`);
-    console.log(`🔍 DEBUG: skullSignals.size = ${this.skullSignals.size}, goldXSignals.size = ${this.goldXSignals.size}`);
+    const timestamp = new Date().toLocaleTimeString();
+    console.log(`🔍 [${timestamp}] Updating signal display: skull=${this.skullIndicatorEnabled}, goldX=${this.goldXIndicatorEnabled}`);
+    console.log(`🔍 [${timestamp}] DEBUG: skullSignals.size = ${this.skullSignals.size}, goldXSignals.size = ${this.goldXSignals.size}`);
     
     const markers = [];
     
@@ -2957,12 +2960,8 @@ class TimeframeManager {
     
     try {
       if (priceSeries) {
-        // Clear markers first, then set new ones to avoid conflicts
-        priceSeries.setMarkers([]);
-        setTimeout(() => {
-          priceSeries.setMarkers(markers);
-          console.log(`✅ Signal display updated successfully with ${markers.length} markers`);
-        }, 10); // Small delay to ensure chart is ready
+        priceSeries.setMarkers(markers);
+        console.log(`✅ Signal display updated successfully with ${markers.length} markers`);
         
         // Update status
         const statusEl = document.getElementById('signal-status');
