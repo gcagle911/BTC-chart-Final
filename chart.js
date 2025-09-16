@@ -3267,95 +3267,39 @@ class TimeframeManager {
     let indicatorACount = 0;
     let indicatorBCount = 0;
     
-    // Check each candle for triggers (with asset/exchange-specific cooldown)
+    // ULTRA SIMPLE: Just check if indicators are enabled and add test triggers
+    let candleCount = 0;
     for (const [candleTime, candleData] of candleBuckets) {
+      candleCount++;
       
-      // Check sell trigger with asset/exchange-specific cooldown
-      const sellCooldownSeconds = TRIGGER_CONFIG.sell.cooldown.enabled ? 
-        (TRIGGER_CONFIG.sell.cooldown.durationMinutes * 60) : 0;
+      // SELL: Trigger every 100th candle if enabled
+      if (this.sellIndicatorEnabled && (candleCount % 100 === 0)) {
+        console.log(`🔥 SELL TRIGGER: Candle ${candleCount} of ${candleBuckets.size}`);
         
-      if (candleTime - cooldownTimes.sell >= sellCooldownSeconds) {
-        if (checkSellTrigger(candleData, candleTime, this.rawData, this.currentSymbol, API_EXCHANGE, this.currentTimeframe)) {
-          const price = candleData[candleData.length - 1]?.price || 50000;
-          this.sellSignals.set(candleTime, {
-            type: 'sell',
-            price: price * 1.02,
-            active: true,
-            timeframe: this.currentTimeframe,
-            assetExchangeKey: assetExchangeKey,
-            triggerReason: 'Layer MAs in top 25% (48h window)',
-            cooldownUntil: candleTime + sellCooldownSeconds
-          });
-          sellCount++;
-          cooldownTimes.sell = candleTime;
-          console.log(`❌ SELL triggered for ${assetExchangeKey} at ${new Date(candleTime * 1000).toISOString()}, next available: ${new Date((candleTime + sellCooldownSeconds) * 1000).toISOString()}`);
-        }
+        const price = candleData[candleData.length - 1]?.price || 50000;
+        this.sellSignals.set(candleTime, {
+          type: 'sell',
+          price: price * 1.02,
+          active: true,
+          timeframe: this.currentTimeframe,
+          triggerReason: 'Simple test'
+        });
+        sellCount++;
       }
       
-      // Check buy trigger with asset/exchange-specific cooldown
-      const buyCooldownSeconds = TRIGGER_CONFIG.buy.cooldown.enabled ? 
-        (TRIGGER_CONFIG.buy.cooldown.durationMinutes * 60) : 0;
+      // BUY: Trigger every 150th candle if enabled  
+      if (this.buyIndicatorEnabled && (candleCount % 150 === 0)) {
+        console.log(`🔥 BUY TRIGGER: Candle ${candleCount} of ${candleBuckets.size}`);
         
-      if (candleTime - cooldownTimes.buy >= buyCooldownSeconds) {
-        if (checkBuyTrigger(candleData, candleTime, this.rawData, this.currentSymbol, API_EXCHANGE, this.currentTimeframe)) {
-          const price = candleData[candleData.length - 1]?.price || 50000;
-          this.buySignals.set(candleTime, {
-            type: 'buy',
-            price: price * 1.02,
-            active: true,
-            timeframe: this.currentTimeframe,
-            assetExchangeKey: assetExchangeKey,
-            triggerReason: 'Custom buy logic',
-            cooldownUntil: candleTime + buyCooldownSeconds
-          });
-          buyCount++;
-          cooldownTimes.buy = candleTime;
-          console.log(`🟢 BUY triggered for ${assetExchangeKey} at ${new Date(candleTime * 1000).toISOString()}, next available: ${new Date((candleTime + buyCooldownSeconds) * 1000).toISOString()}`);
-        }
-      }
-      
-      // Check indicator A trigger with asset/exchange-specific cooldown
-      const indicatorACooldownSeconds = TRIGGER_CONFIG.indicatorA.cooldown.enabled ? 
-        (TRIGGER_CONFIG.indicatorA.cooldown.durationMinutes * 60) : 0;
-        
-      if (candleTime - cooldownTimes.indicatorA >= indicatorACooldownSeconds) {
-        if (checkIndicatorATrigger(candleData, candleTime, this.rawData, this.currentSymbol, API_EXCHANGE, this.currentTimeframe)) {
-          const price = candleData[candleData.length - 1]?.price || 50000;
-          this.indicatorASignals.set(candleTime, {
-            type: 'indicatorA',
-            price: price * 1.02,
-            active: true,
-            timeframe: this.currentTimeframe,
-            assetExchangeKey: assetExchangeKey,
-            triggerReason: 'Indicator A logic',
-            cooldownUntil: candleTime + indicatorACooldownSeconds
-          });
-          indicatorACount++;
-          cooldownTimes.indicatorA = candleTime;
-          console.log(`🔷 INDICATOR A triggered for ${assetExchangeKey} at ${new Date(candleTime * 1000).toISOString()}, next available: ${new Date((candleTime + indicatorACooldownSeconds) * 1000).toISOString()}`);
-        }
-      }
-      
-      // Check indicator B trigger with asset/exchange-specific cooldown
-      const indicatorBCooldownSeconds = TRIGGER_CONFIG.indicatorB.cooldown.enabled ? 
-        (TRIGGER_CONFIG.indicatorB.cooldown.durationMinutes * 60) : 0;
-        
-      if (candleTime - cooldownTimes.indicatorB >= indicatorBCooldownSeconds) {
-        if (checkIndicatorBTrigger(candleData, candleTime, this.rawData, this.currentSymbol, API_EXCHANGE, this.currentTimeframe)) {
-          const price = candleData[candleData.length - 1]?.price || 50000;
-          this.indicatorBSignals.set(candleTime, {
-            type: 'indicatorB',
-            price: price * 1.02,
-            active: true,
-            timeframe: this.currentTimeframe,
-            assetExchangeKey: assetExchangeKey,
-            triggerReason: 'Indicator B logic',
-            cooldownUntil: candleTime + indicatorBCooldownSeconds
-          });
-          indicatorBCount++;
-          cooldownTimes.indicatorB = candleTime;
-          console.log(`🟪 INDICATOR B triggered for ${assetExchangeKey} at ${new Date(candleTime * 1000).toISOString()}, next available: ${new Date((candleTime + indicatorBCooldownSeconds) * 1000).toISOString()}`);
-        }
+        const price = candleData[candleData.length - 1]?.price || 50000;
+        this.buySignals.set(candleTime, {
+          type: 'buy',
+          price: price * 1.02,
+          active: true,
+          timeframe: this.currentTimeframe,
+          triggerReason: 'Simple test'
+        });
+        buyCount++;
       }
     }
     
