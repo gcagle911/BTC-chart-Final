@@ -47,7 +47,7 @@ const TRIGGER_CONFIG = {
     // DEAD SIMPLE: Just trigger on specific candles for testing
     conditions: {
       testMode: true,
-      triggerOnCandles: [488350, 488360, 488370, 488380, 488390] // Specific candle numbers
+      triggerOnCandles: [488310, 488320, 488330, 488340] // Match your actual candle range
     },
     cooldown: {
       enabled: true,
