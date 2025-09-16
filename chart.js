@@ -3553,6 +3553,7 @@ class TimeframeManager {
     
     console.log(`✅ Signals with cooldown: ${sellCount} sell, ${buyCount} buy, ${indicatorACount} A, ${indicatorBCount} B`);
     console.log(`📊 Processed ${candleBuckets.size} candles for ${assetExchangeKey}`);
+    console.log(`🔍 DEBUG SIGNAL STORAGE: Sell=${this.sellSignals.size}, Buy=${this.buySignals.size}, A=${this.indicatorASignals.size}, B=${this.indicatorBSignals.size}`);
   }
 
   // Removed complex background calculation system
@@ -3809,7 +3810,7 @@ class TimeframeManager {
   }
 
   updateSignalDisplay() {
-    console.log(`🔍 Updating signal display: sell=${this.sellIndicatorEnabled}, buy=${this.buyIndicatorEnabled}`);
+    console.log(`🔍 Updating signal display: sell=${this.sellIndicatorEnabled}, buy=${this.buyIndicatorEnabled}, A=${this.indicatorAEnabled}, B=${this.indicatorBEnabled}`);
     
     const markers = [];
     
