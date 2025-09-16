@@ -275,6 +275,11 @@
 
   <!-- Lightweight Charts + your logic -->
   <script src="https://unpkg.com/lightweight-charts@4.0.0/dist/lightweight-charts.standalone.production.js"></script>
+  <!-- Expose modular SignalManager globally without changing chart.js to a module -->
+  <script type="module">
+    import { SignalManager } from './signals/SignalManager.js';
+    window.SignalManager = SignalManager;
+  </script>
   <script src="chart.js"></script>
 
   <!-- small script to make the dropdown work -->

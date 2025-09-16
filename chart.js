@@ -1159,6 +1159,18 @@ class TimeframeManager {
     this.indicatorBSignals = new Map(); // time -> confirmed signal data (candle closed)
     this.signalsCalculated = false;
     this.signalSystemEnabled = false;
+    // Modular signal system (Skull/GoldX)
+    try {
+      this.signalManager = (typeof window !== 'undefined' && window.SignalManager) ? new window.SignalManager() : null;
+      if (this.signalManager) {
+        console.log('🆕 Modular SignalManager initialized');
+      } else {
+        console.log('ℹ️ Modular SignalManager not available (legacy-only signals active)');
+      }
+    } catch (e) {
+      console.warn('⚠️ Failed to initialize SignalManager:', e);
+      this.signalManager = null;
+    }
     
     // Real-time signal tracking
     this.currentCandleSignals = new Map(); // time -> {sell: boolean, buy: boolean, indicatorA: boolean, indicatorB: boolean} (preview)
@@ -2062,6 +2074,14 @@ class TimeframeManager {
       statusEl.textContent = 'Toggle indicators to show historical signals';
     }
     
+    // Clear modular signals
+    try {
+      if (this.signalManager) {
+        this.signalManager.clearAllSignals();
+        this.signalManager.updateStatusDisplay();
+      }
+    } catch (e) { console.warn('Modular clearAllSignals failed:', e); }
+    
     console.log('✅ Signals cleared for new asset/exchange');
   }
 
@@ -2092,6 +2112,14 @@ class TimeframeManager {
     if (statusEl) {
       statusEl.textContent = 'Toggle indicators to show historical signals';
     }
+    
+    // Clear modular signals for timeframe change
+    try {
+      if (this.signalManager) {
+        this.signalManager.clearAllSignals();
+        this.signalManager.updateStatusDisplay();
+      }
+    } catch (e) { console.warn('Modular clearAllSignals (timeframe) failed:', e); }
     
     console.log('✅ Signals cleared for new timeframe');
   }
@@ -3118,6 +3146,14 @@ class TimeframeManager {
     this.sellIndicatorEnabled = enabled;
     console.log(`❌ Sell indicator ${enabled ? 'enabled' : 'disabled'}`);
     
+    // Sync with modular Skull indicator toggle
+    try {
+      if (this.signalManager) {
+        this.signalManager.toggleSkullIndicator(!!enabled);
+        this.signalManager.updateStatusDisplay();
+      }
+    } catch (e) { console.warn('Skull toggle sync failed:', e); }
+
     if (enabled) {
       // Pre-calculate thresholds for performance
       this.preCalculateThresholds();
@@ -3145,6 +3181,14 @@ class TimeframeManager {
     this.buyIndicatorEnabled = enabled;
     console.log(`🟢 Buy indicator ${enabled ? 'enabled' : 'disabled'}`);
     
+    // Sync with modular Gold X indicator toggle
+    try {
+      if (this.signalManager) {
+        this.signalManager.toggleGoldXIndicator(!!enabled);
+        this.signalManager.updateStatusDisplay();
+      }
+    } catch (e) { console.warn('GoldX toggle sync failed:', e); }
+
     if (enabled) {
       // Pre-calculate thresholds for performance
       this.preCalculateThresholds();
@@ -3231,9 +3275,16 @@ class TimeframeManager {
       return;
     }
     
-    // No background calculation needed for fixed thresholds
+    // New modular system: calculate signals in SignalManager first (if available)
+    try {
+      if (this.signalManager) {
+        this.signalManager.calculateAllSignals(this.rawData, this.currentSymbol, API_EXCHANGE, this.currentTimeframe);
+      }
+    } catch (e) {
+      console.warn('⚠️ Modular signal calculation failed, continuing with legacy system:', e);
+    }
     
-    // Use simple, clean trigger system
+    // Legacy system for Sell/Buy placeholders
     this.calculateSimpleSignals();
     this.signalsCalculated = true;
   }
@@ -3739,6 +3790,14 @@ class TimeframeManager {
       }
     }
     
+    // Merge markers from modular signal system if active
+    try {
+      if (this.signalManager) {
+        const modularMarkers = this.signalManager.getAllMarkers() || [];
+        for (const m of modularMarkers) markers.push(m);
+      }
+    } catch (e) { console.warn('Failed to fetch modular markers:', e); }
+
     console.log(`📍 Setting ${markers.length} total markers on chart`);
     
     try {
@@ -4590,7 +4649,7 @@ function zoomIn() {
       timeScale.setVisibleRange(newVisibleRange);
       
       // CRITICAL: Sync volume chart immediately after zoom
-      if (volumeChart && manager.volumeIndicatorEnabled) {
+      if (typeof volumeChart !== 'undefined' && volumeChart && manager.volumeIndicatorEnabled) {
         setTimeout(() => {
           volumeChart.timeScale().setVisibleRange(newVisibleRange);
           console.log('🔄 ZOOM SYNC: Volume chart synced after zoom in');
@@ -4615,7 +4674,7 @@ function zoomOut() {
       timeScale.setVisibleRange(newVisibleRange);
       
       // CRITICAL: Sync volume chart immediately after zoom
-      if (volumeChart && manager.volumeIndicatorEnabled) {
+      if (typeof volumeChart !== 'undefined' && volumeChart && manager.volumeIndicatorEnabled) {
         setTimeout(() => {
           volumeChart.timeScale().setVisibleRange(newVisibleRange);
           console.log('🔄 ZOOM SYNC: Volume chart synced after zoom out');
@@ -4630,7 +4689,7 @@ function fitContent() {
     window.chart.timeScale().fitContent();
     
     // CRITICAL: Sync volume chart after fit content
-    if (volumeChart && manager.volumeIndicatorEnabled) {
+    if (typeof volumeChart !== 'undefined' && volumeChart && manager.volumeIndicatorEnabled) {
       setTimeout(() => {
         volumeChart.timeScale().fitContent();
         console.log('🔄 FIT SYNC: Volume chart synced after fit content');
