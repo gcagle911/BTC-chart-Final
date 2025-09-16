@@ -95,7 +95,7 @@ const TRIGGER_CONFIG = {
     // Trigger conditions ready to be added
   },
   
-  // Indicator B configuration (Purple Square below candles)
+  // Indicator B configuration (Purple Square above candles)
   indicatorB: {
     enabled: true,
     signalType: 'INDICATOR_B',
@@ -103,7 +103,7 @@ const TRIGGER_CONFIG = {
     marker: {
       emoji: '🟪',
       color: '#8000FF',
-      position: 'belowBar',
+      position: 'aboveBar', // FIXED: Both A and B above candles
       size: 2,
       previewColor: '#9966FF',
       previewSize: 1
