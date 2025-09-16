@@ -44,10 +44,10 @@ const TRIGGER_CONFIG = {
       previewColor: '#FF6666',
       previewSize: 1
     },
-    // ULTRA SIMPLE: Fixed thresholds (no percentile calculations)
+    // DEAD SIMPLE: Just trigger every 10th candle for testing
     conditions: {
-      l50_ma50_threshold: 0.020,      // L50MA50 > 0.020
-      l50_ma200_threshold: 0.015      // L50MA200 > 0.015
+      testMode: true,
+      triggerEveryNthCandle: 10
     },
     cooldown: {
       enabled: true,
@@ -221,43 +221,30 @@ function checkMinuteTriggerConditions(signalType, minuteData, minuteIndex, candl
   }
   
   if (signalType === 'sell') {
-    // ULTRA SIMPLE: Fixed thresholds (instant, reliable)
+    // DEAD SIMPLE TEST: Trigger every 10th candle
     const config = TRIGGER_CONFIG.sell.conditions;
     
-    // Calculate current MA values
-    const l50ma50 = calculateTriggerMA(rawData, currentIndex, 'spread_L50_pct_avg', 50);
-    const l50ma200 = calculateTriggerMA(rawData, currentIndex, 'spread_L50_pct_avg', 200);
-    
-    if (l50ma50 === null || l50ma200 === null) {
-      return { 
-        met: false, 
-        reason: 'Insufficient data for MA calculations', 
-        values: { assetExchangeKey, currentIndex }
+    if (config.testMode) {
+      // Simple test: trigger every Nth candle
+      const candleIndex = Math.floor(candleTime / 3600); // Rough candle index
+      const shouldTrigger = (candleIndex % config.triggerEveryNthCandle) === 0;
+      
+      console.log(`🔍 SELL TEST: Candle ${candleIndex}, trigger every ${config.triggerEveryNthCandle}, shouldTrigger=${shouldTrigger}`);
+      
+      return {
+        met: shouldTrigger,
+        reason: shouldTrigger ? `Test trigger (candle ${candleIndex})` : `Not trigger candle (${candleIndex})`,
+        values: {
+          assetExchangeKey,
+          candleIndex,
+          timestamp: minuteData.time,
+          testMode: true
+        }
       };
     }
     
-    // Simple threshold checks
-    const ma50Qualified = l50ma50 > config.l50_ma50_threshold;
-    const ma200Qualified = l50ma200 > config.l50_ma200_threshold;
-    const bothQualified = ma50Qualified && ma200Qualified;
-    
-    // DEBUG: Log every evaluation to see what's happening
-    console.log(`🔍 ${assetExchangeKey} SELL CHECK: L50MA50=${l50ma50?.toFixed(6)} > ${config.l50_ma50_threshold} = ${ma50Qualified}, L50MA200=${l50ma200?.toFixed(6)} > ${config.l50_ma200_threshold} = ${ma200Qualified}, TRIGGER=${bothQualified}`);
-    
-    return {
-      met: bothQualified,
-      reason: bothQualified 
-        ? `L50MA50 (${l50ma50.toFixed(6)}) > ${config.l50_ma50_threshold} AND L50MA200 (${l50ma200.toFixed(6)}) > ${config.l50_ma200_threshold} (${assetExchangeKey})`
-        : `MA requirements not met for ${assetExchangeKey}`,
-      values: {
-        assetExchangeKey,
-        l50ma50: l50ma50,
-        l50ma200: l50ma200,
-        ma50Qualified: ma50Qualified,
-        ma200Qualified: ma200Qualified,
-        timestamp: minuteData.time
-      }
-    };
+    // If not test mode, no trigger
+    return { met: false, reason: 'Test mode disabled', values: {} };
     
   } else if (signalType === 'buy') {
     // BUY TRIGGER: No conditions implemented yet
