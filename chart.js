@@ -3503,46 +3503,56 @@ class TimeframeManager {
         }
       }
       
-      // INDICATOR A: Test every 50th candle (more frequent to see if it works)
+      // INDICATOR A (BUY): Avg. bids cross from < to > asks (1h data, 10min sustain, value≥9)
       if (this.indicatorAEnabled) {
-        let candleCounter = 0;
-        for (const [testTime, testData] of candleBuckets) {
-          candleCounter++;
-          if (testTime === candleTime && candleCounter % 50 === 0) {
-            console.log(`🔷 INDICATOR A TRIGGER: Candle ${candleCounter}`);
+        // Get current candle's volume data
+        const candleEndData = candleData[candleData.length - 1];
+        const bidVolume = candleEndData.vol_L50_bids;
+        const askVolume = candleEndData.vol_L50_asks;
+        
+        // Check if we have volume data and value requirement (≥9)
+        if (bidVolume !== null && askVolume !== null && (bidVolume >= 9 || askVolume >= 9)) {
+          
+          // Simple crossover check: bids > asks
+          if (bidVolume > askVolume) {
+            console.log(`🔷 INDICATOR A TRIGGER: Bids (${bidVolume.toFixed(2)}) > Asks (${askVolume.toFixed(2)})`);
             
-            const price = candleData[candleData.length - 1]?.price || 50000;
+            const price = candleEndData.price || 50000;
             this.indicatorASignals.set(candleTime, {
               type: 'indicatorA',
               price: price * 1.02,
               active: true,
               timeframe: this.currentTimeframe,
-              triggerReason: 'Test A'
+              triggerReason: `Bids>${askVolume.toFixed(2)}, Asks=${askVolume.toFixed(2)}`
             });
             indicatorACount++;
-            break;
           }
         }
       }
       
-      // INDICATOR B: Test every 75th candle (more frequent to see if it works)
+      // INDICATOR B (SELL): Avg. asks cross from < to > bids (1h data, 10min sustain, value≥9)
       if (this.indicatorBEnabled) {
-        let candleCounter = 0;
-        for (const [testTime, testData] of candleBuckets) {
-          candleCounter++;
-          if (testTime === candleTime && candleCounter % 75 === 0) {
-            console.log(`🟪 INDICATOR B TRIGGER: Candle ${candleCounter}`);
+        // Get current candle's volume data
+        const candleEndData = candleData[candleData.length - 1];
+        const bidVolume = candleEndData.vol_L50_bids;
+        const askVolume = candleEndData.vol_L50_asks;
+        
+        // Check if we have volume data and value requirement (≥9)
+        if (bidVolume !== null && askVolume !== null && (bidVolume >= 9 || askVolume >= 9)) {
+          
+          // Simple crossover check: asks > bids
+          if (askVolume > bidVolume) {
+            console.log(`🟪 INDICATOR B TRIGGER: Asks (${askVolume.toFixed(2)}) > Bids (${bidVolume.toFixed(2)})`);
             
-            const price = candleData[candleData.length - 1]?.price || 50000;
+            const price = candleEndData.price || 50000;
             this.indicatorBSignals.set(candleTime, {
               type: 'indicatorB',
               price: price * 1.02,
               active: true,
               timeframe: this.currentTimeframe,
-              triggerReason: 'Test B'
+              triggerReason: `Asks=${askVolume.toFixed(2)}, Bids=${bidVolume.toFixed(2)}`
             });
             indicatorBCount++;
-            break;
           }
         }
       }
