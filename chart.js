@@ -702,7 +702,7 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
       bottom: 0.02,
     },
     borderVisible: false,
-    autoScale: false, // DISABLED - no autoscaling
+    autoScale: true,
     entireTextOnly: true,
     ticksVisible: true,
     mode: LightweightCharts.PriceScaleMode.Normal,
@@ -821,7 +821,7 @@ function createVolumeSeries() {
       visible: false, // Hidden by default
       scaleMargins: { top: 0.7, bottom: 0.05 }, // Position at bottom
       mode: LightweightCharts.PriceScaleMode.Normal,
-      autoScale: false, // DISABLED - no autoscaling
+      autoScale: true,
     });
 
     console.log('✅ Volume series created on main chart with separate price scale');
@@ -892,7 +892,7 @@ function createIndicator2Series() {
       visible: false,
       scaleMargins: { top: 0.4, bottom: 0.4 }, // Middle 20% of chart
       mode: LightweightCharts.PriceScaleMode.Normal,
-      autoScale: false, // DISABLED - no autoscaling
+      autoScale: true,
     });
 
     console.log('✅ Indicator 2 series (Timeframe-Averaged Volume) created');
@@ -929,7 +929,7 @@ function createIndicator3Series() {
       visible: false,
       scaleMargins: { top: 0.05, bottom: 0.8 }, // Top 15% of chart
       mode: LightweightCharts.PriceScaleMode.Normal,
-      autoScale: false, // DISABLED - no autoscaling
+      autoScale: true,
     });
 
     console.log('✅ Indicator 3 series created');
@@ -1203,16 +1203,17 @@ class TimeframeManager {
 
   applyAutoScale() {
     try {
-      // DISABLED: No autoscaling on any axis
+      // Only auto-scale right axis (price data)
       chart.priceScale('right').applyOptions({ 
-        autoScale: false // DISABLED - no autoscaling
+        autoScale: true
       });
+      // Keep left axis manual but allow user scaling
       chart.priceScale('left').applyOptions({ 
-        autoScale: false // DISABLED - no autoscaling
+        autoScale: false // Manual control, but scaling allowed
       });
-      console.log('✅ Auto-scale DISABLED on both axes');
+      console.log('✅ Auto-scale applied: right=enabled, left=manual');
     } catch (e) {
-      console.error('Failed to disable auto-scale:', e);
+      console.error('Failed to apply auto-scale:', e);
     }
   }
 
@@ -4805,10 +4806,10 @@ function addScaleResetButton() {
     resetButton.style.cssText = 'background: #2962ff; color: #fff; margin-top: 8px;';
     resetButton.textContent = '🔄 Reset Y-Scales';
     resetButton.onclick = () => {
-      // Reset both axes to manual (no autoscaling)
-      chart.priceScale('right').applyOptions({ autoScale: false });
+      // Reset both axes to sensible defaults
+      chart.priceScale('right').applyOptions({ autoScale: true });
       chart.priceScale('left').applyOptions({ autoScale: false });
-      console.log('✅ Y-axis scales reset to manual (no autoscaling)');
+      console.log('✅ Y-axis scales reset');
     };
     toolsMenu.appendChild(resetButton);
   }
