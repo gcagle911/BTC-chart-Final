@@ -75,7 +75,7 @@ const TRIGGER_CONFIG = {
     // Trigger conditions will be added here
   },
   
-  // Indicator A configuration (Blue Diamond above candles)
+  // Indicator A configuration (Blue Diamond below candles)
   indicatorA: {
     enabled: true,
     signalType: 'INDICATOR_A',
@@ -83,7 +83,7 @@ const TRIGGER_CONFIG = {
     marker: {
       emoji: '🔷',
       color: '#0080FF',
-      position: 'aboveBar',
+      position: 'belowBar', // FIXED: Blue diamond below candles
       size: 2,
       previewColor: '#6699FF',
       previewSize: 1
