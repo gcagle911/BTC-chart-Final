@@ -1498,12 +1498,12 @@ class TimeframeManager {
       // Set complete dataset
       priceSeries.setData(priceData);
       
-      // Only fit content on initial load, not on updates to preserve user's zoom/pan position
-      if (!isUpdate) {
-        chart.timeScale().fitContent();
-      }
-      // Ensure right axis scales to new data range (left axis stays manual)
-      this.applyAutoScale();
+      // DISABLED: No automatic fitting to preserve user's zoom/pan position
+      // if (!isUpdate) {
+      //   chart.timeScale().fitContent();
+      // }
+      // DISABLED: No automatic scaling to preserve user's view
+      // this.applyAutoScale();
     }
 
     // Apply visibility after any computation
@@ -4633,17 +4633,20 @@ function zoomOut() {
 }
 
 function fitContent() {
-  if (window.chart) {
-    window.chart.timeScale().fitContent();
-    
-    // CRITICAL: Sync volume chart after fit content
-    if (volumeChart && manager.volumeIndicatorEnabled) {
-      setTimeout(() => {
-        volumeChart.timeScale().fitContent();
-        console.log('🔄 FIT SYNC: Volume chart synced after fit content');
-      }, 10);
-    }
-  }
+  // DISABLED: Prevents unwanted chart resets while analyzing data
+  console.log('📍 fitContent() called but disabled to preserve user view');
+  
+  // if (window.chart) {
+  //   window.chart.timeScale().fitContent();
+  //   
+  //   // CRITICAL: Sync volume chart after fit content
+  //   if (volumeChart && manager.volumeIndicatorEnabled) {
+  //     setTimeout(() => {
+  //       volumeChart.timeScale().fitContent();
+  //       console.log('🔄 FIT SYNC: Volume chart synced after fit content');
+  //     }, 10);
+  //   }
+  // }
 }
 
 // Enhanced Y-axis scale functions for dual axis
