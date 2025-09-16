@@ -3267,39 +3267,95 @@ class TimeframeManager {
     let indicatorACount = 0;
     let indicatorBCount = 0;
     
-    // ULTRA SIMPLE: Just check if indicators are enabled and add test triggers
-    let candleCount = 0;
-    for (const [candleTime, candleData] of candleBuckets) {
-      candleCount++;
+    // REAL TRIGGER: L50MA50 in top 15% of 48h window (direct calculation)
+    
+    // Calculate 48-hour L50MA50 threshold once for this asset/exchange
+    let l50ma50Threshold = null;
+    if (this.sellIndicatorEnabled) {
+      // Get 48 hours of data
+      const now = Date.now();
+      const cutoffTime = new Date(now - (48 * 60 * 60 * 1000));
+      const recent48hData = this.rawData.filter(item => {
+        const itemTime = new Date(item.time);
+        return itemTime >= cutoffTime;
+      });
       
-      // SELL: Trigger every 100th candle if enabled
-      if (this.sellIndicatorEnabled && (candleCount % 100 === 0)) {
-        console.log(`🔥 SELL TRIGGER: Candle ${candleCount} of ${candleBuckets.size}`);
+      // Calculate all L50MA50 values from 48h data
+      const l50ma50Values = [];
+      for (let i = 49; i < recent48hData.length; i++) { // Need 50 points for MA50
+        let sum = 0;
+        let count = 0;
         
-        const price = candleData[candleData.length - 1]?.price || 50000;
-        this.sellSignals.set(candleTime, {
-          type: 'sell',
-          price: price * 1.02,
-          active: true,
-          timeframe: this.currentTimeframe,
-          triggerReason: 'Simple test'
-        });
-        sellCount++;
+        for (let j = i - 49; j <= i; j++) {
+          const val = recent48hData[j].spread_L50_pct_avg;
+          if (val !== null && val !== undefined && isFinite(val)) {
+            sum += val;
+            count++;
+          }
+        }
+        
+        if (count > 0) {
+          l50ma50Values.push(sum / count);
+        }
       }
       
-      // BUY: Trigger every 150th candle if enabled  
-      if (this.buyIndicatorEnabled && (candleCount % 150 === 0)) {
-        console.log(`🔥 BUY TRIGGER: Candle ${candleCount} of ${candleBuckets.size}`);
+      // Get 85th percentile (top 15%)
+      if (l50ma50Values.length > 0) {
+        l50ma50Values.sort((a, b) => a - b);
+        const index = Math.floor(l50ma50Values.length * 0.85);
+        l50ma50Threshold = l50ma50Values[index];
+        console.log(`📊 ${assetExchangeKey} L50MA50 threshold (top 15%): ${l50ma50Threshold.toFixed(6)} from ${l50ma50Values.length} values`);
+      }
+    }
+    
+    // Check each candle
+    for (const [candleTime, candleData] of candleBuckets) {
+      
+      // SELL: Check L50MA50 vs threshold
+      if (this.sellIndicatorEnabled && l50ma50Threshold !== null) {
         
-        const price = candleData[candleData.length - 1]?.price || 50000;
-        this.buySignals.set(candleTime, {
-          type: 'buy',
-          price: price * 1.02,
-          active: true,
-          timeframe: this.currentTimeframe,
-          triggerReason: 'Simple test'
-        });
-        buyCount++;
+        // Calculate current L50MA50 for this candle
+        const candleEndData = candleData[candleData.length - 1];
+        
+        // Find this candle's data index in rawData
+        let dataIndex = -1;
+        for (let i = 0; i < this.rawData.length; i++) {
+          if (this.rawData[i].time === candleEndData.time) {
+            dataIndex = i;
+            break;
+          }
+        }
+        
+        if (dataIndex >= 49) { // Need 50 points for MA50
+          let sum = 0;
+          let count = 0;
+          
+          for (let j = dataIndex - 49; j <= dataIndex; j++) {
+            const val = this.rawData[j].spread_L50_pct_avg;
+            if (val !== null && val !== undefined && isFinite(val)) {
+              sum += val;
+              count++;
+            }
+          }
+          
+          if (count > 0) {
+            const currentL50MA50 = sum / count;
+            
+            if (currentL50MA50 >= l50ma50Threshold) {
+              console.log(`🔥 SELL TRIGGER: L50MA50 ${currentL50MA50.toFixed(6)} >= threshold ${l50ma50Threshold.toFixed(6)}`);
+              
+              const price = candleEndData.price || 50000;
+              this.sellSignals.set(candleTime, {
+                type: 'sell',
+                price: price * 1.02,
+                active: true,
+                timeframe: this.currentTimeframe,
+                triggerReason: `L50MA50 in top 15% (${currentL50MA50.toFixed(6)} >= ${l50ma50Threshold.toFixed(6)})`
+              });
+              sellCount++;
+            }
+          }
+        }
       }
     }
     
