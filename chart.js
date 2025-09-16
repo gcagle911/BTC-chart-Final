@@ -44,10 +44,10 @@ const TRIGGER_CONFIG = {
       previewColor: '#FF6666',
       previewSize: 1
     },
-    // DEAD SIMPLE: Just trigger every 10th candle for testing
+    // DEAD SIMPLE: Just trigger on specific candles for testing
     conditions: {
       testMode: true,
-      triggerEveryNthCandle: 10
+      triggerOnCandles: [488350, 488360, 488370, 488380, 488390] // Specific candle numbers
     },
     cooldown: {
       enabled: true,
@@ -226,15 +226,15 @@ function checkMinuteTriggerConditions(signalType, minuteData, minuteIndex, candl
     const config = TRIGGER_CONFIG.sell.conditions;
     
     if (config.testMode) {
-      // Simple test: trigger every Nth candle
+      // Simple test: trigger on specific candle numbers
       const candleIndex = Math.floor(candleTime / 3600); // Rough candle index
-      const shouldTrigger = (candleIndex % config.triggerEveryNthCandle) === 0;
+      const shouldTrigger = config.triggerOnCandles.includes(candleIndex);
       
-      console.log(`🔍 SELL TEST: Candle ${candleIndex}, trigger every ${config.triggerEveryNthCandle}, shouldTrigger=${shouldTrigger}`);
+      console.log(`🔍 SELL TEST: Candle ${candleIndex}, shouldTrigger=${shouldTrigger}`);
       
       return {
         met: shouldTrigger,
-        reason: shouldTrigger ? `Test trigger (candle ${candleIndex})` : `Not trigger candle (${candleIndex})`,
+        reason: shouldTrigger ? `Test trigger (candle ${candleIndex})` : `Not test candle (${candleIndex})`,
         values: {
           assetExchangeKey,
           candleIndex,
