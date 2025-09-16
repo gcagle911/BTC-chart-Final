@@ -150,7 +150,7 @@ function evaluateTrigger(signalType, candleData, candleTime, rawData, currentSym
   // Check each minute within the candle
   for (let i = 0; i < candleData.length; i++) {
     const minuteData = candleData[i];
-    const minuteResult = checkMinuteTriggerConditions(signalType, minuteData, i, candleData, rawData, currentSymbol, exchange, timeframe);
+    const minuteResult = checkMinuteTriggerConditions(signalType, minuteData, i, candleData, rawData, currentSymbol, exchange, timeframe, candleTime);
     
     conditionResults.push(minuteResult);
     if (minuteResult.met) {
@@ -200,9 +200,10 @@ function evaluateTrigger(signalType, candleData, candleTime, rawData, currentSym
  * @param {string} currentSymbol - Trading pair
  * @param {string} exchange - Exchange name
  * @param {string} timeframe - Chart timeframe
+ * @param {number} candleTime - Candle start timestamp
  * @returns {Object} - {met: boolean, reason: string, values: Object}
  */
-function checkMinuteTriggerConditions(signalType, minuteData, minuteIndex, candleData, rawData, currentSymbol, exchange, timeframe) {
+function checkMinuteTriggerConditions(signalType, minuteData, minuteIndex, candleData, rawData, currentSymbol, exchange, timeframe, candleTime) {
   
   // CRITICAL: Create asset/exchange isolation key
   const assetExchangeKey = `${currentSymbol}_${exchange}`;
