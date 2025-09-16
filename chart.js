@@ -3503,54 +3503,58 @@ class TimeframeManager {
         }
       }
       
-      // INDICATOR A (BUY): Avg. bids cross from < to > asks (1h data, 10min sustain, value≥9)
+      // INDICATOR A (BUY): Avg. bids cross from < to > asks (1h timeframe data, 10min sustain, value≥9)
       if (this.indicatorAEnabled) {
-        // Get current candle's volume data
-        const candleEndData = candleData[candleData.length - 1];
-        const bidVolume = candleEndData.vol_L50_bids;
-        const askVolume = candleEndData.vol_L50_asks;
+        // Get 1-hour aggregated volume data for this candle time
+        const hourlyVolumeData = this.get1HourVolumeForCandle(candleTime);
         
-        // Check if we have volume data and value requirement (≥9)
-        if (bidVolume !== null && askVolume !== null && (bidVolume >= 9 || askVolume >= 9)) {
+        if (hourlyVolumeData && hourlyVolumeData.avgBids !== null && hourlyVolumeData.avgAsks !== null) {
+          const { avgBids, avgAsks, sustainedMinutes } = hourlyVolumeData;
           
-          // Simple crossover check: bids > asks
-          if (bidVolume > askVolume) {
-            console.log(`🔷 INDICATOR A TRIGGER: Bids (${bidVolume.toFixed(2)}) > Asks (${askVolume.toFixed(2)})`);
+          // Check all conditions: bids > asks + 10min sustain + value≥9
+          const crossoverCondition = avgBids > avgAsks;
+          const sustainCondition = sustainedMinutes >= 10;
+          const valueCondition = avgBids >= 9 || avgAsks >= 9;
+          
+          if (crossoverCondition && sustainCondition && valueCondition) {
+            console.log(`🔷 INDICATOR A TRIGGER: 1h Avg Bids (${avgBids.toFixed(2)}) > Avg Asks (${avgAsks.toFixed(2)}) sustained ${sustainedMinutes}min`);
             
-            const price = candleEndData.price || 50000;
+            const price = candleData[candleData.length - 1]?.price || 50000;
             this.indicatorASignals.set(candleTime, {
               type: 'indicatorA',
               price: price * 1.02,
               active: true,
               timeframe: this.currentTimeframe,
-              triggerReason: `Bids>${askVolume.toFixed(2)}, Asks=${askVolume.toFixed(2)}`
+              triggerReason: `1h Bids>${avgBids.toFixed(2)} > Asks=${avgAsks.toFixed(2)}, sustained ${sustainedMinutes}min`
             });
             indicatorACount++;
           }
         }
       }
       
-      // INDICATOR B (SELL): Avg. asks cross from < to > bids (1h data, 10min sustain, value≥9)
+      // INDICATOR B (SELL): Avg. asks cross from < to > bids (1h timeframe data, 10min sustain, value≥9)
       if (this.indicatorBEnabled) {
-        // Get current candle's volume data
-        const candleEndData = candleData[candleData.length - 1];
-        const bidVolume = candleEndData.vol_L50_bids;
-        const askVolume = candleEndData.vol_L50_asks;
+        // Get 1-hour aggregated volume data for this candle time
+        const hourlyVolumeData = this.get1HourVolumeForCandle(candleTime);
         
-        // Check if we have volume data and value requirement (≥9)
-        if (bidVolume !== null && askVolume !== null && (bidVolume >= 9 || askVolume >= 9)) {
+        if (hourlyVolumeData && hourlyVolumeData.avgBids !== null && hourlyVolumeData.avgAsks !== null) {
+          const { avgBids, avgAsks, sustainedMinutes } = hourlyVolumeData;
           
-          // Simple crossover check: asks > bids
-          if (askVolume > bidVolume) {
-            console.log(`🟪 INDICATOR B TRIGGER: Asks (${askVolume.toFixed(2)}) > Bids (${bidVolume.toFixed(2)})`);
+          // Check all conditions: asks > bids + 10min sustain + value≥9
+          const crossoverCondition = avgAsks > avgBids;
+          const sustainCondition = sustainedMinutes >= 10;
+          const valueCondition = avgBids >= 9 || avgAsks >= 9;
+          
+          if (crossoverCondition && sustainCondition && valueCondition) {
+            console.log(`🟪 INDICATOR B TRIGGER: 1h Avg Asks (${avgAsks.toFixed(2)}) > Avg Bids (${avgBids.toFixed(2)}) sustained ${sustainedMinutes}min`);
             
-            const price = candleEndData.price || 50000;
+            const price = candleData[candleData.length - 1]?.price || 50000;
             this.indicatorBSignals.set(candleTime, {
               type: 'indicatorB',
               price: price * 1.02,
               active: true,
               timeframe: this.currentTimeframe,
-              triggerReason: `Asks=${askVolume.toFixed(2)}, Bids=${bidVolume.toFixed(2)}`
+              triggerReason: `1h Asks=${avgAsks.toFixed(2)} > Bids=${avgBids.toFixed(2)}, sustained ${sustainedMinutes}min`
             });
             indicatorBCount++;
           }
@@ -3573,6 +3577,56 @@ class TimeframeManager {
     const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
     console.log(`✅ Using fixed thresholds for ${assetExchangeKey} - no calculation needed`);
     this.thresholdsReady = true;
+  }
+
+  // Get 1-hour timeframe volume data for a specific candle (EXACTLY what displays on 1h chart)
+  get1HourVolumeForCandle(candleTime) {
+    if (!this.rawData || this.rawData.length === 0) return null;
+    
+    // Convert current candle time to 1-hour bucket (regardless of current timeframe)
+    const hourBucketTime = Math.floor(candleTime / 3600) * 3600; // 1-hour alignment
+    
+    // Get all minute data that falls within this 1-hour bucket
+    const hourData = this.rawData.filter(item => {
+      const itemTimestamp = this.toUnixTimestamp(item.time);
+      const itemHourBucket = Math.floor(itemTimestamp / 3600) * 3600;
+      return itemHourBucket === hourBucketTime;
+    });
+    
+    if (hourData.length === 0) return null;
+    
+    // Calculate 1-hour averages (EXACTLY like 1h chart display)
+    const validBids = hourData.filter(item => item.vol_L50_bids !== null).map(item => item.vol_L50_bids);
+    const validAsks = hourData.filter(item => item.vol_L50_asks !== null).map(item => item.vol_L50_asks);
+    
+    if (validBids.length === 0 || validAsks.length === 0) return null;
+    
+    const avgBids = validBids.reduce((sum, val) => sum + val, 0) / validBids.length;
+    const avgAsks = validAsks.reduce((sum, val) => sum + val, 0) / validAsks.length;
+    
+    // Check 10-minute sustain: count how many minutes bids > asks (or asks > bids)
+    let bidsGreaterCount = 0;
+    let asksGreaterCount = 0;
+    
+    for (const item of hourData) {
+      if (item.vol_L50_bids !== null && item.vol_L50_asks !== null) {
+        if (item.vol_L50_bids > item.vol_L50_asks) {
+          bidsGreaterCount++;
+        } else if (item.vol_L50_asks > item.vol_L50_bids) {
+          asksGreaterCount++;
+        }
+      }
+    }
+    
+    return {
+      avgBids: avgBids,
+      avgAsks: avgAsks,
+      sustainedMinutes: Math.max(bidsGreaterCount, asksGreaterCount), // Minutes of dominance
+      bidsGreaterMinutes: bidsGreaterCount,
+      asksGreaterMinutes: asksGreaterCount,
+      hourBucketTime: hourBucketTime,
+      dataPoints: hourData.length
+    };
   }
   
   // Calculate MA from specific dataset (helper for pre-calculation)
