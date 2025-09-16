@@ -260,25 +260,67 @@ function checkMinuteTriggerConditions(signalType, minuteData, minuteIndex, candl
     };
     
   } else if (signalType === 'indicatorA') {
-    // INDICATOR A: No conditions implemented yet
+    // INDICATOR A: Using Volume L50 data
+    const bidVolume = minuteData.vol_L50_bids;
+    const askVolume = minuteData.vol_L50_asks;
+    
+    if (bidVolume === null || askVolume === null) {
+      return { 
+        met: false, 
+        reason: 'No volume L50 data available', 
+        values: { assetExchangeKey, timestamp: minuteData.time }
+      };
+    }
+    
+    // Access volume data - ready for your requirements
+    const totalVolume = bidVolume + askVolume;
+    const bidRatio = bidVolume / totalVolume;
+    const askRatio = askVolume / totalVolume;
+    
+    console.log(`🔷 INDICATOR A: BidVol=${bidVolume.toFixed(2)}, AskVol=${askVolume.toFixed(2)}, Total=${totalVolume.toFixed(2)}, BidRatio=${bidRatio.toFixed(3)}`);
+    
     return { 
-      met: false, 
-      reason: 'No indicator A conditions implemented yet', 
+      met: false, // No trigger conditions yet - ready for your requirements
+      reason: 'Volume L50 data accessed - awaiting trigger conditions', 
       values: {
-        assetExchangeKey: `${currentSymbol}_${exchange}`,
-        price: minuteData.price,
+        assetExchangeKey,
+        bidVolume,
+        askVolume,
+        totalVolume,
+        bidRatio,
+        askRatio,
         timestamp: minuteData.time
       }
     };
     
   } else if (signalType === 'indicatorB') {
-    // INDICATOR B: No conditions implemented yet
+    // INDICATOR B: Using Volume L50 data  
+    const bidVolume = minuteData.vol_L50_bids;
+    const askVolume = minuteData.vol_L50_asks;
+    
+    if (bidVolume === null || askVolume === null) {
+      return { 
+        met: false, 
+        reason: 'No volume L50 data available', 
+        values: { assetExchangeKey, timestamp: minuteData.time }
+      };
+    }
+    
+    // Access volume data - ready for your requirements
+    const totalVolume = bidVolume + askVolume;
+    const volumeImbalance = (bidVolume - askVolume) / totalVolume; // Positive = more bids
+    
+    console.log(`🟪 INDICATOR B: BidVol=${bidVolume.toFixed(2)}, AskVol=${askVolume.toFixed(2)}, Imbalance=${volumeImbalance.toFixed(3)}`);
+    
     return { 
-      met: false, 
-      reason: 'No indicator B conditions implemented yet', 
+      met: false, // No trigger conditions yet - ready for your requirements
+      reason: 'Volume L50 data accessed - awaiting trigger conditions', 
       values: {
-        assetExchangeKey: `${currentSymbol}_${exchange}`,
-        price: minuteData.price,
+        assetExchangeKey,
+        bidVolume,
+        askVolume,
+        totalVolume,
+        volumeImbalance,
         timestamp: minuteData.time
       }
     };
