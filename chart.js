@@ -3503,39 +3503,47 @@ class TimeframeManager {
         }
       }
       
-      // INDICATOR A: Simple test trigger every 200th candle
+      // INDICATOR A: Test every 50th candle (more frequent to see if it works)
       if (this.indicatorAEnabled) {
-        const candleIndex = Math.floor(candleTime / 60);
-        if (candleIndex % 200 === 0) {
-          console.log(`🔷 INDICATOR A TRIGGER: Test candle ${candleIndex}`);
-          
-          const price = candleData[candleData.length - 1]?.price || 50000;
-          this.indicatorASignals.set(candleTime, {
-            type: 'indicatorA',
-            price: price * 1.02,
-            active: true,
-            timeframe: this.currentTimeframe,
-            triggerReason: 'Simple test A'
-          });
-          indicatorACount++;
+        let candleCounter = 0;
+        for (const [testTime, testData] of candleBuckets) {
+          candleCounter++;
+          if (testTime === candleTime && candleCounter % 50 === 0) {
+            console.log(`🔷 INDICATOR A TRIGGER: Candle ${candleCounter}`);
+            
+            const price = candleData[candleData.length - 1]?.price || 50000;
+            this.indicatorASignals.set(candleTime, {
+              type: 'indicatorA',
+              price: price * 1.02,
+              active: true,
+              timeframe: this.currentTimeframe,
+              triggerReason: 'Test A'
+            });
+            indicatorACount++;
+            break;
+          }
         }
       }
       
-      // INDICATOR B: Simple test trigger every 250th candle
+      // INDICATOR B: Test every 75th candle (more frequent to see if it works)
       if (this.indicatorBEnabled) {
-        const candleIndex = Math.floor(candleTime / 60);
-        if (candleIndex % 250 === 0) {
-          console.log(`🟪 INDICATOR B TRIGGER: Test candle ${candleIndex}`);
-          
-          const price = candleData[candleData.length - 1]?.price || 50000;
-          this.indicatorBSignals.set(candleTime, {
-            type: 'indicatorB',
-            price: price * 1.02,
-            active: true,
-            timeframe: this.currentTimeframe,
-            triggerReason: 'Simple test B'
-          });
-          indicatorBCount++;
+        let candleCounter = 0;
+        for (const [testTime, testData] of candleBuckets) {
+          candleCounter++;
+          if (testTime === candleTime && candleCounter % 75 === 0) {
+            console.log(`🟪 INDICATOR B TRIGGER: Candle ${candleCounter}`);
+            
+            const price = candleData[candleData.length - 1]?.price || 50000;
+            this.indicatorBSignals.set(candleTime, {
+              type: 'indicatorB',
+              price: price * 1.02,
+              active: true,
+              timeframe: this.currentTimeframe,
+              triggerReason: 'Test B'
+            });
+            indicatorBCount++;
+            break;
+          }
         }
       }
     }
