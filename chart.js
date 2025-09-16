@@ -2179,6 +2179,9 @@ class TimeframeManager {
     this.indicatorBSignals.clear();
     this.signalsCalculated = false;
     
+    // Clear crossover tracking for new asset/exchange
+    this.triggeredHours.clear();
+    
     // Reset cooloff for new asset/exchange
     this.lastSkullTrigger = 0;
     
@@ -2212,6 +2215,9 @@ class TimeframeManager {
     this.indicatorASignals.clear();
     this.indicatorBSignals.clear();
     this.signalsCalculated = false;
+    
+    // Clear crossover tracking for new timeframe
+    this.triggeredHours.clear();
     
     // Clear signal markers from chart
     if (priceSeries) {
@@ -3743,6 +3749,19 @@ class TimeframeManager {
     }
     
     triggeredSet.add(hourBucket);
+  }
+
+  // Manual clear for debugging caching issues
+  clearAllCaches() {
+    const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
+    console.log(`🧹 MANUAL CLEAR: Clearing all caches for ${assetExchangeKey}`);
+    
+    this.triggeredHours.clear();
+    this.preCalculatedThresholds.clear();
+    this.lastCooldownTimes.clear();
+    this.signalsCalculated = false;
+    
+    console.log(`✅ All caches cleared for ${assetExchangeKey}`);
   }
   
   // Calculate MA from specific dataset (helper for pre-calculation)
