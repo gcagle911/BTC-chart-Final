@@ -3234,6 +3234,12 @@ class TimeframeManager {
     
     // Use simple, clean trigger system
     this.calculateSimpleSignals();
+    
+    // Compute A/B hourly crossover signals if toggles enabled
+    if (this.indicatorAEnabled || this.indicatorBEnabled) {
+      this.calculateABIndicatorsHourlyCrossover();
+    }
+    
     this.signalsCalculated = true;
   }
 
@@ -3370,6 +3376,91 @@ class TimeframeManager {
     
     console.log(`✅ Signals with cooldown: ${sellCount} sell, ${buyCount} buy, ${indicatorACount} A, ${indicatorBCount} B`);
     console.log(`📊 Processed ${candleBuckets.size} candles for ${assetExchangeKey}`);
+  }
+
+  // Indicator A/B hourly crossover with sustain and magnitude filter
+  calculateABIndicatorsHourlyCrossover() {
+    try {
+      if (!this.rawData || this.rawData.length === 0) return;
+      this.indicatorASignals.clear();
+      this.indicatorBSignals.clear();
+      const windowMinutes = 60; // 1h window
+      const sustainMinutes = 10; // 10 minutes sustain
+      const n = this.rawData.length;
+      const times = new Array(n);
+      const prices = new Array(n);
+      const bids = new Array(n);
+      const asks = new Array(n);
+      for (let i = 0; i < n; i++) {
+        const it = this.rawData[i];
+        times[i] = this.toUnixTimestamp(it.time);
+        prices[i] = it.price ?? null;
+        bids[i] = it.vol_L50_bids ?? null;
+        asks[i] = it.vol_L50_asks ?? null;
+      }
+      const avgBids = this.computeRollingAverageSkipNulls(bids, windowMinutes);
+      const avgAsks = this.computeRollingAverageSkipNulls(asks, windowMinutes);
+      for (let i = windowMinutes; i < n; i++) {
+        const abPrev = avgBids[i-1], aaPrev = avgAsks[i-1];
+        const ab = avgBids[i], aa = avgAsks[i];
+        if (abPrev === null || aaPrev === null || ab === null || aa === null) continue;
+        if (Math.max(ab, aa) < 9) continue; // magnitude gate at crossover
+        // A: bids crosses above asks and sustains
+        if (this.indicatorAEnabled && abPrev <= aaPrev && ab > aa) {
+          if (this.checkSustainGreater(avgBids, avgAsks, i, sustainMinutes)) {
+            const t = times[i]; const p = prices[i] ?? 0;
+            this.indicatorASignals.set(t, {
+              type: 'indicatorA',
+              price: p ? p * 1.02 : undefined,
+              active: true,
+              timeframe: this.currentTimeframe,
+              triggerReason: `A: AvgBids>AvgAsks 1h, sustained ${sustainMinutes}m, max≥9`
+            });
+          }
+        }
+        // B: asks crosses above bids and sustains
+        if (this.indicatorBEnabled && aaPrev <= abPrev && aa > ab) {
+          if (this.checkSustainGreater(avgAsks, avgBids, i, sustainMinutes)) {
+            const t = times[i]; const p = prices[i] ?? 0;
+            this.indicatorBSignals.set(t, {
+              type: 'indicatorB',
+              price: p ? p * 0.98 : undefined,
+              active: true,
+              timeframe: this.currentTimeframe,
+              triggerReason: `B: AvgAsks>AvgBids 1h, sustained ${sustainMinutes}m, max≥9`
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.error('A/B hourly crossover calculation failed:', e);
+    }
+  }
+
+  computeRollingAverageSkipNulls(values, windowSize) {
+    const n = values.length; const res = new Array(n).fill(null);
+    let sum = 0, cnt = 0; const q = [];
+    for (let i = 0; i < n; i++) {
+      const v = values[i]; q.push(v);
+      if (v !== null && v !== undefined && isFinite(v)) { sum += v; cnt++; }
+      if (q.length > windowSize) {
+        const r = q.shift();
+        if (r !== null && r !== undefined && isFinite(r)) { sum -= r; cnt--; }
+      }
+      if (q.length === windowSize && cnt > 0) res[i] = sum / cnt; else res[i] = null;
+    }
+    return res;
+  }
+
+  checkSustainGreater(seriesA, seriesB, startIdx, sustainLen) {
+    const n = seriesA.length;
+    for (let k = 1; k <= sustainLen; k++) {
+      const j = startIdx + k; if (j >= n) return false;
+      const a = seriesA[j], b = seriesB[j];
+      if (a === null || b === null) return false;
+      if (!(a > b)) return false;
+    }
+    return true;
   }
 
   // Removed complex background calculation system
