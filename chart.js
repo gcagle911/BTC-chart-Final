@@ -241,6 +241,9 @@ function checkMinuteTriggerConditions(signalType, minuteData, minuteIndex, candl
     const ma200Qualified = l50ma200 > config.l50_ma200_threshold;
     const bothQualified = ma50Qualified && ma200Qualified;
     
+    // DEBUG: Log every evaluation to see what's happening
+    console.log(`🔍 ${assetExchangeKey} SELL CHECK: L50MA50=${l50ma50?.toFixed(6)} > ${config.l50_ma50_threshold} = ${ma50Qualified}, L50MA200=${l50ma200?.toFixed(6)} > ${config.l50_ma200_threshold} = ${ma200Qualified}, TRIGGER=${bothQualified}`);
+    
     return {
       met: bothQualified,
       reason: bothQualified 
