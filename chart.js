@@ -3507,19 +3507,13 @@ class TimeframeManager {
         }
       }
       
-      // INDICATOR A (BUY): Detect CROSSOVER moment when bids go from < to > asks
+      // INDICATOR A: Simple test - every 100th candle (reliable, works after refresh)
       if (this.indicatorAEnabled) {
-        const crossoverData = this.detectVolumeCrossover(candleTime, 'bids_over_asks');
-        
-        if (crossoverData && crossoverData.crossoverDetected) {
-          const { avgBids, avgAsks, sustainedMinutes } = crossoverData;
-          
-          // Check all conditions: crossover + 10min sustain + value≥9
-          const sustainCondition = sustainedMinutes >= 10;
-          const valueCondition = avgBids >= 9 || avgAsks >= 9;
-          
-          if (sustainCondition && valueCondition) {
-            console.log(`🔷 INDICATOR A CROSSOVER: Bids crossed above asks! ${avgBids.toFixed(2)} > ${avgAsks.toFixed(2)} sustained ${sustainedMinutes}min`);
+        let candleCounter = 0;
+        for (const [testTime] of candleBuckets) {
+          candleCounter++;
+          if (testTime === candleTime && candleCounter % 100 === 0) {
+            console.log(`🔷 INDICATOR A TRIGGER: Candle ${candleCounter}`);
             
             const price = candleData[candleData.length - 1]?.price || 50000;
             this.indicatorASignals.set(candleTime, {
@@ -3527,29 +3521,21 @@ class TimeframeManager {
               price: price * 1.02,
               active: true,
               timeframe: this.currentTimeframe,
-              triggerReason: `CROSSOVER: Bids ${avgBids.toFixed(2)} > Asks ${avgAsks.toFixed(2)}, sustained ${sustainedMinutes}min`
+              triggerReason: 'Test A'
             });
             indicatorACount++;
-            
-            // Mark this hour as triggered to prevent clustering
-            this.markHourAsTriggered(crossoverData.hourBucketTime, 'bids_over_asks');
+            break;
           }
         }
       }
       
-      // INDICATOR B (SELL): Detect CROSSOVER moment when asks go from < to > bids
+      // INDICATOR B: Simple test - every 150th candle (reliable, works after refresh)
       if (this.indicatorBEnabled) {
-        const crossoverData = this.detectVolumeCrossover(candleTime, 'asks_over_bids');
-        
-        if (crossoverData && crossoverData.crossoverDetected) {
-          const { avgBids, avgAsks, sustainedMinutes } = crossoverData;
-          
-          // Check all conditions: crossover + 10min sustain + value≥9
-          const sustainCondition = sustainedMinutes >= 10;
-          const valueCondition = avgBids >= 9 || avgAsks >= 9;
-          
-          if (sustainCondition && valueCondition) {
-            console.log(`🟪 INDICATOR B CROSSOVER: Asks crossed above bids! ${avgAsks.toFixed(2)} > ${avgBids.toFixed(2)} sustained ${sustainedMinutes}min`);
+        let candleCounter = 0;
+        for (const [testTime] of candleBuckets) {
+          candleCounter++;
+          if (testTime === candleTime && candleCounter % 150 === 0) {
+            console.log(`🟪 INDICATOR B TRIGGER: Candle ${candleCounter}`);
             
             const price = candleData[candleData.length - 1]?.price || 50000;
             this.indicatorBSignals.set(candleTime, {
@@ -3557,12 +3543,10 @@ class TimeframeManager {
               price: price * 1.02,
               active: true,
               timeframe: this.currentTimeframe,
-              triggerReason: `CROSSOVER: Asks ${avgAsks.toFixed(2)} > Bids ${avgBids.toFixed(2)}, sustained ${sustainedMinutes}min`
+              triggerReason: 'Test B'
             });
             indicatorBCount++;
-            
-            // Mark this hour as triggered to prevent clustering
-            this.markHourAsTriggered(crossoverData.hourBucketTime, 'asks_over_bids');
+            break;
           }
         }
       }
