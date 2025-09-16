@@ -3236,8 +3236,12 @@ class TimeframeManager {
     this.calculateSimpleSignals();
     
     // Compute A/B hourly crossover signals if toggles enabled
-    if (this.indicatorAEnabled || this.indicatorBEnabled) {
-      this.calculateABIndicatorsHourlyCrossover();
+    try {
+      if (this.indicatorAEnabled || this.indicatorBEnabled) {
+        this.calculateABIndicatorsHourlyCrossover();
+      }
+    } catch (e) {
+      console.warn('A/B calculation skipped due to error:', e);
     }
     
     this.signalsCalculated = true;
@@ -3381,7 +3385,7 @@ class TimeframeManager {
   // Indicator A/B hourly crossover with sustain and magnitude filter
   calculateABIndicatorsHourlyCrossover() {
     try {
-      if (!this.rawData || this.rawData.length === 0) return;
+      if (!Array.isArray(this.rawData) || this.rawData.length === 0) return;
       this.indicatorASignals.clear();
       this.indicatorBSignals.clear();
       const windowMinutes = 60; // 1h window
@@ -3393,10 +3397,11 @@ class TimeframeManager {
       const asks = new Array(n);
       for (let i = 0; i < n; i++) {
         const it = this.rawData[i];
+        if (!it) { times[i]=null; prices[i]=null; bids[i]=null; asks[i]=null; continue; }
         times[i] = this.toUnixTimestamp(it.time);
-        prices[i] = it.price ?? null;
-        bids[i] = it.vol_L50_bids ?? null;
-        asks[i] = it.vol_L50_asks ?? null;
+        prices[i] = (it.price !== undefined && it.price !== null) ? it.price : null;
+        bids[i] = (it.vol_L50_bids !== undefined && it.vol_L50_bids !== null && isFinite(it.vol_L50_bids)) ? Number(it.vol_L50_bids) : null;
+        asks[i] = (it.vol_L50_asks !== undefined && it.vol_L50_asks !== null && isFinite(it.vol_L50_asks)) ? Number(it.vol_L50_asks) : null;
       }
       const avgBids = this.computeRollingAverageSkipNulls(bids, windowMinutes);
       const avgAsks = this.computeRollingAverageSkipNulls(asks, windowMinutes);
@@ -3438,16 +3443,31 @@ class TimeframeManager {
   }
 
   computeRollingAverageSkipNulls(values, windowSize) {
-    const n = values.length; const res = new Array(n).fill(null);
-    let sum = 0, cnt = 0; const q = [];
+    if (!Array.isArray(values) || !Number.isInteger(windowSize) || windowSize <= 0) return [];
+    const n = values.length;
+    const res = new Array(n).fill(null);
+    let sum = 0;
+    let cnt = 0;
+    const q = [];
     for (let i = 0; i < n; i++) {
-      const v = values[i]; q.push(v);
-      if (v !== null && v !== undefined && isFinite(v)) { sum += v; cnt++; }
+      const v = values[i];
+      q.push(v);
+      if (v !== null && v !== undefined && isFinite(v)) {
+        sum += v;
+        cnt += 1;
+      }
       if (q.length > windowSize) {
         const r = q.shift();
-        if (r !== null && r !== undefined && isFinite(r)) { sum -= r; cnt--; }
+        if (r !== null && r !== undefined && isFinite(r)) {
+          sum -= r;
+          cnt -= 1;
+        }
       }
-      if (q.length === windowSize && cnt > 0) res[i] = sum / cnt; else res[i] = null;
+      if (q.length === windowSize && cnt > 0) {
+        res[i] = sum / cnt;
+      } else {
+        res[i] = null;
+      }
     }
     return res;
   }
