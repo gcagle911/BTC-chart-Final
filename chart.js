@@ -376,85 +376,109 @@ function checkIndicatorBTrigger(candleData, candleTime, rawData, currentSymbol, 
  * @returns {Object} - {success, avgBids, avgAsks, crossoverDetected, sustainedMinutes, hasRequiredValue, reason}
  */
 function get1HourVolumeData(rawData, currentIndex, assetExchangeKey) {
-  // Get last 70 minutes of data (10 min extra for crossover detection)
-  const lookbackMinutes = 70;
-  
-  if (currentIndex < lookbackMinutes) {
-    return { 
-      success: false, 
-      reason: `Need ${lookbackMinutes} minutes of data, have ${currentIndex}` 
+  try {
+    const toUnix = (t) => Math.floor(new Date(t).getTime() / 1000);
+    const LOOKBACK_MIN = 120;
+    const start = Math.max(0, currentIndex - LOOKBACK_MIN + 1);
+
+    const rows = rawData.slice(start, currentIndex + 1)
+      .map((r) => {
+        const time = r.time ?? r.t ?? r.timestamp ?? r.date;
+        if (!time) return null;
+        const ts = typeof time === 'number' ? (time > 2e10 ? time : time * 1000) : Date.parse(time);
+        const bid = +r.vol_L50_bids;
+        const ask = +r.vol_L50_asks;
+        if (!Number.isFinite(ts) || !Number.isFinite(bid) || !Number.isFinite(ask)) return null;
+        return { unix: Math.floor(ts / 1000), bid, ask };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.unix - b.unix);
+
+    if (rows.length < 70) {
+      return { success: false, reason: `Not enough 1m data (need 70, have ${rows.length})` };
+    }
+
+    const WIN = 60;
+    function rollingAvg(arr) {
+      const out = new Array(arr.length).fill(null);
+      let q = [], sum = 0;
+      for (let i = 0; i < arr.length; i++) {
+        const v = arr[i];
+        q.push(v); sum += v;
+        if (q.length > WIN) sum -= q.shift();
+        if (q.length === WIN) out[i] = sum / WIN;
+      }
+      return out;
+    }
+
+    const bids = rows.map((r) => r.bid);
+    const asks = rows.map((r) => r.ask);
+    const bid1h = rollingAvg(bids);
+    const ask1h = rollingAvg(asks);
+    const ts = rows.map((r) => r.unix);
+
+    const sustainN = 10;
+    const firstValid = WIN;
+    const lastIdx = ts.length - 1;
+
+    function confirm(direction) {
+      for (let i = lastIdx - sustainN; i > firstValid; i--) {
+        const pb = bid1h[i - 1], pa = ask1h[i - 1];
+        const cb = bid1h[i],     ca = ask1h[i];
+        if (![pb, pa, cb, ca].every(Number.isFinite)) continue;
+
+        const flipped = (direction === 'A') ? (pb <= pa && cb > ca) : (pa <= pb && ca > cb);
+        if (!flipped) continue;
+
+        let ok = true, maxVal = -Infinity;
+        for (let k = 1; k <= sustainN; k++) {
+          const b = bid1h[i + k], a = ask1h[i + k];
+          if (!Number.isFinite(b) || !Number.isFinite(a)) { ok = false; break; }
+          if (direction === 'A' && !(b > a)) { ok = false; break; }
+          if (direction === 'B' && !(a > b)) { ok = false; break; }
+          maxVal = Math.max(maxVal, b, a);
+        }
+        if (!ok || maxVal < 9) continue;
+
+        const confirmIdx = i + sustainN;
+        return {
+          confirmed: true,
+          confirmIdx,
+          avgBids: bid1h[confirmIdx],
+          avgAsks: ask1h[confirmIdx],
+          hasRequiredValue: true,
+          confirmUnix: ts[confirmIdx]
+        };
+      }
+      return { confirmed: false };
+    }
+
+    const A = confirm('A');
+    const B = confirm('B');
+
+    let final = null, type = null;
+    if (A.confirmed && B.confirmed) {
+      if (A.confirmIdx >= B.confirmIdx) { final = A; type = 'A'; } else { final = B; type = 'B'; }
+    } else if (A.confirmed) { final = A; type = 'A'; }
+    else if (B.confirmed) { final = B; type = 'B'; }
+
+    if (!final) return { success: false, reason: 'No valid crossover' };
+
+    return {
+      success: true,
+      avgBids: final.avgBids ?? null,
+      avgAsks: final.avgAsks ?? null,
+      crossoverDetected: type === 'A',
+      asksCrossoverDetected: type === 'B',
+      sustainedMinutes: sustainN,
+      hasRequiredValue: true,
+      confirmUnix: final.confirmUnix ?? null,
+      reason: 'Confirmed crossover'
     };
+  } catch (e) {
+    console.error('AB indicator error:', e);
+    return { success: false, reason: 'Exception in A/B logic' };
   }
-  
-  // Get recent data for analysis
-  const recentData = rawData.slice(currentIndex - lookbackMinutes + 1, currentIndex + 1);
-  
-  // Convert to 1-hour timeframe buckets (60-minute aggregation)
-  const hourlyBuckets = new Map();
-  
-  for (const item of recentData) {
-    const timestamp = new Date(item.time).getTime() / 1000;
-    const hourBucket = Math.floor(timestamp / 3600) * 3600; // 1-hour buckets
-    
-    if (!hourlyBuckets.has(hourBucket)) {
-      hourlyBuckets.set(hourBucket, { bids: [], asks: [] });
-    }
-    
-    if (item.vol_L50_bids !== null && item.vol_L50_asks !== null) {
-      hourlyBuckets.get(hourBucket).bids.push(item.vol_L50_bids);
-      hourlyBuckets.get(hourBucket).asks.push(item.vol_L50_asks);
-    }
-  }
-  
-  // Calculate hourly averages
-  const hourlyAverages = [];
-  for (const [hourTime, volumes] of hourlyBuckets) {
-    if (volumes.bids.length > 0 && volumes.asks.length > 0) {
-      const avgBids = volumes.bids.reduce((sum, val) => sum + val, 0) / volumes.bids.length;
-      const avgAsks = volumes.asks.reduce((sum, val) => sum + val, 0) / volumes.asks.length;
-      
-      hourlyAverages.push({
-        time: hourTime,
-        avgBids: avgBids,
-        avgAsks: avgAsks,
-        bidsGreater: avgBids > avgAsks,
-        asksGreater: avgAsks > avgBids,
-        hasRequiredValue: avgBids >= 9 || avgAsks >= 9
-      });
-    }
-  }
-  
-  if (hourlyAverages.length < 2) {
-    return { 
-      success: false, 
-      reason: 'Need at least 2 hours of volume data for crossover detection' 
-    };
-  }
-  
-  // Sort by time
-  hourlyAverages.sort((a, b) => a.time - b.time);
-  
-  // Get current and previous hour
-  const currentHour = hourlyAverages[hourlyAverages.length - 1];
-  const previousHour = hourlyAverages[hourlyAverages.length - 2];
-  
-  // Detect crossovers
-  const bidsCrossover = !previousHour.bidsGreater && currentHour.bidsGreater; // Bids crossed above asks
-  const asksCrossover = !previousHour.asksGreater && currentHour.asksGreater; // Asks crossed above bids
-  
-  // Check 10-minute sustain (simplified - using current hour data as proxy)
-  const sustainedMinutes = 60; // Simplified: if it's in the current hour bucket, consider it sustained
-  
-  return {
-    success: true,
-    avgBids: currentHour.avgBids,
-    avgAsks: currentHour.avgAsks,
-    crossoverDetected: bidsCrossover, // For indicator A
-    asksCrossoverDetected: asksCrossover, // For indicator B
-    sustainedMinutes: sustainedMinutes,
-    hasRequiredValue: currentHour.hasRequiredValue,
-    reason: 'Volume crossover analysis complete'
-  };
 }
 
 /**
