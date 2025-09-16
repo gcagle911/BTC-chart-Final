@@ -746,6 +746,9 @@ window.chart = LightweightCharts.createChart(document.getElementById('main-chart
   },
 });
 
+// Ensure local binding for chart is available everywhere
+const chart = window.chart;
+
 // Price series on RIGHT y-axis
 const priceSeries = chart.addCandlestickSeries({
   priceScaleId: 'right', // RIGHT y-axis for price
