@@ -3503,21 +3503,19 @@ class TimeframeManager {
         }
       }
       
-      // INDICATOR A (BUY): Avg. bids cross from < to > asks (1h timeframe data, 10min sustain, value≥9)
+      // INDICATOR A (BUY): Detect CROSSOVER moment when bids go from < to > asks
       if (this.indicatorAEnabled) {
-        // Get 1-hour aggregated volume data for this candle time
-        const hourlyVolumeData = this.get1HourVolumeForCandle(candleTime);
+        const crossoverData = this.detectVolumeCrossover(candleTime, 'bids_over_asks');
         
-        if (hourlyVolumeData && hourlyVolumeData.avgBids !== null && hourlyVolumeData.avgAsks !== null) {
-          const { avgBids, avgAsks, sustainedMinutes } = hourlyVolumeData;
+        if (crossoverData && crossoverData.crossoverDetected) {
+          const { avgBids, avgAsks, sustainedMinutes } = crossoverData;
           
-          // Check all conditions: bids > asks + 10min sustain + value≥9
-          const crossoverCondition = avgBids > avgAsks;
+          // Check all conditions: crossover + 10min sustain + value≥9
           const sustainCondition = sustainedMinutes >= 10;
           const valueCondition = avgBids >= 9 || avgAsks >= 9;
           
-          if (crossoverCondition && sustainCondition && valueCondition) {
-            console.log(`🔷 INDICATOR A TRIGGER: 1h Avg Bids (${avgBids.toFixed(2)}) > Avg Asks (${avgAsks.toFixed(2)}) sustained ${sustainedMinutes}min`);
+          if (sustainCondition && valueCondition) {
+            console.log(`🔷 INDICATOR A CROSSOVER: Bids crossed above asks! ${avgBids.toFixed(2)} > ${avgAsks.toFixed(2)} sustained ${sustainedMinutes}min`);
             
             const price = candleData[candleData.length - 1]?.price || 50000;
             this.indicatorASignals.set(candleTime, {
@@ -3525,28 +3523,26 @@ class TimeframeManager {
               price: price * 1.02,
               active: true,
               timeframe: this.currentTimeframe,
-              triggerReason: `1h Bids>${avgBids.toFixed(2)} > Asks=${avgAsks.toFixed(2)}, sustained ${sustainedMinutes}min`
+              triggerReason: `CROSSOVER: Bids ${avgBids.toFixed(2)} > Asks ${avgAsks.toFixed(2)}, sustained ${sustainedMinutes}min`
             });
             indicatorACount++;
           }
         }
       }
       
-      // INDICATOR B (SELL): Avg. asks cross from < to > bids (1h timeframe data, 10min sustain, value≥9)
+      // INDICATOR B (SELL): Detect CROSSOVER moment when asks go from < to > bids
       if (this.indicatorBEnabled) {
-        // Get 1-hour aggregated volume data for this candle time
-        const hourlyVolumeData = this.get1HourVolumeForCandle(candleTime);
+        const crossoverData = this.detectVolumeCrossover(candleTime, 'asks_over_bids');
         
-        if (hourlyVolumeData && hourlyVolumeData.avgBids !== null && hourlyVolumeData.avgAsks !== null) {
-          const { avgBids, avgAsks, sustainedMinutes } = hourlyVolumeData;
+        if (crossoverData && crossoverData.crossoverDetected) {
+          const { avgBids, avgAsks, sustainedMinutes } = crossoverData;
           
-          // Check all conditions: asks > bids + 10min sustain + value≥9
-          const crossoverCondition = avgAsks > avgBids;
+          // Check all conditions: crossover + 10min sustain + value≥9
           const sustainCondition = sustainedMinutes >= 10;
           const valueCondition = avgBids >= 9 || avgAsks >= 9;
           
-          if (crossoverCondition && sustainCondition && valueCondition) {
-            console.log(`🟪 INDICATOR B TRIGGER: 1h Avg Asks (${avgAsks.toFixed(2)}) > Avg Bids (${avgBids.toFixed(2)}) sustained ${sustainedMinutes}min`);
+          if (sustainCondition && valueCondition) {
+            console.log(`🟪 INDICATOR B CROSSOVER: Asks crossed above bids! ${avgAsks.toFixed(2)} > ${avgBids.toFixed(2)} sustained ${sustainedMinutes}min`);
             
             const price = candleData[candleData.length - 1]?.price || 50000;
             this.indicatorBSignals.set(candleTime, {
@@ -3554,7 +3550,7 @@ class TimeframeManager {
               price: price * 1.02,
               active: true,
               timeframe: this.currentTimeframe,
-              triggerReason: `1h Asks=${avgAsks.toFixed(2)} > Bids=${avgBids.toFixed(2)}, sustained ${sustainedMinutes}min`
+              triggerReason: `CROSSOVER: Asks ${avgAsks.toFixed(2)} > Bids ${avgBids.toFixed(2)}, sustained ${sustainedMinutes}min`
             });
             indicatorBCount++;
           }
@@ -3626,6 +3622,48 @@ class TimeframeManager {
       asksGreaterMinutes: asksGreaterCount,
       hourBucketTime: hourBucketTime,
       dataPoints: hourData.length
+    };
+  }
+
+  // Detect volume crossover moment (< to > transition)
+  detectVolumeCrossover(candleTime, crossoverType) {
+    if (!this.rawData || this.rawData.length === 0) return null;
+    
+    // Get current and previous 1-hour volume data
+    const currentHourData = this.get1HourVolumeForCandle(candleTime);
+    const previousHourTime = candleTime - 3600; // 1 hour earlier
+    const previousHourData = this.get1HourVolumeForCandle(previousHourTime);
+    
+    if (!currentHourData || !previousHourData) return null;
+    
+    const currentBids = currentHourData.avgBids;
+    const currentAsks = currentHourData.avgAsks;
+    const previousBids = previousHourData.avgBids;
+    const previousAsks = previousHourData.avgAsks;
+    
+    let crossoverDetected = false;
+    
+    if (crossoverType === 'bids_over_asks') {
+      // INDICATOR A: Detect bids crossing from < to > asks
+      const previousCondition = previousBids <= previousAsks; // Bids were <= asks
+      const currentCondition = currentBids > currentAsks;     // Bids now > asks
+      crossoverDetected = previousCondition && currentCondition;
+      
+    } else if (crossoverType === 'asks_over_bids') {
+      // INDICATOR B: Detect asks crossing from < to > bids
+      const previousCondition = previousAsks <= previousBids; // Asks were <= bids  
+      const currentCondition = currentAsks > currentBids;     // Asks now > bids
+      crossoverDetected = previousCondition && currentCondition;
+    }
+    
+    return {
+      crossoverDetected: crossoverDetected,
+      avgBids: currentBids,
+      avgAsks: currentAsks,
+      sustainedMinutes: crossoverType === 'bids_over_asks' ? currentHourData.bidsGreaterMinutes : currentHourData.asksGreaterMinutes,
+      previousBids: previousBids,
+      previousAsks: previousAsks,
+      hourBucketTime: currentHourData.hourBucketTime
     };
   }
   
