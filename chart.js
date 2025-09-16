@@ -3267,6 +3267,13 @@ class TimeframeManager {
       return;
     }
     
+    // Ensure background calculation is started if not already done
+    const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
+    if (!this.preCalculatedThresholds.has(assetExchangeKey) && !this.backgroundCalculationInProgress) {
+      console.log(`🔄 Auto-starting background calculation for ${assetExchangeKey}`);
+      this.startBackgroundCalculation();
+    }
+    
     // Use simple, clean trigger system
     this.calculateSimpleSignals();
     this.signalsCalculated = true;
@@ -3489,6 +3496,15 @@ class TimeframeManager {
   
   // Simple pre-calculate method that starts background process
   preCalculateThresholds() {
+    const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
+    
+    // Check if we already have thresholds for this asset/exchange
+    if (this.preCalculatedThresholds.has(assetExchangeKey) && this.thresholdsReady) {
+      console.log(`✅ Thresholds already available for ${assetExchangeKey}`);
+      return;
+    }
+    
+    console.log(`🔄 Triggering background calculation for ${assetExchangeKey}`);
     this.startBackgroundCalculation();
   }
   
