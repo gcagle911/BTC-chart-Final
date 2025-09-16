@@ -1308,10 +1308,8 @@ class TimeframeManager {
     this.lastCooldownTimes = new Map(); // assetExchangeKey -> {sell: timestamp, buy: timestamp, indicatorA: timestamp, indicatorB: timestamp}
     this.thresholdsReady = false; // Flag to track if thresholds are calculated
     
-    // Background calculation system
-    this.backgroundWorker = null;
-    this.backgroundCalculationInProgress = false;
-    this.backgroundResults = new Map(); // assetExchangeKey -> calculation results
+    // Crossover tracking to prevent clustering
+    this.triggeredHours = new Map(); // assetExchangeKey -> Set of hour buckets where we triggered
     
     // Skull Trigger System
     this.spreadThresholds = new Map(); // asset_exchange -> {top5Percent: value}
@@ -3526,6 +3524,9 @@ class TimeframeManager {
               triggerReason: `CROSSOVER: Bids ${avgBids.toFixed(2)} > Asks ${avgAsks.toFixed(2)}, sustained ${sustainedMinutes}min`
             });
             indicatorACount++;
+            
+            // Mark this hour as triggered to prevent clustering
+            this.markHourAsTriggered(crossoverData.hourBucketTime, 'bids_over_asks');
           }
         }
       }
@@ -3553,6 +3554,9 @@ class TimeframeManager {
               triggerReason: `CROSSOVER: Asks ${avgAsks.toFixed(2)} > Bids ${avgBids.toFixed(2)}, sustained ${sustainedMinutes}min`
             });
             indicatorBCount++;
+            
+            // Mark this hour as triggered to prevent clustering
+            this.markHourAsTriggered(crossoverData.hourBucketTime, 'asks_over_bids');
           }
         }
       }
@@ -3625,14 +3629,17 @@ class TimeframeManager {
     };
   }
 
-  // Detect volume crossover moment (< to > transition)
+  // Detect volume crossover moment (< to > transition) - ONLY FIRST CROSSOVER
   detectVolumeCrossover(candleTime, crossoverType) {
     if (!this.rawData || this.rawData.length === 0) return null;
     
-    // Get current and previous 1-hour volume data
-    const currentHourData = this.get1HourVolumeForCandle(candleTime);
-    const previousHourTime = candleTime - 3600; // 1 hour earlier
-    const previousHourData = this.get1HourVolumeForCandle(previousHourTime);
+    // ALWAYS use true 1-hour data (ignore current timeframe)
+    const currentHourBucket = Math.floor(candleTime / 3600) * 3600;
+    const previousHourBucket = currentHourBucket - 3600;
+    
+    // Get REAL 1-hour aggregated data (what displays on 1h chart)
+    const currentHourData = this.getTrue1HourVolumeData(currentHourBucket);
+    const previousHourData = this.getTrue1HourVolumeData(previousHourBucket);
     
     if (!currentHourData || !previousHourData) return null;
     
@@ -3656,15 +3663,86 @@ class TimeframeManager {
       crossoverDetected = previousCondition && currentCondition;
     }
     
+    // ANTI-CLUSTERING: Only trigger once per crossover (not repeatedly)
+    // Check if we already triggered for this hour bucket
+    const alreadyTriggered = this.hasTriggeredForHour(currentHourBucket, crossoverType);
+    const shouldTrigger = crossoverDetected && !alreadyTriggered;
+    
     return {
-      crossoverDetected: crossoverDetected,
+      crossoverDetected: shouldTrigger, // Only trigger once per crossover
       avgBids: currentBids,
       avgAsks: currentAsks,
-      sustainedMinutes: crossoverType === 'bids_over_asks' ? currentHourData.bidsGreaterMinutes : currentHourData.asksGreaterMinutes,
+      sustainedMinutes: currentHourData.sustainedMinutes,
       previousBids: previousBids,
       previousAsks: previousAsks,
-      hourBucketTime: currentHourData.hourBucketTime
+      hourBucketTime: currentHourBucket
     };
+  }
+
+  // Get TRUE 1-hour volume data (exactly what displays on 1h chart)
+  getTrue1HourVolumeData(hourBucketTime) {
+    if (!this.rawData || this.rawData.length === 0) return null;
+    
+    // Get ALL minute data for this specific 1-hour bucket
+    const hourData = this.rawData.filter(item => {
+      const itemTimestamp = this.toUnixTimestamp(item.time);
+      const itemHourBucket = Math.floor(itemTimestamp / 3600) * 3600;
+      return itemHourBucket === hourBucketTime;
+    });
+    
+    if (hourData.length === 0) return null;
+    
+    // Calculate TRUE 1-hour averages (exactly like 1h chart)
+    const validBids = hourData.filter(item => item.vol_L50_bids !== null).map(item => item.vol_L50_bids);
+    const validAsks = hourData.filter(item => item.vol_L50_asks !== null).map(item => item.vol_L50_asks);
+    
+    if (validBids.length === 0 || validAsks.length === 0) return null;
+    
+    const avgBids = validBids.reduce((sum, val) => sum + val, 0) / validBids.length;
+    const avgAsks = validAsks.reduce((sum, val) => sum + val, 0) / validAsks.length;
+    
+    // Count sustained minutes within this hour
+    let sustainedMinutes = 0;
+    for (const item of hourData) {
+      if (item.vol_L50_bids !== null && item.vol_L50_asks !== null) {
+        if (avgBids > avgAsks && item.vol_L50_bids > item.vol_L50_asks) {
+          sustainedMinutes++;
+        } else if (avgAsks > avgBids && item.vol_L50_asks > item.vol_L50_bids) {
+          sustainedMinutes++;
+        }
+      }
+    }
+    
+    return {
+      avgBids: avgBids,
+      avgAsks: avgAsks,
+      sustainedMinutes: sustainedMinutes,
+      dataPoints: hourData.length,
+      hourBucketTime: hourBucketTime
+    };
+  }
+
+  // Check if we already triggered for this hour bucket (prevent clustering)
+  hasTriggeredForHour(hourBucket, crossoverType) {
+    const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
+    const key = `${assetExchangeKey}_${crossoverType}`;
+    
+    const triggeredSet = this.triggeredHours.get(key) || new Set();
+    return triggeredSet.has(hourBucket);
+  }
+
+  // Mark hour bucket as triggered (prevent clustering)
+  markHourAsTriggered(hourBucket, crossoverType) {
+    const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
+    const key = `${assetExchangeKey}_${crossoverType}`;
+    
+    let triggeredSet = this.triggeredHours.get(key);
+    if (!triggeredSet) {
+      triggeredSet = new Set();
+      this.triggeredHours.set(key, triggeredSet);
+    }
+    
+    triggeredSet.add(hourBucket);
   }
   
   // Calculate MA from specific dataset (helper for pre-calculation)
