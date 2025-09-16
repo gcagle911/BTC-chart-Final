@@ -3308,11 +3308,14 @@ class TimeframeManager {
       }
     }
     
-    // Check each candle
+    // Check each candle with 2-hour cooldown
+    let lastSellTime = 0;
+    const cooldownSeconds = 2 * 60 * 60; // 2 hours in seconds
+    
     for (const [candleTime, candleData] of candleBuckets) {
       
-      // SELL: Check L50MA50 vs threshold
-      if (this.sellIndicatorEnabled && l50ma50Threshold !== null) {
+      // SELL: Check L50MA50 vs threshold with 2-hour cooldown
+      if (this.sellIndicatorEnabled && l50ma50Threshold !== null && (candleTime - lastSellTime >= cooldownSeconds)) {
         
         // Calculate current L50MA50 for this candle
         const candleEndData = candleData[candleData.length - 1];
@@ -3342,7 +3345,7 @@ class TimeframeManager {
             const currentL50MA50 = sum / count;
             
             if (currentL50MA50 >= l50ma50Threshold) {
-              console.log(`🔥 SELL TRIGGER: L50MA50 ${currentL50MA50.toFixed(6)} >= threshold ${l50ma50Threshold.toFixed(6)}`);
+              console.log(`🔥 SELL TRIGGER: L50MA50 ${currentL50MA50.toFixed(6)} >= threshold ${l50ma50Threshold.toFixed(6)} (2h cooldown)`);
               
               const price = candleEndData.price || 50000;
               this.sellSignals.set(candleTime, {
@@ -3350,9 +3353,13 @@ class TimeframeManager {
                 price: price * 1.02,
                 active: true,
                 timeframe: this.currentTimeframe,
-                triggerReason: `L50MA50 in top 15% (${currentL50MA50.toFixed(6)} >= ${l50ma50Threshold.toFixed(6)})`
+                triggerReason: `L50MA50 in top 15% (${currentL50MA50.toFixed(6)} >= ${l50ma50Threshold.toFixed(6)})`,
+                cooldownUntil: candleTime + cooldownSeconds
               });
               sellCount++;
+              lastSellTime = candleTime;
+              
+              console.log(`⏰ Next sell available at: ${new Date((candleTime + cooldownSeconds) * 1000).toISOString()}`);
             }
           }
         }
