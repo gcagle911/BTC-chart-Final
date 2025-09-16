@@ -44,13 +44,10 @@ const TRIGGER_CONFIG = {
       previewColor: '#FF6666',
       previewSize: 1
     },
-    // MIDDLE GROUND: Simplified but still percentage-based
+    // ULTRA SIMPLE: Fixed thresholds (no percentile calculations)
     conditions: {
-      // Check just L50 layer with 2 key MAs (instead of all layers/periods)
-      layer: 'L50',                   // Focus on L50 layer only
-      maPeriods: [50, 200],           // Check just MA50 and MA200 (key levels)
-      percentileThreshold: 0.80,      // Top 20% (easier to achieve)
-      lookbackHours: 24               // 24 hours instead of 48 (half the data)
+      l50_ma50_threshold: 0.020,      // L50MA50 > 0.020
+      l50_ma200_threshold: 0.015      // L50MA200 > 0.015
     },
     cooldown: {
       enabled: true,
@@ -224,61 +221,37 @@ function checkMinuteTriggerConditions(signalType, minuteData, minuteIndex, candl
   }
   
   if (signalType === 'sell') {
-    // MIDDLE GROUND: Simplified but still percentage-based
+    // ULTRA SIMPLE: Fixed thresholds (instant, reliable)
     const config = TRIGGER_CONFIG.sell.conditions;
     
-    // Get pre-calculated thresholds for this asset/exchange
-    const managerInstance = window.manager || manager;
-    const thresholds = managerInstance?.preCalculatedThresholds?.get(assetExchangeKey);
+    // Calculate current MA values
+    const l50ma50 = calculateTriggerMA(rawData, currentIndex, 'spread_L50_pct_avg', 50);
+    const l50ma200 = calculateTriggerMA(rawData, currentIndex, 'spread_L50_pct_avg', 200);
     
-    if (!thresholds) {
-      if (managerInstance?.backgroundCalculationInProgress) {
-        return { 
-          met: false, 
-          reason: 'Background calculation in progress...', 
-          values: { assetExchangeKey, status: 'calculating' }
-        };
-      } else {
-        return { 
-          met: false, 
-          reason: 'Thresholds not ready - background calculation needed', 
-          values: { assetExchangeKey, status: 'not_started' }
-        };
-      }
-    }
-    
-    const fieldName = `spread_${config.layer}_pct_avg`;
-    let allMAsQualify = true;
-    const maResults = {};
-    
-    // Check just 2 key MA periods for L50 layer
-    for (const period of config.maPeriods) {
-      const maValue = calculateTriggerMA(rawData, currentIndex, fieldName, period);
-      const thresholdKey = `${config.layer}MA${period}`;
-      const threshold = thresholds[thresholdKey];
-      
-      const qualified = maValue !== null && threshold !== undefined && maValue >= threshold;
-      
-      maResults[thresholdKey] = {
-        value: maValue,
-        threshold: threshold,
-        qualified: qualified
+    if (l50ma50 === null || l50ma200 === null) {
+      return { 
+        met: false, 
+        reason: 'Insufficient data for MA calculations', 
+        values: { assetExchangeKey, currentIndex }
       };
-      
-      if (!qualified) {
-        allMAsQualify = false;
-      }
     }
+    
+    // Simple threshold checks
+    const ma50Qualified = l50ma50 > config.l50_ma50_threshold;
+    const ma200Qualified = l50ma200 > config.l50_ma200_threshold;
+    const bothQualified = ma50Qualified && ma200Qualified;
     
     return {
-      met: allMAsQualify,
-      reason: allMAsQualify 
-        ? `${config.layer} layer qualified (${assetExchangeKey})`
-        : `${config.layer} layer failed (${assetExchangeKey})`,
+      met: bothQualified,
+      reason: bothQualified 
+        ? `L50MA50 (${l50ma50.toFixed(6)}) > ${config.l50_ma50_threshold} AND L50MA200 (${l50ma200.toFixed(6)}) > ${config.l50_ma200_threshold} (${assetExchangeKey})`
+        : `MA requirements not met for ${assetExchangeKey}`,
       values: {
         assetExchangeKey,
-        layer: config.layer,
-        maResults,
+        l50ma50: l50ma50,
+        l50ma200: l50ma200,
+        ma50Qualified: ma50Qualified,
+        ma200Qualified: ma200Qualified,
         timestamp: minuteData.time
       }
     };
@@ -3494,18 +3467,11 @@ class TimeframeManager {
     }
   }
   
-  // Simple pre-calculate method that starts background process
+  // Simple pre-calculate method (no background needed for fixed thresholds)
   preCalculateThresholds() {
     const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
-    
-    // Check if we already have thresholds for this asset/exchange
-    if (this.preCalculatedThresholds.has(assetExchangeKey) && this.thresholdsReady) {
-      console.log(`✅ Thresholds already available for ${assetExchangeKey}`);
-      return;
-    }
-    
-    console.log(`🔄 Triggering background calculation for ${assetExchangeKey}`);
-    this.startBackgroundCalculation();
+    console.log(`✅ Using fixed thresholds for ${assetExchangeKey} - no calculation needed`);
+    this.thresholdsReady = true;
   }
   
   // Calculate MA from specific dataset (helper for pre-calculation)
