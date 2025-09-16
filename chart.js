@@ -3243,12 +3243,7 @@ class TimeframeManager {
       return;
     }
     
-    // Ensure background calculation is started if not already done
-    const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
-    if (!this.preCalculatedThresholds.has(assetExchangeKey) && !this.backgroundCalculationInProgress) {
-      console.log(`🔄 Auto-starting background calculation for ${assetExchangeKey}`);
-      this.startBackgroundCalculation();
-    }
+    // No background calculation needed for fixed thresholds
     
     // Use simple, clean trigger system
     this.calculateSimpleSignals();
@@ -3264,10 +3259,14 @@ class TimeframeManager {
     // Clear existing signals
     this.sellSignals.clear();
     this.buySignals.clear();
+    this.indicatorASignals.clear();
+    this.indicatorBSignals.clear();
     
     // Group data into candles
     const candleBuckets = this.groupDataIntoCandleBuckets();
     const timeframeSeconds = this.timeframes[this.currentTimeframe].seconds;
+    
+    console.log(`📊 DEBUG: Processing ${candleBuckets.size} candles, sellEnabled=${this.sellIndicatorEnabled}`);
     
     // CRITICAL: Asset/Exchange isolation
     const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
@@ -3379,96 +3378,7 @@ class TimeframeManager {
     console.log(`📊 Processed ${candleBuckets.size} candles for ${assetExchangeKey}`);
   }
 
-  // Start background calculation (non-blocking)
-  startBackgroundCalculation() {
-    if (this.backgroundCalculationInProgress) return;
-    
-    const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
-    console.log(`🔄 Starting background calculation for ${assetExchangeKey}...`);
-    
-    this.backgroundCalculationInProgress = true;
-    
-    // Use setTimeout to break up the calculation into chunks (non-blocking)
-    setTimeout(() => {
-      this.calculateThresholdsInBackground(assetExchangeKey);
-    }, 100);
-  }
-  
-  // Calculate thresholds in background without blocking UI
-  calculateThresholdsInBackground(assetExchangeKey) {
-    try {
-      if (!this.rawData || this.rawData.length === 0) {
-        this.backgroundCalculationInProgress = false;
-        return;
-      }
-      
-      console.log(`⚡ Background calculating for ${assetExchangeKey}...`);
-      
-      // Calculate 24-hour window
-      const now = Date.now();
-      const cutoffTime = new Date(now - (24 * 60 * 60 * 1000));
-      const recentData = this.rawData.filter(item => {
-        const itemTime = new Date(item.time);
-        return itemTime >= cutoffTime;
-      });
-      
-      if (recentData.length === 0) {
-        console.warn(`⚠️ No recent data for ${assetExchangeKey}`);
-        this.backgroundCalculationInProgress = false;
-        return;
-      }
-      
-      const thresholds = {};
-      
-      // Calculate thresholds in chunks to avoid blocking
-      const config = TRIGGER_CONFIG.sell.conditions;
-      const fieldName = `spread_${config.layer}_pct_avg`;
-      
-      let periodIndex = 0;
-      const calculateNextPeriod = () => {
-        if (periodIndex >= config.maPeriods.length) {
-          // All done - store results
-          this.preCalculatedThresholds.set(assetExchangeKey, thresholds);
-          this.thresholdsReady = true;
-          this.backgroundCalculationInProgress = false;
-          
-          console.log(`✅ Background calculation complete for ${assetExchangeKey}: ${Object.keys(thresholds).length} thresholds`);
-          return;
-        }
-        
-        const period = config.maPeriods[periodIndex];
-        
-        // Calculate MA values for this period
-        const maValues = [];
-        for (let i = period - 1; i < recentData.length; i++) {
-          const ma = this.calculateMAFromData(recentData, i, fieldName, period);
-          if (ma !== null) {
-            maValues.push(ma);
-          }
-        }
-        
-        if (maValues.length > 0) {
-          maValues.sort((a, b) => a - b);
-          const index = Math.floor(maValues.length * config.percentileThreshold);
-          const threshold = maValues[Math.min(index, maValues.length - 1)];
-          
-          thresholds[`${config.layer}MA${period}`] = threshold;
-          console.log(`📊 Background: ${config.layer}MA${period} = ${threshold.toFixed(6)}`);
-        }
-        
-        periodIndex++;
-        
-        // Schedule next period calculation (non-blocking)
-        setTimeout(calculateNextPeriod, 50);
-      };
-      
-      calculateNextPeriod();
-      
-    } catch (error) {
-      console.error('❌ Background calculation error:', error);
-      this.backgroundCalculationInProgress = false;
-    }
-  }
+  // Removed complex background calculation system
   
   // Simple pre-calculate method (no background needed for fixed thresholds)
   preCalculateThresholds() {
