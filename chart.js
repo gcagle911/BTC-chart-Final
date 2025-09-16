@@ -3502,6 +3502,42 @@ class TimeframeManager {
           }
         }
       }
+      
+      // INDICATOR A: Simple test trigger every 200th candle
+      if (this.indicatorAEnabled) {
+        const candleIndex = Math.floor(candleTime / 60);
+        if (candleIndex % 200 === 0) {
+          console.log(`🔷 INDICATOR A TRIGGER: Test candle ${candleIndex}`);
+          
+          const price = candleData[candleData.length - 1]?.price || 50000;
+          this.indicatorASignals.set(candleTime, {
+            type: 'indicatorA',
+            price: price * 1.02,
+            active: true,
+            timeframe: this.currentTimeframe,
+            triggerReason: 'Simple test A'
+          });
+          indicatorACount++;
+        }
+      }
+      
+      // INDICATOR B: Simple test trigger every 250th candle
+      if (this.indicatorBEnabled) {
+        const candleIndex = Math.floor(candleTime / 60);
+        if (candleIndex % 250 === 0) {
+          console.log(`🟪 INDICATOR B TRIGGER: Test candle ${candleIndex}`);
+          
+          const price = candleData[candleData.length - 1]?.price || 50000;
+          this.indicatorBSignals.set(candleTime, {
+            type: 'indicatorB',
+            price: price * 1.02,
+            active: true,
+            timeframe: this.currentTimeframe,
+            triggerReason: 'Simple test B'
+          });
+          indicatorBCount++;
+        }
+      }
     }
     
     // Store updated cooldown times for this asset/exchange
