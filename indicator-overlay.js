@@ -67,9 +67,17 @@
   window.__IndicatorOverlay = {
     refresh: () => drawOnce(),
     setEnabled: (flags={}) => {
-      if (typeof flags.A === "boolean") ENABLED.A = flags.A;
-      if (typeof flags.B === "boolean") ENABLED.B = flags.B;
+      if (typeof flags.A === "boolean") {
+        ENABLED.A = flags.A;
+        log("A enabled:", flags.A);
+      }
+      if (typeof flags.B === "boolean") {
+        ENABLED.B = flags.B;
+        log("B enabled:", flags.B);
+      }
+      log("Current state:", ENABLED);
     },
+    getEnabled: () => ({ ...ENABLED }),
     startPolling: async (ms=60000) => { while(true){ await drawOnce(); await new Promise(r=>setTimeout(r, ms)); } }
   };
 

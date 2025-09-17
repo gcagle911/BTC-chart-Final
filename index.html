@@ -258,8 +258,8 @@
           
           <div class="ma-toggle-list" style="margin-top:8px;">
             <label style="color: #d1d4dc; font-size: 11px; margin-bottom: 4px; display: block;">Signal Indicators:</label>
-            <label><input type="checkbox" id="indicatorA-toggle" onchange="toggleIndicatorA(this.checked)" checked> 🔵 A (blue)</label>
-            <label><input type="checkbox" id="indicatorB-toggle" onchange="toggleIndicatorB(this.checked)" checked> 🟣 B (purple)</label>
+            <label><input type="checkbox" id="indicatorA-toggle" onchange="toggleOverlayA(this.checked)" checked> 🔵 A (blue)</label>
+            <label><input type="checkbox" id="indicatorB-toggle" onchange="toggleOverlayB(this.checked)" checked> 🟣 B (purple)</label>
             <button id="btn-calculate-signals" class="tool-btn" style="background: #2962ff; color: #fff;">🔄 Calculate All Signals</button>
             <div id="signal-status" style="font-size: 10px; color: #888; margin-top: 4px; text-align: center;">Toggle indicators to show historical signals</div>
           </div>
@@ -301,7 +301,24 @@
   // Optional: if chart.js exposes state, keep it here so overlay can read it.
   // window.__chartState = { ex: 'coinbase', sym: 'BTC', tf: '1m' };
 
-  // Wire toolbox toggles → overlay
+  // Clean overlay toggle functions (independent from chart.js signal system)
+  window.toggleOverlayA = function(checked) {
+    console.log(`🔵 Overlay A ${checked ? 'enabled' : 'disabled'}`);
+    if (window.__IndicatorOverlay) {
+      window.__IndicatorOverlay.setEnabled({ A: checked });
+      window.__IndicatorOverlay.refresh();
+    }
+  };
+  
+  window.toggleOverlayB = function(checked) {
+    console.log(`🟣 Overlay B ${checked ? 'enabled' : 'disabled'}`);
+    if (window.__IndicatorOverlay) {
+      window.__IndicatorOverlay.setEnabled({ B: checked });
+      window.__IndicatorOverlay.refresh();
+    }
+  };
+  
+  // Initial sync function
   function syncABToggles() {
     const A = document.getElementById('indicatorA-toggle')?.checked ?? true;
     const B = document.getElementById('indicatorB-toggle')?.checked ?? true;
@@ -310,20 +327,6 @@
       window.__IndicatorOverlay.refresh();
     }
   }
-  
-  // Hook into existing toggle functions to sync with overlay
-  window.originalToggleIndicatorA = window.toggleIndicatorA;
-  window.originalToggleIndicatorB = window.toggleIndicatorB;
-  
-  window.toggleIndicatorA = function(checked) {
-    if (window.originalToggleIndicatorA) window.originalToggleIndicatorA(checked);
-    syncABToggles();
-  };
-  
-  window.toggleIndicatorB = function(checked) {
-    if (window.originalToggleIndicatorB) window.originalToggleIndicatorB(checked);
-    syncABToggles();
-  };
 
   // initial sync after overlay loads
   window.addEventListener('load', () => setTimeout(syncABToggles, 700));
