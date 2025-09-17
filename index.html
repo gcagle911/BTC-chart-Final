@@ -258,10 +258,10 @@
           
           <div class="ma-toggle-list" style="margin-top:8px;">
             <label style="color: #d1d4dc; font-size: 11px; margin-bottom: 4px; display: block;">Signal Indicators:</label>
-            <label><input type="checkbox" id="sell-indicator-toggle" onchange="toggleSellIndicator(this.checked)"> ❌ Sell</label>
-            <label><input type="checkbox" id="buy-indicator-toggle" onchange="toggleBuyIndicator(this.checked)"> 🟢 Buy</label>
-            <label><input type="checkbox" id="indicatorA-toggle" onchange="toggleIndicatorA(this.checked)"> 🔷 A</label>
-            <label><input type="checkbox" id="indicatorB-toggle" onchange="toggleIndicatorB(this.checked)"> 🟪 B</label>
+            <label><input type="checkbox" id="sell-indicator-toggle" onchange="toggleSellIndicator(this.checked)" checked> ❌ Sell</label>
+            <label><input type="checkbox" id="buy-indicator-toggle" onchange="toggleBuyIndicator(this.checked)" checked> 🟢 Buy</label>
+            <label><input type="checkbox" id="indicatorA-toggle" onchange="toggleIndicatorA(this.checked)" checked> 🔵 A (blue)</label>
+            <label><input type="checkbox" id="indicatorB-toggle" onchange="toggleIndicatorB(this.checked)" checked> 🟣 B (purple)</label>
             <button id="btn-calculate-signals" class="tool-btn" style="background: #2962ff; color: #fff;">🔄 Calculate All Signals</button>
             <div id="signal-status" style="font-size: 10px; color: #888; margin-top: 4px; text-align: center;">Toggle indicators to show historical signals</div>
           </div>
@@ -290,12 +290,6 @@
     })();
   </script>
 
-<!-- ===== Indicator toggles (simple bar) ===== -->
-<div id="ab-toggle-bar" style="position:fixed;top:8px;right:8px;background:#0b0b0bcc;border:1px solid #333;padding:8px 10px;border-radius:6px;font:12px system-ui;color:#ddd;z-index:9999">
-  <label style="margin-right:10px"><input id="toggleA" type="checkbox" checked /> A (blue)</label>
-  <label><input id="toggleB" type="checkbox" checked /> B (purple)</label>
-</div>
-
 <!-- ===== Load chart once (keep ONLY this include) ===== -->
 <script src="/chart.js"></script>
 
@@ -309,17 +303,29 @@
   // Optional: if chart.js exposes state, keep it here so overlay can read it.
   // window.__chartState = { ex: 'coinbase', sym: 'BTC', tf: '1m' };
 
-  // Wire toggles → overlay
+  // Wire toolbox toggles → overlay
   function syncABToggles() {
-    const A = document.getElementById('toggleA')?.checked ?? true;
-    const B = document.getElementById('toggleB')?.checked ?? true;
+    const A = document.getElementById('indicatorA-toggle')?.checked ?? true;
+    const B = document.getElementById('indicatorB-toggle')?.checked ?? true;
     if (window.__IndicatorOverlay) {
       window.__IndicatorOverlay.setEnabled({ A, B });
       window.__IndicatorOverlay.refresh();
     }
   }
-  document.getElementById('toggleA')?.addEventListener('change', syncABToggles);
-  document.getElementById('toggleB')?.addEventListener('change', syncABToggles);
+  
+  // Hook into existing toggle functions to sync with overlay
+  window.originalToggleIndicatorA = window.toggleIndicatorA;
+  window.originalToggleIndicatorB = window.toggleIndicatorB;
+  
+  window.toggleIndicatorA = function(checked) {
+    if (window.originalToggleIndicatorA) window.originalToggleIndicatorA(checked);
+    syncABToggles();
+  };
+  
+  window.toggleIndicatorB = function(checked) {
+    if (window.originalToggleIndicatorB) window.originalToggleIndicatorB(checked);
+    syncABToggles();
+  };
 
   // initial sync after overlay loads
   window.addEventListener('load', () => setTimeout(syncABToggles, 700));
