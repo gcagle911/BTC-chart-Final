@@ -77,9 +77,13 @@ const TRIGGER_CONFIG = {
   
   // Indicator A configuration (Blue Diamond below candles)
   indicatorA: {
+    label: "A Crossover",
     enabled: true,
     signalType: 'INDICATOR_A',
     displayName: 'A',
+    color: "#3B82F6", // blue
+    position: "belowBar",
+    id: "indicatorA",
     marker: {
       emoji: '🔷',
       color: '#0080FF',
@@ -97,9 +101,13 @@ const TRIGGER_CONFIG = {
   
   // Indicator B configuration (Purple Square above candles)
   indicatorB: {
+    label: "B Crossover",
     enabled: true,
     signalType: 'INDICATOR_B',
     displayName: 'B',
+    color: "#8B5CF6", // purple
+    position: "aboveBar",
+    id: "indicatorB",
     marker: {
       emoji: '🟪',
       color: '#8000FF',
@@ -367,6 +375,31 @@ function checkIndicatorBTrigger(candleData, candleTime, rawData, currentSymbol, 
 // =============================================================================
 // TRADING BOT UTILITY FUNCTIONS
 // =============================================================================
+
+/**
+ * Return the best available 1-minute array feeding A/B.
+ * This avoids "Disabled or no data" by centralizing where A/B gets minute rows.
+ * We try a few known places the app stores minute data.
+ */
+function getMinuteArrayForAB() {
+  // Try most specific → most generic
+  const candidates = [
+    window.baseMinuteData,
+    window.minuteBaseData,
+    window.minuteRaw,
+    window.minuteData,
+    window.rawMinuteData,
+    window.tfMgr?.rawData,     // TimeframeManager keeps the base 1m data here
+    window.__rawMinuteData,
+  ].filter(Boolean);
+  // Pick the first array-like candidate
+  for (const c of candidates) {
+    if (Array.isArray(c) && c.length) return c;
+  }
+  // Fallback: if chart keeps everything in a manager object
+  if (window.tfMgr && Array.isArray(window.tfMgr?.rawData)) return window.tfMgr.rawData;
+  return [];
+}
 
 /**
  * Get 1-hour timeframe volume data for crossover analysis
@@ -5207,5 +5240,20 @@ function addScaleResetButton() {
     toolsMenu.appendChild(resetButton);
   }
 }
+
+// ===== Developer helper: run in console to see A/B inputs =====
+window.AB_dbg = function() {
+  const arr = getMinuteArrayForAB();
+  console.log('A/B minute array length =', Array.isArray(arr) ? arr.length : 0);
+  if (arr && arr.length) {
+    console.log('A/B last row keys =', Object.keys(arr[arr.length - 1] || {}));
+    console.log('A row sample:', arr.slice(-3));
+  }
+  const A = (window.TradingBotAPI?.evaluateCurrentTrigger) ? TradingBotAPI.evaluateCurrentTrigger('indicatorA') : null;
+  const B = (window.TradingBotAPI?.evaluateCurrentTrigger) ? TradingBotAPI.evaluateCurrentTrigger('indicatorB') : null;
+  console.log('A result:', A);
+  console.log('B result:', B);
+  return { A, B, len: arr?.length ?? 0 };
+};
 
 
