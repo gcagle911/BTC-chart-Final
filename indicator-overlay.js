@@ -15,7 +15,7 @@
   }));
 
   async function fetchIndicators(ex, sym, tf) {
-    const url = `${API_BASE}/api/indicators?ex=${encodeURIComponent(ex)}&sym=${encodeURIComponent(sym)}&ind=AB`;
+    const url = `${API_BASE}/api/indicators?ex=${encodeURIComponent(ex)}&sym=${encodeURIComponent(sym)}&ind=AB&days=30`;
     const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) throw new Error(`API ${res.status}`);
     return res.json(); // { A: [...], B: [...] } or { AB: [...] } depending on backend
