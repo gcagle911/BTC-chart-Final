@@ -444,22 +444,7 @@ setTimeout(() => {
   __updateOverlayState(window.API_EXCHANGE, (window.manager && window.manager.currentSymbol), (window.manager && window.manager.currentTimeframe));
 }, 600);
 
-// =====: New: wire A/B toggle UI to overlay
-(function wireABToggles(){
-  const elA = document.getElementById('toggleA');
-  const elB = document.getElementById('toggleB');
-  function sync() {
-    const A = elA ? !!elA.checked : true;
-    const B = elB ? !!elB.checked : true;
-    if (window.__IndicatorOverlay && typeof window.__IndicatorOverlay.setEnabled === 'function') {
-      window.__IndicatorOverlay.setEnabled({ A, B });
-      window.__IndicatorOverlay.refresh();
-    }
-  }
-  if (elA) elA.addEventListener('change', sync);
-  if (elB) elB.addEventListener('change', sync);
-  setTimeout(sync, 800); // initial sync after chart is up
-})();
+// A/B toggle wiring moved to HTML syncABToggles() function
 
 // =====: (Optional) if you had periodic refresh from legacy, remove/neutralize it
 if (window.updateSignalDisplay) window.updateSignalDisplay = () => {};
