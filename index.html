@@ -273,9 +273,8 @@
     <div id="main-chart"></div>
   </div>
 
-  <!-- Lightweight Charts + your logic -->
+  <!-- Lightweight Charts -->
   <script src="https://unpkg.com/lightweight-charts@4.0.0/dist/lightweight-charts.standalone.production.js"></script>
-  <script src="chart.js"></script>
 
   <!-- small script to make the dropdown work -->
   <script>
@@ -290,5 +289,44 @@
       });
     })();
   </script>
+
+<!-- ===== Indicator toggles (simple bar) ===== -->
+<div id="ab-toggle-bar" style="position:fixed;top:8px;right:8px;background:#0b0b0bcc;border:1px solid #333;padding:8px 10px;border-radius:6px;font:12px system-ui;color:#ddd;z-index:9999">
+  <label style="margin-right:10px"><input id="toggleA" type="checkbox" checked /> A (blue)</label>
+  <label><input id="toggleB" type="checkbox" checked /> B (purple)</label>
+</div>
+
+<!-- ===== Load chart once (keep ONLY this include) ===== -->
+<script src="/chart.js"></script>
+
+<!-- ===== Overlay config & wiring ===== -->
+<script>
+  // Render API base + history window
+  window.__INDICATOR_API_BASE = "https://indicator-api-yw8m.onrender.com";
+  window.__IND_DAYS = 10;        // change to 30 later
+  window.__AB_DEBUG = false;     // set true to see [overlay] logs in console
+
+  // Optional: if chart.js exposes state, keep it here so overlay can read it.
+  // window.__chartState = { ex: 'coinbase', sym: 'BTC', tf: '1m' };
+
+  // Wire toggles → overlay
+  function syncABToggles() {
+    const A = document.getElementById('toggleA')?.checked ?? true;
+    const B = document.getElementById('toggleB')?.checked ?? true;
+    if (window.__IndicatorOverlay) {
+      window.__IndicatorOverlay.setEnabled({ A, B });
+      window.__IndicatorOverlay.refresh();
+    }
+  }
+  document.getElementById('toggleA')?.addEventListener('change', syncABToggles);
+  document.getElementById('toggleB')?.addEventListener('change', syncABToggles);
+
+  // initial sync after overlay loads
+  window.addEventListener('load', () => setTimeout(syncABToggles, 700));
+</script>
+
+<!-- ===== Overlay (must be after chart & config) ===== -->
+<script src="/indicator-overlay.js"></script>
+
 </body>
 </html>
