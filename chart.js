@@ -268,10 +268,11 @@ function checkMinuteTriggerConditions(signalType, minuteData, minuteIndex, candl
     };
     
   } else if (signalType === 'indicatorA') {
-    // INDICATOR A (BUY): Avg. bids cross from < to > avg. asks (1h data, 10min sustain, value≥9)
-    
-    // Get 1-hour timeframe volume data (regardless of current chart timeframe)
-    const hourlyVolumeData = get1HourVolumeData(rawData, currentIndex, assetExchangeKey);
+    // INDICATOR A (BUY): evaluation kept for API parity;
+    // Rendering comes from AB_ENGINE (1m-based), not this per-candle loop.
+    const minute = getMinuteArrayForAB();
+    const idx = Math.max(0, minute.length - 1);
+    const hourlyVolumeData = get1HourVolumeData(minute, idx, assetExchangeKey);
     if (!hourlyVolumeData.success) {
       return { 
         met: false, 
@@ -301,15 +302,16 @@ function checkMinuteTriggerConditions(signalType, minuteData, minuteIndex, candl
         crossoverDetected,
         sustainedMinutes,
         hasRequiredValue,
-        timestamp: minuteData.time
+        timestamp: minuteData.time,
+        confirmUnix: hourlyVolumeData.confirmUnix ?? null
       }
     };
     
   } else if (signalType === 'indicatorB') {
-    // INDICATOR B (SELL): Avg. asks cross from < to > avg. bids (1h data, 10min sustain, value≥9)
-    
-    // Get 1-hour timeframe volume data (regardless of current chart timeframe)  
-    const hourlyVolumeData = get1HourVolumeData(rawData, currentIndex, assetExchangeKey);
+    // INDICATOR B (SELL): same note as A.
+    const minute = getMinuteArrayForAB();
+    const idx = Math.max(0, minute.length - 1);
+    const hourlyVolumeData = get1HourVolumeData(minute, idx, assetExchangeKey);
     if (!hourlyVolumeData.success) {
       return { 
         met: false, 
@@ -339,7 +341,8 @@ function checkMinuteTriggerConditions(signalType, minuteData, minuteIndex, candl
         crossoverDetected: asksCrossoverDetected,
         sustainedMinutes,
         hasRequiredValue,
-        timestamp: minuteData.time
+        timestamp: minuteData.time,
+        confirmUnix: hourlyVolumeData.confirmUnix ?? null
       }
     };
   }
@@ -377,18 +380,16 @@ function checkIndicatorBTrigger(candleData, candleTime, rawData, currentSymbol, 
 // =============================================================================
 
 /**
- * Return the best available 1-minute array feeding A/B.
- * This avoids "Disabled or no data" by centralizing where A/B gets minute rows.
- * We try a few known places the app stores minute data.
+ * Return the canonical **1-minute** array for A/B.
+ * Do NOT use resampled data; A/B always runs on minute base.
  */
 function getMinuteArrayForAB() {
-  if (window.manager && Array.isArray(window.manager.rawData) && window.manager.rawData.length) {
-    return window.manager.rawData;
-  }
-  if (window.tfMgr && Array.isArray(window.tfMgr.rawData) && window.tfMgr.rawData.length) {
-    return window.tfMgr.rawData;
-  }
-  return [];
+  const a = (window.manager && Array.isArray(window.manager.rawData) && window.manager.rawData.length)
+    ? window.manager.rawData
+    : (window.tfMgr && Array.isArray(window.tfMgr.rawData) && window.tfMgr.rawData.length)
+      ? window.tfMgr.rawData
+      : [];
+  return a;
 }
 
 /**
@@ -398,71 +399,83 @@ function getMinuteArrayForAB() {
  * @param {string} assetExchangeKey - Asset/exchange identifier
  * @returns {Object} - {success, avgBids, avgAsks, crossoverDetected, sustainedMinutes, hasRequiredValue, reason}
  */
+/**
+ * Core: compute 1-hour rolling averages on minute data,
+ * detect crossovers, require 10-min sustain, and ≥9 strength at confirmation.
+ * Returns an object with final confirmation minute (unix seconds) if present.
+ */
 function get1HourVolumeData(rawData, currentIndex, assetExchangeKey) {
   try {
-    const toUnix = (t) => Math.floor(new Date(t).getTime() / 1000);
-    const LOOKBACK_MIN = 120;
-    const start = Math.max(0, currentIndex - LOOKBACK_MIN + 1);
+    const need = 70; // 60 for 1h + 10 sustain
+    if (!Array.isArray(rawData) || !Number.isFinite(currentIndex)) {
+      return { success: false, reason: 'No minute data or bad index' };
+    }
+    if (currentIndex + 1 < need) {
+      return { success: false, reason: `Need ${need} minutes for ${assetExchangeKey}, have ${currentIndex + 1}` };
+    }
+    // Take last ~120 minutes to be safe
+    const start = Math.max(0, currentIndex - 119);
+    const rows = rawData.slice(start, currentIndex + 1).map(r => {
+      // time: support ts(ms) or time (ISO or seconds)
+      let ms = Number.isFinite(r.ts) ? r.ts : NaN;
+      if (!Number.isFinite(ms)) {
+        const t = r.time ?? r.t ?? r.timestamp ?? r.date;
+        if (t != null) {
+          if (typeof t === 'number') ms = t > 2e10 ? t : t * 1000;
+          else {
+            const p = Date.parse(t);
+            if (Number.isFinite(p)) ms = p;
+          }
+        }
+      }
+      const toNum = (v) => {
+        const n = typeof v === 'string' ? Number(v) : v;
+        return Number.isFinite(n) ? n : NaN;
+      };
+      const bid = toNum(r.vol_L50_bids ?? r.bid_l50_avg ?? r.bid ?? r.bids ?? r.bid_value);
+      const ask = toNum(r.vol_L50_asks ?? r.ask_l50_avg ?? r.ask ?? r.asks ?? r.ask_value);
+      if (!Number.isFinite(ms) || !Number.isFinite(bid) || !Number.isFinite(ask)) return null;
+      return { unix: Math.floor(ms / 1000), bid, ask };
+    }).filter(Boolean).sort((a,b)=>a.unix-b.unix);
 
-    const rows = rawData.slice(start, currentIndex + 1)
-      .map((r) => {
-        const time = r.time ?? r.t ?? r.timestamp ?? r.date;
-        if (!time) return null;
-        const ts = typeof time === 'number' ? (time > 2e10 ? time : time * 1000) : Date.parse(time);
-        const bid = +r.vol_L50_bids;
-        const ask = +r.vol_L50_asks;
-        if (!Number.isFinite(ts) || !Number.isFinite(bid) || !Number.isFinite(ask)) return null;
-        return { unix: Math.floor(ts / 1000), bid, ask };
-      })
-      .filter(Boolean)
-      .sort((a, b) => a.unix - b.unix);
-
-    if (rows.length < 70) {
-      return { success: false, reason: `Not enough 1m data (need 70, have ${rows.length})` };
+    if (rows.length < need) {
+      return { success: false, reason: `Need ${need} valid minutes, have ${rows.length}` };
     }
 
-    const WIN = 60;
-    function rollingAvg(arr) {
-      const out = new Array(arr.length).fill(null);
-      let q = [], sum = 0;
-      for (let i = 0; i < arr.length; i++) {
-        const v = arr[i];
+    const WIN = 60, sustainN = 10;
+    const bids = rows.map(r=>r.bid), asks = rows.map(r=>r.ask), ts = rows.map(r=>r.unix);
+    function rollingMean(src) {
+      const out = new Array(src.length).fill(null);
+      let q=[], sum=0;
+      for (let i=0;i<src.length;i++){
+        const v = Number.isFinite(src[i]) ? src[i] : 0;
         q.push(v); sum += v;
         if (q.length > WIN) sum -= q.shift();
         if (q.length === WIN) out[i] = sum / WIN;
       }
       return out;
     }
+    const bid1h = rollingMean(bids), ask1h = rollingMean(asks);
+    const firstValid = WIN, lastIdx = ts.length - 1;
 
-    const bids = rows.map((r) => r.bid);
-    const asks = rows.map((r) => r.ask);
-    const bid1h = rollingAvg(bids);
-    const ask1h = rollingAvg(asks);
-    const ts = rows.map((r) => r.unix);
-
-    const sustainN = 10;
-    const firstValid = WIN;
-    const lastIdx = ts.length - 1;
-
-    function confirm(direction) {
+    function confirm(direction /* 'A' | 'B' */) {
       for (let i = lastIdx - sustainN; i > firstValid; i--) {
-        const pb = bid1h[i - 1], pa = ask1h[i - 1];
-        const cb = bid1h[i],     ca = ask1h[i];
-        if (![pb, pa, cb, ca].every(Number.isFinite)) continue;
-
-        const flipped = (direction === 'A') ? (pb <= pa && cb > ca) : (pa <= pb && ca > cb);
-        if (!flipped) continue;
-
+        const pb = bid1h[i-1], pa = ask1h[i-1], cb = bid1h[i], ca = ask1h[i];
+        if (![pb,pa,cb,ca].every(Number.isFinite)) continue;
+        const flipA = (pb <= pa) && (cb > ca);
+        const flipB = (pa <= pb) && (ca > cb);
+        if ((direction === 'A' && !flipA) || (direction === 'B' && !flipB)) continue;
+        // sustain
         let ok = true, maxVal = -Infinity;
-        for (let k = 1; k <= sustainN; k++) {
-          const b = bid1h[i + k], a = ask1h[i + k];
-          if (!Number.isFinite(b) || !Number.isFinite(a)) { ok = false; break; }
-          if (direction === 'A' && !(b > a)) { ok = false; break; }
-          if (direction === 'B' && !(a > b)) { ok = false; break; }
-          maxVal = Math.max(maxVal, b, a);
+        for (let k=1;k<=sustainN;k++){
+          const b = bid1h[i+k], a = ask1h[i+k];
+          if (!Number.isFinite(b) || !Number.isFinite(a)) { ok=false; break; }
+          if (direction === 'A' && !(b>a)) { ok=false; break; }
+          if (direction === 'B' && !(a>b)) { ok=false; break; }
+          if (b > maxVal) maxVal = b;
+          if (a > maxVal) maxVal = a;
         }
         if (!ok || maxVal < 9) continue;
-
         const confirmIdx = i + sustainN;
         return {
           confirmed: true,
@@ -470,7 +483,7 @@ function get1HourVolumeData(rawData, currentIndex, assetExchangeKey) {
           avgBids: bid1h[confirmIdx],
           avgAsks: ask1h[confirmIdx],
           hasRequiredValue: true,
-          confirmUnix: ts[confirmIdx]
+          confirmUnix: ts[confirmIdx],
         };
       }
       return { confirmed: false };
@@ -478,31 +491,68 @@ function get1HourVolumeData(rawData, currentIndex, assetExchangeKey) {
 
     const A = confirm('A');
     const B = confirm('B');
-
-    let final = null, type = null;
-    if (A.confirmed && B.confirmed) {
-      if (A.confirmIdx >= B.confirmIdx) { final = A; type = 'A'; } else { final = B; type = 'B'; }
-    } else if (A.confirmed) { final = A; type = 'A'; }
-    else if (B.confirmed) { final = B; type = 'B'; }
-
-    if (!final) return { success: false, reason: 'No valid crossover' };
-
+    let final=null, type=null;
+    if (A.confirmed && B.confirmed) { if (A.confirmIdx >= B.confirmIdx) {final=A; type='A';} else {final=B; type='B';} }
+    else if (A.confirmed) {final=A; type='A';}
+    else if (B.confirmed) {final=B; type='B';}
+    if (!final) return { success:false, reason:'No confirmed crossover' };
     return {
-      success: true,
+      success:true,
       avgBids: final.avgBids ?? null,
       avgAsks: final.avgAsks ?? null,
-      crossoverDetected: type === 'A',
-      asksCrossoverDetected: type === 'B',
-      sustainedMinutes: sustainN,
+      crossoverDetected: type==='A',
+      asksCrossoverDetected: type==='B',
+      sustainedMinutes: 10,
       hasRequiredValue: true,
       confirmUnix: final.confirmUnix ?? null,
       reason: 'Confirmed crossover'
     };
-  } catch (e) {
-    console.error('AB indicator error:', e);
-    return { success: false, reason: 'Exception in A/B logic' };
+  } catch(e){
+    console.error('get1HourVolumeData error:', e);
+    return { success:false, reason:'Exception in get1HourVolumeData' };
   }
 }
+
+// =========================
+// A/B ENGINE (timeframe‑independent)
+// =========================
+window.AB_ENGINE = window.AB_ENGINE || {
+  key: null,
+  A: [],
+  B: [],
+  setData(minuteRows) {
+    // Compute once per symbol+exchange
+    const ex = (window.API_EXCHANGE || 'ex').toString();
+    const sym = (window.manager?.currentSymbol || window.CURRENT_SYMBOL || 'sym').toString();
+    const k = `${ex}:${sym}`;
+    if (!Array.isArray(minuteRows) || minuteRows.length < 70) {
+      this.key = k; this.A = []; this.B = []; return;
+    }
+    if (this.key === k && (this.A.length || this.B.length)) return; // already computed for this key
+    const A=[], B=[];
+    for (let i=69;i<minuteRows.length;i++){
+      const res = get1HourVolumeData(minuteRows, i, 'AB');
+      if (res && res.success && res.confirmUnix && res.hasRequiredValue) {
+        if (res.crossoverDetected) A.push(res.confirmUnix);
+        else if (res.asksCrossoverDetected) B.push(res.confirmUnix);
+      }
+    }
+    // de‑dupe + sort
+    const uniq = (xs)=>Array.from(new Set(xs)).sort((a,b)=>a-b);
+    this.A = uniq(A); this.B = uniq(B); this.key = k;
+  },
+  render(priceSeries) {
+    const s = priceSeries || window.seriesPrice || window.priceSeries || window.series?.price;
+    if (!s) return;
+    const markers=[];
+    for (const t of this.A) markers.push({ time:t, position:'belowBar', color:'#3B82F6', shape:'square', text:'A' });
+    for (const t of this.B) markers.push({ time:t, position:'aboveBar', color:'#8B5CF6', shape:'square', text:'B' });
+    s.setMarkers(markers);
+    s._abMarkers = markers;
+  },
+  // Optional inspector for console:
+  info(){ return { key:this.key, A:this.A, B:this.B, lenA:this.A.length, lenB:this.B.length }; }
+};
 
 /**
  * Calculate MA value for specific asset/exchange data
@@ -5286,23 +5336,23 @@ window.AB_dbg = function() {
     console.log('A/B last row keys =', Object.keys(arr[arr.length - 1] || {}));
     console.log('A row sample:', arr.slice(-3));
   }
-  const A = (window.TradingBotAPI?.evaluateCurrentTrigger) ? TradingBotAPI.evaluateCurrentTrigger('indicatorA') : null;
-  const B = (window.TradingBotAPI?.evaluateCurrentTrigger) ? TradingBotAPI.evaluateCurrentTrigger('indicatorB') : null;
-  console.log('A result:', A);
-  console.log('B result:', B);
-  return { A, B, len: arr?.length ?? 0 };
+  const info = window.AB_ENGINE?.info ? window.AB_ENGINE.info() : {};
+  console.log('AB_ENGINE info:', info);
+  return { len: arr?.length ?? 0, engine: info };
 };
 
 // =========================
-// DATA/TF INTEGRATION HOOKS (call sites)
+// DATA/TF INTEGRATION HOOKS
 // =========================
-// After you assign your combined 1-minute rows (example):
-//   manager.rawData = combinedRows;
-//   window.tfMgr = window.tfMgr || {};
-//   window.tfMgr.rawData = combinedRows;  // keep parity with existing code
-//   ensureABCacheUpToDate();              // compute once per symbol/exchange
-//   renderABMarkersFromCache();           // draw same markers on any TF
+// 🔗 IMPORTANT — insert these calls at the two integration points:
 //
-// On timeframe change handlers:
-//   renderABMarkersFromCache();           // DO NOT recompute; just re-draw
+// (1) RIGHT AFTER you assign your combined 1‑minute data:
+//     manager.rawData = combinedRows;               // (this already exists in your loader)
+//     window.tfMgr = window.tfMgr || {};            // keep parity for other code
+//     window.tfMgr.rawData = combinedRows;
+//     window.AB_ENGINE.setData(combinedRows);       // compute global A/B once
+//     window.AB_ENGINE.render();                    // draw same markers on any TF
+//
+// (2) ON TIMEFRAME CHANGE handlers (do NOT recompute):
+//     window.AB_ENGINE.render();                    // just re-draw markers
 
