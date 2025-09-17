@@ -382,22 +382,12 @@ function checkIndicatorBTrigger(candleData, candleTime, rawData, currentSymbol, 
  * We try a few known places the app stores minute data.
  */
 function getMinuteArrayForAB() {
-  // Try most specific → most generic
-  const candidates = [
-    window.baseMinuteData,
-    window.minuteBaseData,
-    window.minuteRaw,
-    window.minuteData,
-    window.rawMinuteData,
-    window.tfMgr?.rawData,     // TimeframeManager keeps the base 1m data here
-    window.__rawMinuteData,
-  ].filter(Boolean);
-  // Pick the first array-like candidate
-  for (const c of candidates) {
-    if (Array.isArray(c) && c.length) return c;
+  if (window.manager && Array.isArray(window.manager.rawData) && window.manager.rawData.length) {
+    return window.manager.rawData;
   }
-  // Fallback: if chart keeps everything in a manager object
-  if (window.tfMgr && Array.isArray(window.tfMgr?.rawData)) return window.tfMgr.rawData;
+  if (window.tfMgr && Array.isArray(window.tfMgr.rawData) && window.tfMgr.rawData.length) {
+    return window.tfMgr.rawData;
+  }
   return [];
 }
 
