@@ -291,12 +291,22 @@
     })();
   </script>
 
-  <!-- Overlay config (optional debug) -->
-  <script>
-    window.__INDICATOR_API_BASE = "https://indicator-api-yw8m.onrender.com";
-    window.__AB_DEBUG = true; // set false to silence logs
-  </script>
-  <!-- Overlay that fetches AB markers from the backend and draws them -->
-  <script src="/indicator-overlay.js" defer></script>
+<!-- Simple A/B toggle bar -->
+<div id="ab-toggle-bar" style="position:fixed;top:8px;right:8px;background:#0b0b0bcc;border:1px solid #333;padding:8px 10px;border-radius:6px;font:12px system-ui;color:#ddd;z-index:9999">
+  <label style="margin-right:10px">
+    <input id="toggleA" type="checkbox" checked /> A (blue)
+  </label>
+  <label>
+    <input id="toggleB" type="checkbox" checked /> B (purple)
+  </label>
+</div>
+
+<script src="chart.js"></script>
+<script>
+  // Config for overlay
+  window.__INDICATOR_API_BASE = "https://indicator-api-yw8m.onrender.com";
+  window.__AB_DEBUG = false;
+</script>
+<script src="/indicator-overlay.js" defer></script>
 </body>
 </html>

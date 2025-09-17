@@ -374,21 +374,14 @@ function checkIndicatorBTrigger(candleData, candleTime, rawData, currentSymbol, 
   return result.triggered;
 }
 
-// =========================
-// A/B SETTINGS
-// =========================
-// Single source of truth for A/B:
-const AB_SUSTAIN_MINUTES = 10;
-const AB_THRESHOLD = 9;   // your spec: require >= 9 (we'll show this in debug)
-window.__AB_DEBUG = true; // set false to silence logs/markers
+// Legacy A/B constants removed - all A/B logic moved to backend API
 
-// ===== Overlay integration flags (keep legacy AB off) =====
-window.FE_USE_LEGACY_AB = false;           // never use built-in A/B anymore
-window.AB_CACHE = null;                    // clear any old caches if code checks this
-// if a legacy interceptor exists in your build, neutralize it:
+// =====: New: disable ALL legacy AB logic permanently
+window.FE_USE_LEGACY_AB = false;
+window.AB_CACHE = null;
 if (window.uninstallABMarkerInterceptor) try { window.uninstallABMarkerInterceptor(); } catch(e){}
 
-// ===== 1) Expose price series once it exists =====
+// =====: New: expose the price series once it exists (no refactor needed)
 (function ensurePriceSeriesRef() {
   try {
     const s =
@@ -404,89 +397,73 @@ if (window.uninstallABMarkerInterceptor) try { window.uninstallABMarkerIntercept
   setTimeout(ensurePriceSeriesRef, 200);
 })();
 
-// ===== 2) Expose chart state (exchange/symbol/timeframe) and refresh overlay =====
+// =====: Guard setMarkers so nobody but the overlay can draw
+(function guardMarkers(){
+  const guard = () => {
+    const s = window.__priceSeries;
+    if (!s || typeof s.setMarkers !== "function") return setTimeout(guard, 200);
+    if (s._origSetMarkers) return; // already guarded
+    s._origSetMarkers = s.setMarkers;
+    s.setMarkers = function(markers){
+      if (window.__ALLOW_OVERLAY_SET) {
+        return s._origSetMarkers.call(this, markers);
+      } else {
+        // block all non-overlay writes
+        return;
+      }
+    };
+    if (window.__IndicatorOverlay && !window.__IndicatorOverlay._wrapped) {
+      const old = window.__IndicatorOverlay.refresh.bind(window.__IndicatorOverlay);
+      window.__IndicatorOverlay.refresh = async function(){
+        try { window.__ALLOW_OVERLAY_SET = true; return await old(); }
+        finally { window.__ALLOW_OVERLAY_SET = false; }
+      };
+      window.__IndicatorOverlay._wrapped = true;
+    }
+  };
+  guard();
+})();
+
+// =====: New: expose current state (exchange/symbol/timeframe) and refresh overlay
 function __updateOverlayState(ex, sym, tf) {
   if (!window.__chartState) window.__chartState = {};
   if (ex) window.__chartState.ex = ex;
   if (sym) window.__chartState.sym = sym;
   if (tf) window.__chartState.tf = tf;
-  // Fallbacks if not provided yet
+  // Fallbacks
   window.__chartState.ex = window.__chartState.ex || window.API_EXCHANGE || "coinbase";
   window.__chartState.sym = window.__chartState.sym || (window.manager && window.manager.currentSymbol) || "BTC";
-  window.__chartState.tf = window.__chartState.tf || (window.manager && window.manager.currentTimeframe) || "1m";
+  window.__chartState.tf  = window.__chartState.tf  || (window.manager && window.manager.currentTimeframe) || "1m";
   if (window.__IndicatorOverlay && typeof window.__IndicatorOverlay.refresh === "function") {
     window.__IndicatorOverlay.refresh();
   }
 }
 
-// ===== 3) Call __updateOverlayState at your existing symbol/timeframe change points =====
-// If you already have handlers like onSymbolChange / onTimeframeChange, just call:
-// __updateOverlayState(newExchange, newSymbol, newTimeframe);
-//
-// If not, we add light listeners for common globals. Adjust if your app uses different events.
-(function wireBasicStateUpdates(){
-  // Initial state attempt after load
-  setTimeout(() => {
-    const ex = window.API_EXCHANGE || "coinbase";
-    const sym = (window.manager && window.manager.currentSymbol) || "BTC";
-    const tf = (window.manager && window.manager.currentTimeframe) || "1m";
-    __updateOverlayState(ex, sym, tf);
-  }, 500);
+// Call __updateOverlayState after your initial dataset load / symbol set:
+setTimeout(() => {
+  __updateOverlayState(window.API_EXCHANGE, (window.manager && window.manager.currentSymbol), (window.manager && window.manager.currentTimeframe));
+}, 600);
 
-  // If your app sets these globals later, patch setters to refresh overlay
-  try {
-    Object.defineProperty(window, "API_EXCHANGE", {
-      set(v){ this.__API_EXCHANGE=v; __updateOverlayState(v, null, null); },
-      get(){ return this.__API_EXCHANGE; }
-    });
-  } catch(_) {}
-})();
-
-// ===== 5) Rewire the A/B UI toggles to control overlay (not legacy) =====
-// Call this whenever the user clicks the A or B checkbox in your UI.
-// Replace the "getAToggleChecked()" / "getBToggleChecked()" with your actual checkbox state getters.
-function __syncOverlayToggles() {
-  try {
-    const showA = typeof getAToggleChecked === 'function' ? !!getAToggleChecked() : true;
-    const showB = typeof getBToggleChecked === 'function' ? !!getBToggleChecked() : true;
+// =====: New: wire A/B toggle UI to overlay
+(function wireABToggles(){
+  const elA = document.getElementById('toggleA');
+  const elB = document.getElementById('toggleB');
+  function sync() {
+    const A = elA ? !!elA.checked : true;
+    const B = elB ? !!elB.checked : true;
     if (window.__IndicatorOverlay && typeof window.__IndicatorOverlay.setEnabled === 'function') {
-      window.__IndicatorOverlay.setEnabled({ A: showA, B: showB });
+      window.__IndicatorOverlay.setEnabled({ A, B });
       window.__IndicatorOverlay.refresh();
     }
-  } catch (_) {}
-}
-
-// ===== A/B Indicator Toggle Functions =====
-function toggleIndicatorA(enabled) {
-  if (window.__IndicatorOverlay && typeof window.__IndicatorOverlay.setEnabled === 'function') {
-    window.__IndicatorOverlay.setEnabled({ A: enabled });
-    window.__IndicatorOverlay.refresh();
   }
-  if (window.__AB_DEBUG) console.log(`[overlay] Indicator A ${enabled ? 'enabled' : 'disabled'}`);
-}
+  if (elA) elA.addEventListener('change', sync);
+  if (elB) elB.addEventListener('change', sync);
+  setTimeout(sync, 800); // initial sync after chart is up
+})();
 
-function toggleIndicatorB(enabled) {
-  if (window.__IndicatorOverlay && typeof window.__IndicatorOverlay.setEnabled === 'function') {
-    window.__IndicatorOverlay.setEnabled({ B: enabled });
-    window.__IndicatorOverlay.refresh();
-  }
-  if (window.__AB_DEBUG) console.log(`[overlay] Indicator B ${enabled ? 'enabled' : 'disabled'}`);
-}
-
-// Helper functions for the generic sync (if needed)
-function getAToggleChecked() {
-  const toggle = document.getElementById('indicatorA-toggle');
-  return toggle ? toggle.checked : true;
-}
-
-function getBToggleChecked() {
-  const toggle = document.getElementById('indicatorB-toggle');
-  return toggle ? toggle.checked : true;
-}
-
-// If you have existing handlers like onAToggleChange / onBToggleChange, call __syncOverlayToggles() inside them.
-// As a generic safety net, try to sync once after load too:
-setTimeout(__syncOverlayToggles, 800);
+// =====: (Optional) if you had periodic refresh from legacy, remove/neutralize it
+if (window.updateSignalDisplay) window.updateSignalDisplay = () => {};
+if (window.ensureABCacheUpToDate) window.ensureABCacheUpToDate = () => {};
 
 // ===== 4) After your first dataset is loaded (where you already call setData on series), add: =====
 // Example (put this right after your initial setData / render completes):
@@ -498,117 +475,11 @@ setTimeout(__syncOverlayToggles, 800);
 // TRADING BOT UTILITY FUNCTIONS
 // =============================================================================
 
-// --- Canonical 1m source for A/B ---
-function getMinuteArrayForAB() {
-  if (window.manager && Array.isArray(window.manager.rawData) && window.manager.rawData.length) return window.manager.rawData;
-  if (window.tfMgr && Array.isArray(window.tfMgr.rawData) && window.tfMgr.rawData.length) return window.tfMgr.rawData;
-  return [];
-}
+// Legacy getMinuteArrayForAB removed - overlay handles data access
 
-/**
- * Get 1-hour timeframe volume data for crossover analysis
- * @param {Array} rawData - Full historical data
- * @param {number} currentIndex - Current data index
- * @param {string} assetExchangeKey - Asset/exchange identifier
- * @returns {Object} - {success, avgBids, avgAsks, crossoverDetected, sustainedMinutes, hasRequiredValue, reason}
- */
-// --- 1h rolling + 10m sustain + >=9 strength (A/B core) ---
-function get1HourVolumeData(rawData, currentIndex, assetExchangeKey) {
-  try {
-    const SUSTAIN = 10, WIN = 60, NEED = WIN + SUSTAIN, THRESH = 9;
-    if (!Array.isArray(rawData) || !Number.isFinite(currentIndex)) return { success:false, reason:'No minute data or bad index' };
-    if (currentIndex + 1 < NEED) return { success:false, reason:`Need ${NEED} minutes, have ${currentIndex+1}` };
-    const start = Math.max(0, currentIndex - 119);
-    const rows = rawData.slice(start, currentIndex + 1).map(r=>{
-      let ms = Number.isFinite(r.ts) ? r.ts : NaN;
-      if (!Number.isFinite(ms)) {
-        const t = r.time ?? r.t ?? r.timestamp ?? r.date;
-        if (t!=null) ms = (typeof t==='number') ? (t>2e10?t:t*1000) : Date.parse(t);
-      }
-      const toNum = v => Number.isFinite(+v) ? +v : NaN;
-      const bid = toNum(r.vol_L50_bids ?? r.bid_l50_avg ?? r.bid ?? r.bids ?? r.bid_value);
-      const ask = toNum(r.vol_L50_asks ?? r.ask_l50_avg ?? r.ask ?? r.asks ?? r.ask_value);
-      if (!Number.isFinite(ms) || !Number.isFinite(bid) || !Number.isFinite(ask)) return null;
-      return { unix: Math.floor(ms/1000), bid, ask };
-    }).filter(Boolean).sort((a,b)=>a.unix-b.unix);
-    if (rows.length < NEED) return { success:false, reason:`Need ${NEED} valid minutes, have ${rows.length}` };
-    const bids = rows.map(r=>r.bid), asks = rows.map(r=>r.ask), ts = rows.map(r=>r.unix);
-    const ma = (arr)=>{ const out=new Array(arr.length).fill(null); let q=[],sum=0; for(let i=0;i<arr.length;i++){const v=Number.isFinite(arr[i])?arr[i]:0; q.push(v); sum+=v; if(q.length>WIN) sum-=q.shift(); if(q.length===WIN) out[i]=sum/WIN;} return out; };
-    const bid1h = ma(bids), ask1h = ma(asks);
-    const firstValid = WIN, last = ts.length-1;
-    function confirm(dir){
-      for (let i = last - SUSTAIN; i > firstValid; i--) {
-        const pb=bid1h[i-1], pa=ask1h[i-1], cb=bid1h[i], ca=ask1h[i];
-        if (![pb,pa,cb,ca].every(Number.isFinite)) continue;
-        const crossA = (pb<=pa)&&(cb>ca), crossB=(pa<=pb)&&(ca>cb);
-        if ((dir==='A'&&!crossA)||(dir==='B'&&!crossB)) continue;
-        let ok=true, maxVal=-Infinity;
-        for (let k=1;k<=SUSTAIN;k++){
-          const b=bid1h[i+k], a=ask1h[i+k];
-          if (!Number.isFinite(b)||!Number.isFinite(a)) { ok=false; break; }
-          if (dir==='A' && !(b>a)) { ok=false; break; }
-          if (dir==='B' && !(a>b)) { ok=false; break; }
-          if (b>maxVal) maxVal=b; if (a>maxVal) maxVal=a;
-        }
-        if (!ok || maxVal < THRESH) continue;
-        const confirmIdx = i + SUSTAIN;
-        return { confirmed:true, confirmIdx, avgBids:bid1h[confirmIdx], avgAsks:ask1h[confirmIdx], hasRequiredValue:true, confirmUnix:ts[confirmIdx] };
-      }
-      return { confirmed:false };
-    }
-    const A = confirm('A'), B = confirm('B');
-    let final=null,type=null;
-    if (A.confirmed && B.confirmed) { if (A.confirmIdx>=B.confirmIdx){final=A;type='A';} else {final=B;type='B';} }
-    else if (A.confirmed){final=A;type='A';}
-    else if (B.confirmed){final=B;type='B';}
-    if (!final) return { success:false, reason:'No confirmed crossover' };
-    return { success:true, avgBids:final.avgBids??null, avgAsks:final.avgAsks??null, crossoverDetected:type==='A', asksCrossoverDetected:type==='B', sustainedMinutes:10, hasRequiredValue:true, confirmUnix:final.confirmUnix??null, reason:'Confirmed crossover' };
-  } catch(e){ console.error('get1HourVolumeData error', e); return { success:false, reason:'Exception in get1HourVolumeData' }; }
-}
+// Legacy get1HourVolumeData removed - all A/B computation moved to backend API
 
-if (window.FE_USE_LEGACY_AB) {
-  // --- A/B cache computed from 1m once per asset:exchange ---
-  window.AB_CACHE = window.AB_CACHE || { key:null, A:[], B:[] };
-  function _abKey(){ const ex=(window.API_EXCHANGE||'ex')+''; const sym=(window.manager?.currentSymbol||window.CURRENT_SYMBOL||'sym')+''; return `${ex}:${sym}`; }
-  function _computeAB(mins){
-    if (!Array.isArray(mins)||mins.length<70) return {A:[],B:[]};
-    const A=[],B=[];
-    for (let i=69;i<mins.length;i++){ const r=get1HourVolumeData(mins,i,'AB'); if(r&&r.success&&r.confirmUnix&&r.hasRequiredValue){ if(r.crossoverDetected)A.push(r.confirmUnix); else if(r.asksCrossoverDetected)B.push(r.confirmUnix); } }
-    const uniq = xs => Array.from(new Set(xs)).sort((a,b)=>a-b);
-    return { A:uniq(A), B:uniq(B) };
-  }
-  function ensureABCacheUpToDate(){
-    const k=_abKey(); if (window.AB_CACHE.key===k) return;
-    const mins=getMinuteArrayForAB(); window.AB_CACHE = { ..._computeAB(mins), key:k };
-  }
-  function buildABMarkerObjects(){
-    const out=[];
-    for (const t of window.AB_CACHE.A||[]) out.push({ time:t, position:'belowBar', color:'#3B82F6', shape:'square', text:'A' });
-    for (const t of window.AB_CACHE.B||[]) out.push({ time:t, position:'aboveBar', color:'#8B5CF6', shape:'square', text:'B' });
-    return out;
-  }
-  function getPriceSeries(){
-    return window.seriesPrice || window.priceSeries || (window.series && window.series.price) || null;
-  }
-  // --- Interceptor: always merge cached A/B markers into whatever the app sets ---
-  function installABMarkerInterceptor(){
-    const s = getPriceSeries();
-    if (!s) { setTimeout(installABMarkerInterceptor, 200); return; }
-    if (s.__abIntercepted) return;
-    const orig = s.setMarkers.bind(s);
-    s.setMarkers = (arr)=>{
-      // Remove any A/B markers coming from timeframe paths, then append cached ones
-      const base = Array.isArray(arr) ? arr.filter(m=>!(m && (m.text==='A' || m.text==='B'))) : [];
-      ensureABCacheUpToDate();
-      const merged = base.concat(buildABMarkerObjects());
-      orig(merged);
-      s._markers = merged;
-    };
-    s.__abIntercepted = true;
-    // initial draw
-    s.setMarkers(s._markers || []);
-  }
-}
+// Legacy A/B code removed - all functionality moved to indicator-overlay.js
 
 /**
  * Calculate MA value for specific asset/exchange data
@@ -5352,77 +5223,23 @@ function addScaleResetButton() {
 
 
 
-// ===== Developer helper: run in console to see A/B inputs =====
+// ===== Developer helper: inspect overlay system =====
 window.AB_dbg = function() {
-  const arr = getMinuteArrayForAB();
-  console.log('A/B minute array length =', Array.isArray(arr) ? arr.length : 0);
-  if (arr && arr.length) {
-    console.log('A/B last row keys =', Object.keys(arr[arr.length - 1] || {}));
-    console.log('A row sample:', arr.slice(-3));
+  console.log('=== A/B Overlay Debug ===');
+  console.log('Chart state:', window.__chartState);
+  console.log('Overlay available:', !!window.__IndicatorOverlay);
+  console.log('Price series available:', !!window.__priceSeries);
+  if (window.__IndicatorOverlay) {
+    console.log('Try: window.__IndicatorOverlay.refresh() to manually refresh');
   }
-  if (window.FE_USE_LEGACY_AB) {
-    console.log('AB_CACHE:', { key: window.AB_CACHE?.key, A:(window.AB_CACHE?.A||[]).length, B:(window.AB_CACHE?.B||[]).length });
-    return { len: arr?.length ?? 0, cache: window.AB_CACHE };
-  } else {
-    console.log('Using new API-based overlay system');
-    console.log('Chart state:', window.__chartState);
-    return { len: arr?.length ?? 0, overlay: 'API-based' };
-  }
+  return { 
+    state: window.__chartState,
+    overlay: !!window.__IndicatorOverlay,
+    priceSeries: !!window.__priceSeries
+  };
 };
 
-// Probe a specific ISO time you care about (e.g. the vertical line)
-// Example: AB_probeISO('2025-09-12T10:30:00Z')
-window.AB_probeISO = function(iso) {
-  try {
-    const arr = getMinuteArrayForAB();
-    if (!arr?.length) { console.warn('No minute array.'); return; }
-    const target = Date.parse(iso);
-    let best = 0, bestDiff = Infinity;
-    for (let i = 0; i < arr.length; i++) {
-      const t = (typeof arr[i].time === 'number') ? (arr[i].time > 2e10 ? arr[i].time : arr[i].time*1000) : Date.parse(arr[i].time);
-      const d = Math.abs(t - target);
-      if (d < bestDiff) { bestDiff = d; best = i; }
-    }
-    const resA = get1HourVolumeData(arr, best, 'AB');
-    const resB = get1HourVolumeData(arr, best, 'AB');
-    console.log('AB_probeISO @', iso, { resA, resB });
-    if (window.__AB_DEBUG) {
-      // optional debug markers on chart
-      const s = window.seriesPrice || window.priceSeries || window.series?.price;
-      if (s && (resA.debug || resB.debug)) {
-        const dbg = resA.debug || resB.debug;
-        const mks = [];
-        if (dbg?.crossUnix) mks.push({ time: dbg.crossUnix, position: 'belowBar', color:'#9CA3AF', shape:'square', text:'cross' });
-        if (dbg?.sustainSamples?.length) {
-          for (const r of dbg.sustainSamples) {
-            mks.push({ time: r.t, position: 'belowBar', color:'#06B6D4', shape:'circle', text:'sustain' });
-          }
-        }
-        const cur = s._markers || [];
-        s.setMarkers(cur.concat(mks));
-        s._markers = cur.concat(mks);
-      }
-    }
-    return { resA, resB };
-  } catch (e) {
-    console.error('AB_probeISO error', e);
-  }
-};
+// Legacy probe function removed - use API endpoints for debugging
 
-if (window.FE_USE_LEGACY_AB) {
-  // =========================
-  // RUNTIME HOOKS
-  // =========================
-  // When minute data is loaded or symbol/exchange changes, keep rawData mirrored
-  // and (re)compute the A/B cache once.
-  (function waitForMinuteData(){
-    const mins = getMinuteArrayForAB();
-    if (mins && mins.length) {
-      ensureABCacheUpToDate();
-      installABMarkerInterceptor(); // ensures markers include cached A/B on any timeframe
-      return;
-    }
-    setTimeout(waitForMinuteData, 400);
-  })();
-}
+// Legacy runtime hooks removed - overlay handles all A/B functionality
 
