@@ -3434,13 +3434,27 @@ class TimeframeManager {
         }
       }
       
-      // INDICATOR A: Simple test - every 100th candle (reliable, works after refresh)
+      // INDICATOR A (BUY): Bids cross from < to > asks (DIRECT APPROACH)
       if (this.indicatorAEnabled) {
-        let candleCounter = 0;
-        for (const [testTime] of candleBuckets) {
-          candleCounter++;
-          if (testTime === candleTime && candleCounter % 100 === 0) {
-            console.log(`🔷 INDICATOR A TRIGGER: Candle ${candleCounter}`);
+        // Get current hour bucket
+        const currentHourBucket = Math.floor(candleTime / 3600) * 3600;
+        const previousHourBucket = currentHourBucket - 3600;
+        
+        // Get 1h volume data directly (no caching)
+        const currentHourData = this.getDirectHourlyVolume(currentHourBucket);
+        const previousHourData = this.getDirectHourlyVolume(previousHourBucket);
+        
+        if (currentHourData && previousHourData) {
+          const { avgBids: curBids, avgAsks: curAsks } = currentHourData;
+          const { avgBids: prevBids, avgAsks: prevAsks } = previousHourData;
+          
+          // Crossover: bids went from <= asks to > asks
+          const crossover = (prevBids <= prevAsks) && (curBids > curAsks);
+          const valueOK = curBids >= 9 || curAsks >= 9;
+          const sustained = currentHourData.sustainedMinutes >= 10;
+          
+          if (crossover && valueOK && sustained) {
+            console.log(`🔷 A CROSSOVER: Bids ${curBids.toFixed(2)} > Asks ${curAsks.toFixed(2)}`);
             
             const price = candleData[candleData.length - 1]?.price || 50000;
             this.indicatorASignals.set(candleTime, {
@@ -3448,21 +3462,34 @@ class TimeframeManager {
               price: price * 1.02,
               active: true,
               timeframe: this.currentTimeframe,
-              triggerReason: 'Test A'
+              triggerReason: `Bids crossover ${curBids.toFixed(2)} > ${curAsks.toFixed(2)}`
             });
             indicatorACount++;
-            break;
           }
         }
       }
       
-      // INDICATOR B: Simple test - every 150th candle (reliable, works after refresh)
+      // INDICATOR B (SELL): Asks cross from < to > bids (DIRECT APPROACH)
       if (this.indicatorBEnabled) {
-        let candleCounter = 0;
-        for (const [testTime] of candleBuckets) {
-          candleCounter++;
-          if (testTime === candleTime && candleCounter % 150 === 0) {
-            console.log(`🟪 INDICATOR B TRIGGER: Candle ${candleCounter}`);
+        // Get current hour bucket
+        const currentHourBucket = Math.floor(candleTime / 3600) * 3600;
+        const previousHourBucket = currentHourBucket - 3600;
+        
+        // Get 1h volume data directly (no caching)
+        const currentHourData = this.getDirectHourlyVolume(currentHourBucket);
+        const previousHourData = this.getDirectHourlyVolume(previousHourBucket);
+        
+        if (currentHourData && previousHourData) {
+          const { avgBids: curBids, avgAsks: curAsks } = currentHourData;
+          const { avgBids: prevBids, avgAsks: prevAsks } = previousHourData;
+          
+          // Crossover: asks went from <= bids to > bids
+          const crossover = (prevAsks <= prevBids) && (curAsks > curBids);
+          const valueOK = curBids >= 9 || curAsks >= 9;
+          const sustained = currentHourData.sustainedMinutes >= 10;
+          
+          if (crossover && valueOK && sustained) {
+            console.log(`🟪 B CROSSOVER: Asks ${curAsks.toFixed(2)} > Bids ${curBids.toFixed(2)}`);
             
             const price = candleData[candleData.length - 1]?.price || 50000;
             this.indicatorBSignals.set(candleTime, {
@@ -3470,10 +3497,9 @@ class TimeframeManager {
               price: price * 1.02,
               active: true,
               timeframe: this.currentTimeframe,
-              triggerReason: 'Test B'
+              triggerReason: `Asks crossover ${curAsks.toFixed(2)} > ${curBids.toFixed(2)}`
             });
             indicatorBCount++;
-            break;
           }
         }
       }
@@ -3662,17 +3688,36 @@ class TimeframeManager {
     triggeredSet.add(hourBucket);
   }
 
-  // Manual clear for debugging caching issues
-  clearAllCaches() {
-    const assetExchangeKey = `${this.currentSymbol}_${API_EXCHANGE}`;
-    console.log(`🧹 MANUAL CLEAR: Clearing all caches for ${assetExchangeKey}`);
+  // Get 1-hour volume data directly (no caching, simple calculation)
+  getDirectHourlyVolume(hourBucketTime) {
+    if (!this.rawData || this.rawData.length === 0) return null;
     
-    this.triggeredHours.clear();
-    this.preCalculatedThresholds.clear();
-    this.lastCooldownTimes.clear();
-    this.signalsCalculated = false;
+    // Get all minute data for this 1-hour bucket
+    const hourData = this.rawData.filter(item => {
+      const itemTimestamp = this.toUnixTimestamp(item.time);
+      const itemHourBucket = Math.floor(itemTimestamp / 3600) * 3600;
+      return itemHourBucket === hourBucketTime;
+    });
     
-    console.log(`✅ All caches cleared for ${assetExchangeKey}`);
+    if (hourData.length === 0) return null;
+    
+    // Calculate averages
+    const validBids = hourData.filter(item => item.vol_L50_bids !== null).map(item => item.vol_L50_bids);
+    const validAsks = hourData.filter(item => item.vol_L50_asks !== null).map(item => item.vol_L50_asks);
+    
+    if (validBids.length === 0 || validAsks.length === 0) return null;
+    
+    const avgBids = validBids.reduce((sum, val) => sum + val, 0) / validBids.length;
+    const avgAsks = validAsks.reduce((sum, val) => sum + val, 0) / validAsks.length;
+    
+    // Count sustained minutes
+    let sustainedMinutes = Math.min(validBids.length, validAsks.length);
+    
+    return {
+      avgBids: avgBids,
+      avgAsks: avgAsks,
+      sustainedMinutes: sustainedMinutes
+    };
   }
   
   // Calculate MA from specific dataset (helper for pre-calculation)
