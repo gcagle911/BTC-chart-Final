@@ -1,4 +1,7 @@
 (() => {
+  // Which series are shown (controlled by UI toggles in chart.js)
+  let ENABLED = { A: true, B: true };
+
   const API_BASE = (window.__INDICATOR_API_BASE || "https://indicator-api-yw8m.onrender.com").replace(/\/+$/,"");
 
   const STYLE = {
@@ -20,9 +23,10 @@
 
   function mergeABMarkers(existing, AB) {
     const base = Array.isArray(existing) ? existing.filter(m => !(m && (m.text === 'A' || m.text === 'B'))) : [];
-    const a = toMarkers(AB.A, STYLE.A);
-    const b = toMarkers(AB.B, STYLE.B);
-    return base.concat(a, b);
+    const out = [...base];
+    if (ENABLED.A) out.push(...toMarkers(AB.A, STYLE.A));
+    if (ENABLED.B) out.push(...toMarkers(AB.B, STYLE.B));
+    return out;
   }
 
   async function drawOnce() {
@@ -45,6 +49,10 @@
 
   window.__IndicatorOverlay = {
     refresh: () => drawOnce(),
+    setEnabled: (flags = {}) => {
+      if (typeof flags.A === 'boolean') ENABLED.A = flags.A;
+      if (typeof flags.B === 'boolean') ENABLED.B = flags.B;
+    },
     startPolling: async (ms = 60000) => {
       while (true) { await drawOnce(); await sleep(ms); }
     }

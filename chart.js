@@ -383,7 +383,10 @@ const AB_THRESHOLD = 9;   // your spec: require >= 9 (we'll show this in debug)
 window.__AB_DEBUG = true; // set false to silence logs/markers
 
 // ===== Overlay integration flags (keep legacy AB off) =====
-window.FE_USE_LEGACY_AB = false;
+window.FE_USE_LEGACY_AB = false;           // never use built-in A/B anymore
+window.AB_CACHE = null;                    // clear any old caches if code checks this
+// if a legacy interceptor exists in your build, neutralize it:
+if (window.uninstallABMarkerInterceptor) try { window.uninstallABMarkerInterceptor(); } catch(e){}
 
 // ===== 1) Expose price series once it exists =====
 (function ensurePriceSeriesRef() {
@@ -438,6 +441,52 @@ function __updateOverlayState(ex, sym, tf) {
     });
   } catch(_) {}
 })();
+
+// ===== 5) Rewire the A/B UI toggles to control overlay (not legacy) =====
+// Call this whenever the user clicks the A or B checkbox in your UI.
+// Replace the "getAToggleChecked()" / "getBToggleChecked()" with your actual checkbox state getters.
+function __syncOverlayToggles() {
+  try {
+    const showA = typeof getAToggleChecked === 'function' ? !!getAToggleChecked() : true;
+    const showB = typeof getBToggleChecked === 'function' ? !!getBToggleChecked() : true;
+    if (window.__IndicatorOverlay && typeof window.__IndicatorOverlay.setEnabled === 'function') {
+      window.__IndicatorOverlay.setEnabled({ A: showA, B: showB });
+      window.__IndicatorOverlay.refresh();
+    }
+  } catch (_) {}
+}
+
+// ===== A/B Indicator Toggle Functions =====
+function toggleIndicatorA(enabled) {
+  if (window.__IndicatorOverlay && typeof window.__IndicatorOverlay.setEnabled === 'function') {
+    window.__IndicatorOverlay.setEnabled({ A: enabled });
+    window.__IndicatorOverlay.refresh();
+  }
+  if (window.__AB_DEBUG) console.log(`[overlay] Indicator A ${enabled ? 'enabled' : 'disabled'}`);
+}
+
+function toggleIndicatorB(enabled) {
+  if (window.__IndicatorOverlay && typeof window.__IndicatorOverlay.setEnabled === 'function') {
+    window.__IndicatorOverlay.setEnabled({ B: enabled });
+    window.__IndicatorOverlay.refresh();
+  }
+  if (window.__AB_DEBUG) console.log(`[overlay] Indicator B ${enabled ? 'enabled' : 'disabled'}`);
+}
+
+// Helper functions for the generic sync (if needed)
+function getAToggleChecked() {
+  const toggle = document.getElementById('indicatorA-toggle');
+  return toggle ? toggle.checked : true;
+}
+
+function getBToggleChecked() {
+  const toggle = document.getElementById('indicatorB-toggle');
+  return toggle ? toggle.checked : true;
+}
+
+// If you have existing handlers like onAToggleChange / onBToggleChange, call __syncOverlayToggles() inside them.
+// As a generic safety net, try to sync once after load too:
+setTimeout(__syncOverlayToggles, 800);
 
 // ===== 4) After your first dataset is loaded (where you already call setData on series), add: =====
 // Example (put this right after your initial setData / render completes):
