@@ -375,6 +375,14 @@ function checkIndicatorBTrigger(candleData, candleTime, rawData, currentSymbol, 
   return result.triggered;
 }
 
+// =========================
+// A/B SETTINGS
+// =========================
+// Single source of truth for A/B:
+const AB_SUSTAIN_MINUTES = 10;
+const AB_THRESHOLD = 9;   // your spec: require >= 9 (we'll show this in debug)
+window.__AB_DEBUG = true; // set false to silence logs/markers
+
 // =============================================================================
 // TRADING BOT UTILITY FUNCTIONS
 // =============================================================================
@@ -402,11 +410,11 @@ function getMinuteArrayForAB() {
 /**
  * Core: compute 1-hour rolling averages on minute data,
  * detect crossovers, require 10-min sustain, and ≥9 strength at confirmation.
- * Returns an object with final confirmation minute (unix seconds) if present.
+ * Now returns rich debug info so we can see EXACTLY what happened.
  */
 function get1HourVolumeData(rawData, currentIndex, assetExchangeKey) {
   try {
-    const need = 70; // 60 for 1h + 10 sustain
+    const need = 60 + AB_SUSTAIN_MINUTES;
     if (!Array.isArray(rawData) || !Number.isFinite(currentIndex)) {
       return { success: false, reason: 'No minute data or bad index' };
     }
@@ -442,7 +450,7 @@ function get1HourVolumeData(rawData, currentIndex, assetExchangeKey) {
       return { success: false, reason: `Need ${need} valid minutes, have ${rows.length}` };
     }
 
-    const WIN = 60, sustainN = 10;
+    const WIN = 60, sustainN = AB_SUSTAIN_MINUTES;
     const bids = rows.map(r=>r.bid), asks = rows.map(r=>r.ask), ts = rows.map(r=>r.unix);
     function rollingMean(src) {
       const out = new Array(src.length).fill(null);
@@ -465,26 +473,50 @@ function get1HourVolumeData(rawData, currentIndex, assetExchangeKey) {
         const flipA = (pb <= pa) && (cb > ca);
         const flipB = (pa <= pb) && (ca > cb);
         if ((direction === 'A' && !flipA) || (direction === 'B' && !flipB)) continue;
-        // sustain
+        // sustain + track values for debug
         let ok = true, maxVal = -Infinity;
+        const sustainSamples = [];
         for (let k=1;k<=sustainN;k++){
           const b = bid1h[i+k], a = ask1h[i+k];
           if (!Number.isFinite(b) || !Number.isFinite(a)) { ok=false; break; }
           if (direction === 'A' && !(b>a)) { ok=false; break; }
           if (direction === 'B' && !(a>b)) { ok=false; break; }
+          sustainSamples.push({ t: ts[i+k], bid1h: b, ask1h: a });
           if (b > maxVal) maxVal = b;
           if (a > maxVal) maxVal = a;
         }
-        if (!ok || maxVal < 9) continue;
+        if (!ok) {
+          if (window.__AB_DEBUG) console.debug(`[AB DEBUG] Sustain broke for ${direction} at`, new Date(ts[i]*1000).toISOString());
+          continue;
+        }
+        if (maxVal < AB_THRESHOLD) {
+          if (window.__AB_DEBUG) console.debug(`[AB DEBUG] Threshold not reached for ${direction}: max during sustain=${maxVal.toFixed(2)} < ${AB_THRESHOLD}`);
+          continue;
+        }
         const confirmIdx = i + sustainN;
-        return {
+        const dbg = {
+          direction,
+          crossUnix: ts[i],
+          crossBids: cb,
+          crossAsks: ca,
+          sustainSamples, // array of 10 rows with bid1h/ask1h at each minute of sustain
+          maxDuringSustain: maxVal,
+          threshold: AB_THRESHOLD
+        };
+        const result = {
           confirmed: true,
           confirmIdx,
           avgBids: bid1h[confirmIdx],
           avgAsks: ask1h[confirmIdx],
           hasRequiredValue: true,
           confirmUnix: ts[confirmIdx],
+          debug: dbg
         };
+        if (window.__AB_DEBUG) {
+          console.debug(`[AB DEBUG] ${direction} confirmed @`, new Date(result.confirmUnix*1000).toISOString(),
+            `avgBids=${result.avgBids?.toFixed(2)} avgAsks=${result.avgAsks?.toFixed(2)} maxDuringSustain=${dbg.maxDuringSustain.toFixed(2)}`);
+        }
+        return result;
       }
       return { confirmed: false };
     }
@@ -502,9 +534,10 @@ function get1HourVolumeData(rawData, currentIndex, assetExchangeKey) {
       avgAsks: final.avgAsks ?? null,
       crossoverDetected: type==='A',
       asksCrossoverDetected: type==='B',
-      sustainedMinutes: 10,
+      sustainedMinutes: AB_SUSTAIN_MINUTES,
       hasRequiredValue: true,
       confirmUnix: final.confirmUnix ?? null,
+      debug: final.debug || null,
       reason: 'Confirmed crossover'
     };
   } catch(e){
@@ -5328,7 +5361,10 @@ function renderABMarkersFromCache() {
   priceSeries._abMarkers = out;
 }
 
-// ===== Developer helper: run in console to see A/B inputs =====
+// =========================
+// Developer helpers
+// =========================
+// Run AB_dbg() in the console to inspect inputs and current results.
 window.AB_dbg = function() {
   const arr = getMinuteArrayForAB();
   console.log('A/B minute array length =', Array.isArray(arr) ? arr.length : 0);
@@ -5339,6 +5375,45 @@ window.AB_dbg = function() {
   const info = window.AB_ENGINE?.info ? window.AB_ENGINE.info() : {};
   console.log('AB_ENGINE info:', info);
   return { len: arr?.length ?? 0, engine: info };
+};
+
+// Probe a specific ISO time you care about (e.g. the vertical line)
+// Example: AB_probeISO('2025-09-12T10:30:00Z')
+window.AB_probeISO = function(iso) {
+  try {
+    const arr = getMinuteArrayForAB();
+    if (!arr?.length) { console.warn('No minute array.'); return; }
+    const target = Date.parse(iso);
+    let best = 0, bestDiff = Infinity;
+    for (let i = 0; i < arr.length; i++) {
+      const t = (typeof arr[i].time === 'number') ? (arr[i].time > 2e10 ? arr[i].time : arr[i].time*1000) : Date.parse(arr[i].time);
+      const d = Math.abs(t - target);
+      if (d < bestDiff) { bestDiff = d; best = i; }
+    }
+    const resA = get1HourVolumeData(arr, best, 'AB');
+    const resB = get1HourVolumeData(arr, best, 'AB');
+    console.log('AB_probeISO @', iso, { resA, resB });
+    if (window.__AB_DEBUG) {
+      // optional debug markers on chart
+      const s = window.seriesPrice || window.priceSeries || window.series?.price;
+      if (s && (resA.debug || resB.debug)) {
+        const dbg = resA.debug || resB.debug;
+        const mks = [];
+        if (dbg?.crossUnix) mks.push({ time: dbg.crossUnix, position: 'belowBar', color:'#9CA3AF', shape:'square', text:'cross' });
+        if (dbg?.sustainSamples?.length) {
+          for (const r of dbg.sustainSamples) {
+            mks.push({ time: r.t, position: 'belowBar', color:'#06B6D4', shape:'circle', text:'sustain' });
+          }
+        }
+        const cur = s._markers || [];
+        s.setMarkers(cur.concat(mks));
+        s._markers = cur.concat(mks);
+      }
+    }
+    return { resA, resB };
+  } catch (e) {
+    console.error('AB_probeISO error', e);
+  }
 };
 
 // =========================
