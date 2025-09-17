@@ -5231,6 +5231,53 @@ function addScaleResetButton() {
   }
 }
 
+// ===== A/B cache (timeframe‑independent) =====
+// We compute historical A & B confirmations ONCE from the 1m base,
+// then render the same timestamps on any timeframe.
+window.AB_CACHE = window.AB_CACHE || { A: [], B: [], key: null };
+
+function _abCacheKey() {
+  const ex = (window.API_EXCHANGE || 'ex').toString();
+  const sym = (window.manager?.currentSymbol || window.CURRENT_SYMBOL || 'sym').toString();
+  return `${ex}:${sym}`;
+}
+
+function _computeABFromMinute(minuteRows) {
+  if (!Array.isArray(minuteRows) || minuteRows.length < 70) return { A: [], B: [] };
+  const A = [], B = [];
+  for (let i = 69; i < minuteRows.length; i++) {
+    const res = get1HourVolumeData(minuteRows, i, 'AB');
+    if (res && res.success && res.confirmUnix && res.hasRequiredValue) {
+      if (res.crossoverDetected) A.push(res.confirmUnix);
+      else if (res.asksCrossoverDetected) B.push(res.confirmUnix);
+    }
+  }
+  const uniq = (xs) => Array.from(new Set(xs)).sort((a,b)=>a-b);
+  return { A: uniq(A), B: uniq(B) };
+}
+
+function ensureABCacheUpToDate() {
+  const k = _abCacheKey();
+  const minute = getMinuteArrayForAB();
+  if (window.AB_CACHE.key !== k) {
+    window.AB_CACHE = { ..._computeABFromMinute(minute), key: k };
+  }
+}
+
+function renderABMarkersFromCache() {
+  const priceSeries = window.seriesPrice || window.priceSeries || window.series?.price;
+  if (!priceSeries) return;
+  const out = [];
+  for (const t of window.AB_CACHE.A || []) {
+    out.push({ time: t, position: 'belowBar', color: '#3B82F6', shape: 'square', text: 'A' });
+  }
+  for (const t of window.AB_CACHE.B || []) {
+    out.push({ time: t, position: 'aboveBar', color: '#8B5CF6', shape: 'square', text: 'B' });
+  }
+  priceSeries.setMarkers(out);
+  priceSeries._abMarkers = out;
+}
+
 // ===== Developer helper: run in console to see A/B inputs =====
 window.AB_dbg = function() {
   const arr = getMinuteArrayForAB();
@@ -5246,4 +5293,16 @@ window.AB_dbg = function() {
   return { A, B, len: arr?.length ?? 0 };
 };
 
+// =========================
+// DATA/TF INTEGRATION HOOKS (call sites)
+// =========================
+// After you assign your combined 1-minute rows (example):
+//   manager.rawData = combinedRows;
+//   window.tfMgr = window.tfMgr || {};
+//   window.tfMgr.rawData = combinedRows;  // keep parity with existing code
+//   ensureABCacheUpToDate();              // compute once per symbol/exchange
+//   renderABMarkersFromCache();           // draw same markers on any TF
+//
+// On timeframe change handlers:
+//   renderABMarkersFromCache();           // DO NOT recompute; just re-draw
 
