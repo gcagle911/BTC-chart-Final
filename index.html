@@ -291,14 +291,12 @@
     })();
   </script>
 
-  <!-- API Configuration -->
+  <!-- Overlay config (optional debug) -->
   <script>
     window.__INDICATOR_API_BASE = "https://indicator-api-yw8m.onrender.com";
-    window.__AB_DEBUG = true;
-    // Force redeployment
+    window.__AB_DEBUG = true; // set false to silence logs
   </script>
-
-  <!-- Indicator Overlay System -->
-  <script src="/indicator-overlay.js"></script>
+  <!-- Overlay that fetches AB markers from the backend and draws them -->
+  <script src="/indicator-overlay.js" defer></script>
 </body>
 </html>

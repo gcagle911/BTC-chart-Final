@@ -382,8 +382,68 @@ const AB_SUSTAIN_MINUTES = 10;
 const AB_THRESHOLD = 9;   // your spec: require >= 9 (we'll show this in debug)
 window.__AB_DEBUG = true; // set false to silence logs/markers
 
-// Legacy AB system control (set to false to use new API-based overlay)
+// ===== Overlay integration flags (keep legacy AB off) =====
 window.FE_USE_LEGACY_AB = false;
+
+// ===== 1) Expose price series once it exists =====
+(function ensurePriceSeriesRef() {
+  try {
+    const s =
+      window.seriesPrice ||
+      window.priceSeries ||
+      (window.series && window.series.price) ||
+      null;
+    if (s && typeof s.setMarkers === "function") {
+      window.__priceSeries = s;
+      return;
+    }
+  } catch (_) {}
+  setTimeout(ensurePriceSeriesRef, 200);
+})();
+
+// ===== 2) Expose chart state (exchange/symbol/timeframe) and refresh overlay =====
+function __updateOverlayState(ex, sym, tf) {
+  if (!window.__chartState) window.__chartState = {};
+  if (ex) window.__chartState.ex = ex;
+  if (sym) window.__chartState.sym = sym;
+  if (tf) window.__chartState.tf = tf;
+  // Fallbacks if not provided yet
+  window.__chartState.ex = window.__chartState.ex || window.API_EXCHANGE || "coinbase";
+  window.__chartState.sym = window.__chartState.sym || (window.manager && window.manager.currentSymbol) || "BTC";
+  window.__chartState.tf = window.__chartState.tf || (window.manager && window.manager.currentTimeframe) || "1m";
+  if (window.__IndicatorOverlay && typeof window.__IndicatorOverlay.refresh === "function") {
+    window.__IndicatorOverlay.refresh();
+  }
+}
+
+// ===== 3) Call __updateOverlayState at your existing symbol/timeframe change points =====
+// If you already have handlers like onSymbolChange / onTimeframeChange, just call:
+// __updateOverlayState(newExchange, newSymbol, newTimeframe);
+//
+// If not, we add light listeners for common globals. Adjust if your app uses different events.
+(function wireBasicStateUpdates(){
+  // Initial state attempt after load
+  setTimeout(() => {
+    const ex = window.API_EXCHANGE || "coinbase";
+    const sym = (window.manager && window.manager.currentSymbol) || "BTC";
+    const tf = (window.manager && window.manager.currentTimeframe) || "1m";
+    __updateOverlayState(ex, sym, tf);
+  }, 500);
+
+  // If your app sets these globals later, patch setters to refresh overlay
+  try {
+    Object.defineProperty(window, "API_EXCHANGE", {
+      set(v){ this.__API_EXCHANGE=v; __updateOverlayState(v, null, null); },
+      get(){ return this.__API_EXCHANGE; }
+    });
+  } catch(_) {}
+})();
+
+// ===== 4) After your first dataset is loaded (where you already call setData on series), add: =====
+// Example (put this right after your initial setData / render completes):
+// __updateOverlayState(window.API_EXCHANGE, (window.manager && manager.currentSymbol), (window.manager && manager.currentTimeframe));
+// Optionally start polling:
+// if (window.__IndicatorOverlay && window.__IndicatorOverlay.startPolling) window.__IndicatorOverlay.startPolling(60000);
 
 // =============================================================================
 // TRADING BOT UTILITY FUNCTIONS
@@ -941,11 +1001,8 @@ const priceSeries = chart.addCandlestickSeries({
   wickVisible: true,
 });
 
-// Expose price series for indicator overlay
+// Expose price series for indicator overlay (backup - main exposure is in the polling function above)
 window.__priceSeries = priceSeries;
-
-// Initialize chart state for indicator overlay
-window.__chartState = { ex: API_EXCHANGE, sym: 'BTC', tf: '1m' };
 chart.priceScale('right').applyOptions({
   minTick: 0.001,
   scaleMargins: { top: 0.02, bottom: 0.02 },
@@ -1952,8 +2009,7 @@ class TimeframeManager {
     this.currentTimeframe = timeframe;
     
     // Update chart state for indicator overlay
-    window.__chartState = { ex: API_EXCHANGE, sym: this.currentSymbol, tf: this.currentTimeframe };
-    if (window.__IndicatorOverlay?.refresh) window.__IndicatorOverlay.refresh();
+    __updateOverlayState(null, null, timeframe);
     
     // Update dropdown
     const dropdown = document.getElementById('timeframe-dropdown');
@@ -4367,8 +4423,7 @@ class TimeframeManager {
     this.rawData = [];
     
     // Update chart state for indicator overlay
-    window.__chartState = { ex: API_EXCHANGE, sym: this.currentSymbol, tf: this.currentTimeframe };
-    if (window.__IndicatorOverlay?.refresh) window.__IndicatorOverlay.refresh();
+    __updateOverlayState(null, this.currentSymbol, null);
     this.lastTimestamp = 0;
     this.isFullDataLoaded = false;
 
@@ -4414,8 +4469,7 @@ class TimeframeManager {
     API_EXCHANGE = exchange;
     
     // Update chart state for indicator overlay
-    window.__chartState = { ex: API_EXCHANGE, sym: this.currentSymbol, tf: this.currentTimeframe };
-    if (window.__IndicatorOverlay?.refresh) window.__IndicatorOverlay.refresh();
+    __updateOverlayState(exchange, null, null);
     // Reload everything for current symbol using new exchange
     if (this.updateInterval) clearInterval(this.updateInterval);
     if (this.refreshInterval) clearInterval(this.refreshInterval);
