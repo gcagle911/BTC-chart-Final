@@ -268,11 +268,10 @@ function checkMinuteTriggerConditions(signalType, minuteData, minuteIndex, candl
     };
     
   } else if (signalType === 'indicatorA') {
-    // INDICATOR A (BUY): evaluation kept for API parity;
-    // Rendering comes from AB_ENGINE (1m-based), not this per-candle loop.
-    const minute = getMinuteArrayForAB();
-    const idx = Math.max(0, minute.length - 1);
-    const hourlyVolumeData = get1HourVolumeData(minute, idx, assetExchangeKey);
+    // INDICATOR A (BUY) — evaluation kept for API parity (rendering is intercepted)
+    const mins = getMinuteArrayForAB();
+    const idx = Math.max(0, mins.length - 1);
+    const hourlyVolumeData = get1HourVolumeData(mins, idx, assetExchangeKey);
     if (!hourlyVolumeData.success) {
       return { 
         met: false, 
@@ -308,10 +307,10 @@ function checkMinuteTriggerConditions(signalType, minuteData, minuteIndex, candl
     };
     
   } else if (signalType === 'indicatorB') {
-    // INDICATOR B (SELL): same note as A.
-    const minute = getMinuteArrayForAB();
-    const idx = Math.max(0, minute.length - 1);
-    const hourlyVolumeData = get1HourVolumeData(minute, idx, assetExchangeKey);
+    // INDICATOR B (SELL) — evaluation kept for API parity (rendering is intercepted)
+    const mins = getMinuteArrayForAB();
+    const idx = Math.max(0, mins.length - 1);
+    const hourlyVolumeData = get1HourVolumeData(mins, idx, assetExchangeKey);
     if (!hourlyVolumeData.success) {
       return { 
         met: false, 
@@ -387,17 +386,11 @@ window.__AB_DEBUG = true; // set false to silence logs/markers
 // TRADING BOT UTILITY FUNCTIONS
 // =============================================================================
 
-/**
- * Return the canonical **1-minute** array for A/B.
- * Do NOT use resampled data; A/B always runs on minute base.
- */
+// --- Canonical 1m source for A/B ---
 function getMinuteArrayForAB() {
-  const a = (window.manager && Array.isArray(window.manager.rawData) && window.manager.rawData.length)
-    ? window.manager.rawData
-    : (window.tfMgr && Array.isArray(window.tfMgr.rawData) && window.tfMgr.rawData.length)
-      ? window.tfMgr.rawData
-      : [];
-  return a;
+  if (window.manager && Array.isArray(window.manager.rawData) && window.manager.rawData.length) return window.manager.rawData;
+  if (window.tfMgr && Array.isArray(window.tfMgr.rawData) && window.tfMgr.rawData.length) return window.tfMgr.rawData;
+  return [];
 }
 
 /**
@@ -407,185 +400,101 @@ function getMinuteArrayForAB() {
  * @param {string} assetExchangeKey - Asset/exchange identifier
  * @returns {Object} - {success, avgBids, avgAsks, crossoverDetected, sustainedMinutes, hasRequiredValue, reason}
  */
-/**
- * Core: compute 1-hour rolling averages on minute data,
- * detect crossovers, require 10-min sustain, and ≥9 strength at confirmation.
- * Now returns rich debug info so we can see EXACTLY what happened.
- */
+// --- 1h rolling + 10m sustain + >=9 strength (A/B core) ---
 function get1HourVolumeData(rawData, currentIndex, assetExchangeKey) {
   try {
-    const need = 60 + AB_SUSTAIN_MINUTES;
-    if (!Array.isArray(rawData) || !Number.isFinite(currentIndex)) {
-      return { success: false, reason: 'No minute data or bad index' };
-    }
-    if (currentIndex + 1 < need) {
-      return { success: false, reason: `Need ${need} minutes for ${assetExchangeKey}, have ${currentIndex + 1}` };
-    }
-    // Take last ~120 minutes to be safe
+    const SUSTAIN = 10, WIN = 60, NEED = WIN + SUSTAIN, THRESH = 9;
+    if (!Array.isArray(rawData) || !Number.isFinite(currentIndex)) return { success:false, reason:'No minute data or bad index' };
+    if (currentIndex + 1 < NEED) return { success:false, reason:`Need ${NEED} minutes, have ${currentIndex+1}` };
     const start = Math.max(0, currentIndex - 119);
-    const rows = rawData.slice(start, currentIndex + 1).map(r => {
-      // time: support ts(ms) or time (ISO or seconds)
+    const rows = rawData.slice(start, currentIndex + 1).map(r=>{
       let ms = Number.isFinite(r.ts) ? r.ts : NaN;
       if (!Number.isFinite(ms)) {
         const t = r.time ?? r.t ?? r.timestamp ?? r.date;
-        if (t != null) {
-          if (typeof t === 'number') ms = t > 2e10 ? t : t * 1000;
-          else {
-            const p = Date.parse(t);
-            if (Number.isFinite(p)) ms = p;
-          }
-        }
+        if (t!=null) ms = (typeof t==='number') ? (t>2e10?t:t*1000) : Date.parse(t);
       }
-      const toNum = (v) => {
-        const n = typeof v === 'string' ? Number(v) : v;
-        return Number.isFinite(n) ? n : NaN;
-      };
+      const toNum = v => Number.isFinite(+v) ? +v : NaN;
       const bid = toNum(r.vol_L50_bids ?? r.bid_l50_avg ?? r.bid ?? r.bids ?? r.bid_value);
       const ask = toNum(r.vol_L50_asks ?? r.ask_l50_avg ?? r.ask ?? r.asks ?? r.ask_value);
       if (!Number.isFinite(ms) || !Number.isFinite(bid) || !Number.isFinite(ask)) return null;
-      return { unix: Math.floor(ms / 1000), bid, ask };
+      return { unix: Math.floor(ms/1000), bid, ask };
     }).filter(Boolean).sort((a,b)=>a.unix-b.unix);
-
-    if (rows.length < need) {
-      return { success: false, reason: `Need ${need} valid minutes, have ${rows.length}` };
-    }
-
-    const WIN = 60, sustainN = AB_SUSTAIN_MINUTES;
+    if (rows.length < NEED) return { success:false, reason:`Need ${NEED} valid minutes, have ${rows.length}` };
     const bids = rows.map(r=>r.bid), asks = rows.map(r=>r.ask), ts = rows.map(r=>r.unix);
-    function rollingMean(src) {
-      const out = new Array(src.length).fill(null);
-      let q=[], sum=0;
-      for (let i=0;i<src.length;i++){
-        const v = Number.isFinite(src[i]) ? src[i] : 0;
-        q.push(v); sum += v;
-        if (q.length > WIN) sum -= q.shift();
-        if (q.length === WIN) out[i] = sum / WIN;
-      }
-      return out;
-    }
-    const bid1h = rollingMean(bids), ask1h = rollingMean(asks);
-    const firstValid = WIN, lastIdx = ts.length - 1;
-
-    function confirm(direction /* 'A' | 'B' */) {
-      for (let i = lastIdx - sustainN; i > firstValid; i--) {
-        const pb = bid1h[i-1], pa = ask1h[i-1], cb = bid1h[i], ca = ask1h[i];
+    const ma = (arr)=>{ const out=new Array(arr.length).fill(null); let q=[],sum=0; for(let i=0;i<arr.length;i++){const v=Number.isFinite(arr[i])?arr[i]:0; q.push(v); sum+=v; if(q.length>WIN) sum-=q.shift(); if(q.length===WIN) out[i]=sum/WIN;} return out; };
+    const bid1h = ma(bids), ask1h = ma(asks);
+    const firstValid = WIN, last = ts.length-1;
+    function confirm(dir){
+      for (let i = last - SUSTAIN; i > firstValid; i--) {
+        const pb=bid1h[i-1], pa=ask1h[i-1], cb=bid1h[i], ca=ask1h[i];
         if (![pb,pa,cb,ca].every(Number.isFinite)) continue;
-        const flipA = (pb <= pa) && (cb > ca);
-        const flipB = (pa <= pb) && (ca > cb);
-        if ((direction === 'A' && !flipA) || (direction === 'B' && !flipB)) continue;
-        // sustain + track values for debug
-        let ok = true, maxVal = -Infinity;
-        const sustainSamples = [];
-        for (let k=1;k<=sustainN;k++){
-          const b = bid1h[i+k], a = ask1h[i+k];
-          if (!Number.isFinite(b) || !Number.isFinite(a)) { ok=false; break; }
-          if (direction === 'A' && !(b>a)) { ok=false; break; }
-          if (direction === 'B' && !(a>b)) { ok=false; break; }
-          sustainSamples.push({ t: ts[i+k], bid1h: b, ask1h: a });
-          if (b > maxVal) maxVal = b;
-          if (a > maxVal) maxVal = a;
+        const crossA = (pb<=pa)&&(cb>ca), crossB=(pa<=pb)&&(ca>cb);
+        if ((dir==='A'&&!crossA)||(dir==='B'&&!crossB)) continue;
+        let ok=true, maxVal=-Infinity;
+        for (let k=1;k<=SUSTAIN;k++){
+          const b=bid1h[i+k], a=ask1h[i+k];
+          if (!Number.isFinite(b)||!Number.isFinite(a)) { ok=false; break; }
+          if (dir==='A' && !(b>a)) { ok=false; break; }
+          if (dir==='B' && !(a>b)) { ok=false; break; }
+          if (b>maxVal) maxVal=b; if (a>maxVal) maxVal=a;
         }
-        if (!ok) {
-          if (window.__AB_DEBUG) console.debug(`[AB DEBUG] Sustain broke for ${direction} at`, new Date(ts[i]*1000).toISOString());
-          continue;
-        }
-        if (maxVal < AB_THRESHOLD) {
-          if (window.__AB_DEBUG) console.debug(`[AB DEBUG] Threshold not reached for ${direction}: max during sustain=${maxVal.toFixed(2)} < ${AB_THRESHOLD}`);
-          continue;
-        }
-        const confirmIdx = i + sustainN;
-        const dbg = {
-          direction,
-          crossUnix: ts[i],
-          crossBids: cb,
-          crossAsks: ca,
-          sustainSamples, // array of 10 rows with bid1h/ask1h at each minute of sustain
-          maxDuringSustain: maxVal,
-          threshold: AB_THRESHOLD
-        };
-        const result = {
-          confirmed: true,
-          confirmIdx,
-          avgBids: bid1h[confirmIdx],
-          avgAsks: ask1h[confirmIdx],
-          hasRequiredValue: true,
-          confirmUnix: ts[confirmIdx],
-          debug: dbg
-        };
-        if (window.__AB_DEBUG) {
-          console.debug(`[AB DEBUG] ${direction} confirmed @`, new Date(result.confirmUnix*1000).toISOString(),
-            `avgBids=${result.avgBids?.toFixed(2)} avgAsks=${result.avgAsks?.toFixed(2)} maxDuringSustain=${dbg.maxDuringSustain.toFixed(2)}`);
-        }
-        return result;
+        if (!ok || maxVal < THRESH) continue;
+        const confirmIdx = i + SUSTAIN;
+        return { confirmed:true, confirmIdx, avgBids:bid1h[confirmIdx], avgAsks:ask1h[confirmIdx], hasRequiredValue:true, confirmUnix:ts[confirmIdx] };
       }
-      return { confirmed: false };
+      return { confirmed:false };
     }
-
-    const A = confirm('A');
-    const B = confirm('B');
-    let final=null, type=null;
-    if (A.confirmed && B.confirmed) { if (A.confirmIdx >= B.confirmIdx) {final=A; type='A';} else {final=B; type='B';} }
-    else if (A.confirmed) {final=A; type='A';}
-    else if (B.confirmed) {final=B; type='B';}
+    const A = confirm('A'), B = confirm('B');
+    let final=null,type=null;
+    if (A.confirmed && B.confirmed) { if (A.confirmIdx>=B.confirmIdx){final=A;type='A';} else {final=B;type='B';} }
+    else if (A.confirmed){final=A;type='A';}
+    else if (B.confirmed){final=B;type='B';}
     if (!final) return { success:false, reason:'No confirmed crossover' };
-    return {
-      success:true,
-      avgBids: final.avgBids ?? null,
-      avgAsks: final.avgAsks ?? null,
-      crossoverDetected: type==='A',
-      asksCrossoverDetected: type==='B',
-      sustainedMinutes: AB_SUSTAIN_MINUTES,
-      hasRequiredValue: true,
-      confirmUnix: final.confirmUnix ?? null,
-      debug: final.debug || null,
-      reason: 'Confirmed crossover'
-    };
-  } catch(e){
-    console.error('get1HourVolumeData error:', e);
-    return { success:false, reason:'Exception in get1HourVolumeData' };
-  }
+    return { success:true, avgBids:final.avgBids??null, avgAsks:final.avgAsks??null, crossoverDetected:type==='A', asksCrossoverDetected:type==='B', sustainedMinutes:10, hasRequiredValue:true, confirmUnix:final.confirmUnix??null, reason:'Confirmed crossover' };
+  } catch(e){ console.error('get1HourVolumeData error', e); return { success:false, reason:'Exception in get1HourVolumeData' }; }
 }
 
-// =========================
-// A/B ENGINE (timeframe‑independent)
-// =========================
-window.AB_ENGINE = window.AB_ENGINE || {
-  key: null,
-  A: [],
-  B: [],
-  setData(minuteRows) {
-    // Compute once per symbol+exchange
-    const ex = (window.API_EXCHANGE || 'ex').toString();
-    const sym = (window.manager?.currentSymbol || window.CURRENT_SYMBOL || 'sym').toString();
-    const k = `${ex}:${sym}`;
-    if (!Array.isArray(minuteRows) || minuteRows.length < 70) {
-      this.key = k; this.A = []; this.B = []; return;
-    }
-    if (this.key === k && (this.A.length || this.B.length)) return; // already computed for this key
-    const A=[], B=[];
-    for (let i=69;i<minuteRows.length;i++){
-      const res = get1HourVolumeData(minuteRows, i, 'AB');
-      if (res && res.success && res.confirmUnix && res.hasRequiredValue) {
-        if (res.crossoverDetected) A.push(res.confirmUnix);
-        else if (res.asksCrossoverDetected) B.push(res.confirmUnix);
-      }
-    }
-    // de‑dupe + sort
-    const uniq = (xs)=>Array.from(new Set(xs)).sort((a,b)=>a-b);
-    this.A = uniq(A); this.B = uniq(B); this.key = k;
-  },
-  render(priceSeries) {
-    const s = priceSeries || window.seriesPrice || window.priceSeries || window.series?.price;
-    if (!s) return;
-    const markers=[];
-    for (const t of this.A) markers.push({ time:t, position:'belowBar', color:'#3B82F6', shape:'square', text:'A' });
-    for (const t of this.B) markers.push({ time:t, position:'aboveBar', color:'#8B5CF6', shape:'square', text:'B' });
-    s.setMarkers(markers);
-    s._abMarkers = markers;
-  },
-  // Optional inspector for console:
-  info(){ return { key:this.key, A:this.A, B:this.B, lenA:this.A.length, lenB:this.B.length }; }
-};
+// --- A/B cache computed from 1m once per asset:exchange ---
+window.AB_CACHE = window.AB_CACHE || { key:null, A:[], B:[] };
+function _abKey(){ const ex=(window.API_EXCHANGE||'ex')+''; const sym=(window.manager?.currentSymbol||window.CURRENT_SYMBOL||'sym')+''; return `${ex}:${sym}`; }
+function _computeAB(mins){
+  if (!Array.isArray(mins)||mins.length<70) return {A:[],B:[]};
+  const A=[],B=[];
+  for (let i=69;i<mins.length;i++){ const r=get1HourVolumeData(mins,i,'AB'); if(r&&r.success&&r.confirmUnix&&r.hasRequiredValue){ if(r.crossoverDetected)A.push(r.confirmUnix); else if(r.asksCrossoverDetected)B.push(r.confirmUnix); } }
+  const uniq = xs => Array.from(new Set(xs)).sort((a,b)=>a-b);
+  return { A:uniq(A), B:uniq(B) };
+}
+function ensureABCacheUpToDate(){
+  const k=_abKey(); if (window.AB_CACHE.key===k) return;
+  const mins=getMinuteArrayForAB(); window.AB_CACHE = { ..._computeAB(mins), key:k };
+}
+function buildABMarkerObjects(){
+  const out=[];
+  for (const t of window.AB_CACHE.A||[]) out.push({ time:t, position:'belowBar', color:'#3B82F6', shape:'square', text:'A' });
+  for (const t of window.AB_CACHE.B||[]) out.push({ time:t, position:'aboveBar', color:'#8B5CF6', shape:'square', text:'B' });
+  return out;
+}
+function getPriceSeries(){
+  return window.seriesPrice || window.priceSeries || (window.series && window.series.price) || null;
+}
+// --- Interceptor: always merge cached A/B markers into whatever the app sets ---
+function installABMarkerInterceptor(){
+  const s = getPriceSeries();
+  if (!s) { setTimeout(installABMarkerInterceptor, 200); return; }
+  if (s.__abIntercepted) return;
+  const orig = s.setMarkers.bind(s);
+  s.setMarkers = (arr)=>{
+    // Remove any A/B markers coming from timeframe paths, then append cached ones
+    const base = Array.isArray(arr) ? arr.filter(m=>!(m && (m.text==='A' || m.text==='B'))) : [];
+    ensureABCacheUpToDate();
+    const merged = base.concat(buildABMarkerObjects());
+    orig(merged);
+    s._markers = merged;
+  };
+  s.__abIntercepted = true;
+  // initial draw
+  s.setMarkers(s._markers || []);
+}
 
 /**
  * Calculate MA value for specific asset/exchange data
@@ -5314,57 +5223,10 @@ function addScaleResetButton() {
   }
 }
 
-// ===== A/B cache (timeframe‑independent) =====
-// We compute historical A & B confirmations ONCE from the 1m base,
-// then render the same timestamps on any timeframe.
-window.AB_CACHE = window.AB_CACHE || { A: [], B: [], key: null };
 
-function _abCacheKey() {
-  const ex = (window.API_EXCHANGE || 'ex').toString();
-  const sym = (window.manager?.currentSymbol || window.CURRENT_SYMBOL || 'sym').toString();
-  return `${ex}:${sym}`;
-}
 
-function _computeABFromMinute(minuteRows) {
-  if (!Array.isArray(minuteRows) || minuteRows.length < 70) return { A: [], B: [] };
-  const A = [], B = [];
-  for (let i = 69; i < minuteRows.length; i++) {
-    const res = get1HourVolumeData(minuteRows, i, 'AB');
-    if (res && res.success && res.confirmUnix && res.hasRequiredValue) {
-      if (res.crossoverDetected) A.push(res.confirmUnix);
-      else if (res.asksCrossoverDetected) B.push(res.confirmUnix);
-    }
-  }
-  const uniq = (xs) => Array.from(new Set(xs)).sort((a,b)=>a-b);
-  return { A: uniq(A), B: uniq(B) };
-}
 
-function ensureABCacheUpToDate() {
-  const k = _abCacheKey();
-  const minute = getMinuteArrayForAB();
-  if (window.AB_CACHE.key !== k) {
-    window.AB_CACHE = { ..._computeABFromMinute(minute), key: k };
-  }
-}
-
-function renderABMarkersFromCache() {
-  const priceSeries = window.seriesPrice || window.priceSeries || window.series?.price;
-  if (!priceSeries) return;
-  const out = [];
-  for (const t of window.AB_CACHE.A || []) {
-    out.push({ time: t, position: 'belowBar', color: '#3B82F6', shape: 'square', text: 'A' });
-  }
-  for (const t of window.AB_CACHE.B || []) {
-    out.push({ time: t, position: 'aboveBar', color: '#8B5CF6', shape: 'square', text: 'B' });
-  }
-  priceSeries.setMarkers(out);
-  priceSeries._abMarkers = out;
-}
-
-// =========================
-// Developer helpers
-// =========================
-// Run AB_dbg() in the console to inspect inputs and current results.
+// ===== Developer helper: run in console to see A/B inputs =====
 window.AB_dbg = function() {
   const arr = getMinuteArrayForAB();
   console.log('A/B minute array length =', Array.isArray(arr) ? arr.length : 0);
@@ -5372,9 +5234,8 @@ window.AB_dbg = function() {
     console.log('A/B last row keys =', Object.keys(arr[arr.length - 1] || {}));
     console.log('A row sample:', arr.slice(-3));
   }
-  const info = window.AB_ENGINE?.info ? window.AB_ENGINE.info() : {};
-  console.log('AB_ENGINE info:', info);
-  return { len: arr?.length ?? 0, engine: info };
+  console.log('AB_CACHE:', { key: window.AB_CACHE?.key, A:(window.AB_CACHE?.A||[]).length, B:(window.AB_CACHE?.B||[]).length });
+  return { len: arr?.length ?? 0, cache: window.AB_CACHE };
 };
 
 // Probe a specific ISO time you care about (e.g. the vertical line)
@@ -5417,17 +5278,17 @@ window.AB_probeISO = function(iso) {
 };
 
 // =========================
-// DATA/TF INTEGRATION HOOKS
+// RUNTIME HOOKS
 // =========================
-// 🔗 IMPORTANT — insert these calls at the two integration points:
-//
-// (1) RIGHT AFTER you assign your combined 1‑minute data:
-//     manager.rawData = combinedRows;               // (this already exists in your loader)
-//     window.tfMgr = window.tfMgr || {};            // keep parity for other code
-//     window.tfMgr.rawData = combinedRows;
-//     window.AB_ENGINE.setData(combinedRows);       // compute global A/B once
-//     window.AB_ENGINE.render();                    // draw same markers on any TF
-//
-// (2) ON TIMEFRAME CHANGE handlers (do NOT recompute):
-//     window.AB_ENGINE.render();                    // just re-draw markers
+// When minute data is loaded or symbol/exchange changes, keep rawData mirrored
+// and (re)compute the A/B cache once.
+(function waitForMinuteData(){
+  const mins = getMinuteArrayForAB();
+  if (mins && mins.length) {
+    ensureABCacheUpToDate();
+    installABMarkerInterceptor(); // ensures markers include cached A/B on any timeframe
+    return;
+  }
+  setTimeout(waitForMinuteData, 400);
+})();
 
