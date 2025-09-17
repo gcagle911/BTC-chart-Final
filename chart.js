@@ -31,97 +31,9 @@ const TRIGGER_CONFIG = {
     thresholdUpdateInterval: 3600 // Update thresholds every hour (seconds)
   },
   
-  // Sell signal configuration (Red X above candles)
-  sell: {
-    enabled: true,
-    signalType: 'SELL',
-    displayName: 'Sell',
-    marker: {
-      emoji: '❌',
-      color: '#FF0000',
-      position: 'aboveBar',
-      size: 2,
-      previewColor: '#FF6666',
-      previewSize: 1
-    },
-    // DEAD SIMPLE: Just trigger on specific candles for testing
-    conditions: {
-      testMode: true,
-      triggerOnCandles: [488310, 488320, 488330, 488340] // Match your actual candle range
-    },
-    cooldown: {
-      enabled: true,
-      durationMinutes: 60  // 1 hour cooldown after trigger
-    }
-  },
+  // Legacy sell/buy configurations removed - only A/B indicators via API now
   
-  // Buy signal configuration (Green Circle below candles)
-  buy: {
-    enabled: true,
-    signalType: 'BUY', 
-    displayName: 'Buy',
-    marker: {
-      emoji: '🟢',
-      color: '#00FF00',
-      position: 'belowBar',
-      size: 2,
-      previewColor: '#66FF66',
-      previewSize: 1
-    },
-    cooldown: {
-      enabled: true,
-      durationMinutes: 60  // 1 hour cooldown after trigger
-    }
-    // Trigger conditions will be added here
-  },
-  
-  // Indicator A configuration (Blue Diamond below candles)
-  indicatorA: {
-    label: "A Crossover",
-    enabled: true,
-    signalType: 'INDICATOR_A',
-    displayName: 'A',
-    color: "#3B82F6", // blue
-    position: "belowBar",
-    id: "indicatorA",
-    marker: {
-      emoji: '🔷',
-      color: '#0080FF',
-      position: 'belowBar', // FIXED: Blue diamond below candles
-      size: 2,
-      previewColor: '#6699FF',
-      previewSize: 1
-    },
-    cooldown: {
-      enabled: true,
-      durationMinutes: 60  // 1 hour cooldown after trigger
-    }
-    // Trigger conditions ready to be added
-  },
-  
-  // Indicator B configuration (Purple Square above candles)
-  indicatorB: {
-    label: "B Crossover",
-    enabled: true,
-    signalType: 'INDICATOR_B',
-    displayName: 'B',
-    color: "#8B5CF6", // purple
-    position: "aboveBar",
-    id: "indicatorB",
-    marker: {
-      emoji: '🟪',
-      color: '#8000FF',
-      position: 'aboveBar', // FIXED: Both A and B above candles
-      size: 2,
-      previewColor: '#9966FF',
-      previewSize: 1
-    },
-    cooldown: {
-      enabled: true,
-      durationMinutes: 60  // 1 hour cooldown after trigger
-    }
-    // Trigger conditions ready to be added
-  }
+  // Legacy indicatorA/B configurations removed - API-based overlay handles all A/B styling and logic
 };
 
 // Data sources mapped by symbol

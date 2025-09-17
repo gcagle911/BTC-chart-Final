@@ -258,12 +258,9 @@
           
           <div class="ma-toggle-list" style="margin-top:8px;">
             <label style="color: #d1d4dc; font-size: 11px; margin-bottom: 4px; display: block;">Signal Indicators:</label>
-            <label><input type="checkbox" id="sell-indicator-toggle" onchange="toggleSellIndicator(this.checked)"> ❌ Sell</label>
-            <label><input type="checkbox" id="buy-indicator-toggle" onchange="toggleBuyIndicator(this.checked)"> 🟢 Buy</label>
             <label><input type="checkbox" id="toggleA" onchange="syncABToggles()" checked> 💎 A (API)</label>
             <label><input type="checkbox" id="toggleB" onchange="syncABToggles()" checked> 🟪 B (API)</label>
-            <button id="btn-calculate-signals" class="tool-btn" style="background: #2962ff; color: #fff;">🔄 Calculate All Signals</button>
-            <div id="signal-status" style="font-size: 10px; color: #888; margin-top: 4px; text-align: center;">Toggle indicators to show historical signals</div>
+            <div id="signal-status" style="font-size: 10px; color: #888; margin-top: 4px; text-align: center;">A/B indicators from API backend</div>
           </div>
         </div>
       </div>
