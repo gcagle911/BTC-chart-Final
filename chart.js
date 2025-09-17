@@ -382,6 +382,9 @@ const AB_SUSTAIN_MINUTES = 10;
 const AB_THRESHOLD = 9;   // your spec: require >= 9 (we'll show this in debug)
 window.__AB_DEBUG = true; // set false to silence logs/markers
 
+// Legacy AB system control (set to false to use new API-based overlay)
+window.FE_USE_LEGACY_AB = false;
+
 // =============================================================================
 // TRADING BOT UTILITY FUNCTIONS
 // =============================================================================
@@ -454,46 +457,48 @@ function get1HourVolumeData(rawData, currentIndex, assetExchangeKey) {
   } catch(e){ console.error('get1HourVolumeData error', e); return { success:false, reason:'Exception in get1HourVolumeData' }; }
 }
 
-// --- A/B cache computed from 1m once per asset:exchange ---
-window.AB_CACHE = window.AB_CACHE || { key:null, A:[], B:[] };
-function _abKey(){ const ex=(window.API_EXCHANGE||'ex')+''; const sym=(window.manager?.currentSymbol||window.CURRENT_SYMBOL||'sym')+''; return `${ex}:${sym}`; }
-function _computeAB(mins){
-  if (!Array.isArray(mins)||mins.length<70) return {A:[],B:[]};
-  const A=[],B=[];
-  for (let i=69;i<mins.length;i++){ const r=get1HourVolumeData(mins,i,'AB'); if(r&&r.success&&r.confirmUnix&&r.hasRequiredValue){ if(r.crossoverDetected)A.push(r.confirmUnix); else if(r.asksCrossoverDetected)B.push(r.confirmUnix); } }
-  const uniq = xs => Array.from(new Set(xs)).sort((a,b)=>a-b);
-  return { A:uniq(A), B:uniq(B) };
-}
-function ensureABCacheUpToDate(){
-  const k=_abKey(); if (window.AB_CACHE.key===k) return;
-  const mins=getMinuteArrayForAB(); window.AB_CACHE = { ..._computeAB(mins), key:k };
-}
-function buildABMarkerObjects(){
-  const out=[];
-  for (const t of window.AB_CACHE.A||[]) out.push({ time:t, position:'belowBar', color:'#3B82F6', shape:'square', text:'A' });
-  for (const t of window.AB_CACHE.B||[]) out.push({ time:t, position:'aboveBar', color:'#8B5CF6', shape:'square', text:'B' });
-  return out;
-}
-function getPriceSeries(){
-  return window.seriesPrice || window.priceSeries || (window.series && window.series.price) || null;
-}
-// --- Interceptor: always merge cached A/B markers into whatever the app sets ---
-function installABMarkerInterceptor(){
-  const s = getPriceSeries();
-  if (!s) { setTimeout(installABMarkerInterceptor, 200); return; }
-  if (s.__abIntercepted) return;
-  const orig = s.setMarkers.bind(s);
-  s.setMarkers = (arr)=>{
-    // Remove any A/B markers coming from timeframe paths, then append cached ones
-    const base = Array.isArray(arr) ? arr.filter(m=>!(m && (m.text==='A' || m.text==='B'))) : [];
-    ensureABCacheUpToDate();
-    const merged = base.concat(buildABMarkerObjects());
-    orig(merged);
-    s._markers = merged;
-  };
-  s.__abIntercepted = true;
-  // initial draw
-  s.setMarkers(s._markers || []);
+if (window.FE_USE_LEGACY_AB) {
+  // --- A/B cache computed from 1m once per asset:exchange ---
+  window.AB_CACHE = window.AB_CACHE || { key:null, A:[], B:[] };
+  function _abKey(){ const ex=(window.API_EXCHANGE||'ex')+''; const sym=(window.manager?.currentSymbol||window.CURRENT_SYMBOL||'sym')+''; return `${ex}:${sym}`; }
+  function _computeAB(mins){
+    if (!Array.isArray(mins)||mins.length<70) return {A:[],B:[]};
+    const A=[],B=[];
+    for (let i=69;i<mins.length;i++){ const r=get1HourVolumeData(mins,i,'AB'); if(r&&r.success&&r.confirmUnix&&r.hasRequiredValue){ if(r.crossoverDetected)A.push(r.confirmUnix); else if(r.asksCrossoverDetected)B.push(r.confirmUnix); } }
+    const uniq = xs => Array.from(new Set(xs)).sort((a,b)=>a-b);
+    return { A:uniq(A), B:uniq(B) };
+  }
+  function ensureABCacheUpToDate(){
+    const k=_abKey(); if (window.AB_CACHE.key===k) return;
+    const mins=getMinuteArrayForAB(); window.AB_CACHE = { ..._computeAB(mins), key:k };
+  }
+  function buildABMarkerObjects(){
+    const out=[];
+    for (const t of window.AB_CACHE.A||[]) out.push({ time:t, position:'belowBar', color:'#3B82F6', shape:'square', text:'A' });
+    for (const t of window.AB_CACHE.B||[]) out.push({ time:t, position:'aboveBar', color:'#8B5CF6', shape:'square', text:'B' });
+    return out;
+  }
+  function getPriceSeries(){
+    return window.seriesPrice || window.priceSeries || (window.series && window.series.price) || null;
+  }
+  // --- Interceptor: always merge cached A/B markers into whatever the app sets ---
+  function installABMarkerInterceptor(){
+    const s = getPriceSeries();
+    if (!s) { setTimeout(installABMarkerInterceptor, 200); return; }
+    if (s.__abIntercepted) return;
+    const orig = s.setMarkers.bind(s);
+    s.setMarkers = (arr)=>{
+      // Remove any A/B markers coming from timeframe paths, then append cached ones
+      const base = Array.isArray(arr) ? arr.filter(m=>!(m && (m.text==='A' || m.text==='B'))) : [];
+      ensureABCacheUpToDate();
+      const merged = base.concat(buildABMarkerObjects());
+      orig(merged);
+      s._markers = merged;
+    };
+    s.__abIntercepted = true;
+    // initial draw
+    s.setMarkers(s._markers || []);
+  }
 }
 
 /**
@@ -935,6 +940,12 @@ const priceSeries = chart.addCandlestickSeries({
   wickDownColor: '#ef5350', // Red wicks
   wickVisible: true,
 });
+
+// Expose price series for indicator overlay
+window.__priceSeries = priceSeries;
+
+// Initialize chart state for indicator overlay
+window.__chartState = { ex: API_EXCHANGE, sym: 'BTC', tf: '1m' };
 chart.priceScale('right').applyOptions({
   minTick: 0.001,
   scaleMargins: { top: 0.02, bottom: 0.02 },
@@ -1939,6 +1950,10 @@ class TimeframeManager {
     console.log(`🔄 Switching to ${timeframe} timeframe`);
     
     this.currentTimeframe = timeframe;
+    
+    // Update chart state for indicator overlay
+    window.__chartState = { ex: API_EXCHANGE, sym: this.currentSymbol, tf: this.currentTimeframe };
+    if (window.__IndicatorOverlay?.refresh) window.__IndicatorOverlay.refresh();
     
     // Update dropdown
     const dropdown = document.getElementById('timeframe-dropdown');
@@ -4350,6 +4365,10 @@ class TimeframeManager {
     // Reset state
     this.currentSymbol = symbol;
     this.rawData = [];
+    
+    // Update chart state for indicator overlay
+    window.__chartState = { ex: API_EXCHANGE, sym: this.currentSymbol, tf: this.currentTimeframe };
+    if (window.__IndicatorOverlay?.refresh) window.__IndicatorOverlay.refresh();
     this.lastTimestamp = 0;
     this.isFullDataLoaded = false;
 
@@ -4393,6 +4412,10 @@ class TimeframeManager {
     if (!exchange || API_EXCHANGE === exchange) return;
     console.log(`🔁 Switching exchange to ${exchange}`);
     API_EXCHANGE = exchange;
+    
+    // Update chart state for indicator overlay
+    window.__chartState = { ex: API_EXCHANGE, sym: this.currentSymbol, tf: this.currentTimeframe };
+    if (window.__IndicatorOverlay?.refresh) window.__IndicatorOverlay.refresh();
     // Reload everything for current symbol using new exchange
     if (this.updateInterval) clearInterval(this.updateInterval);
     if (this.refreshInterval) clearInterval(this.refreshInterval);
@@ -5234,8 +5257,14 @@ window.AB_dbg = function() {
     console.log('A/B last row keys =', Object.keys(arr[arr.length - 1] || {}));
     console.log('A row sample:', arr.slice(-3));
   }
-  console.log('AB_CACHE:', { key: window.AB_CACHE?.key, A:(window.AB_CACHE?.A||[]).length, B:(window.AB_CACHE?.B||[]).length });
-  return { len: arr?.length ?? 0, cache: window.AB_CACHE };
+  if (window.FE_USE_LEGACY_AB) {
+    console.log('AB_CACHE:', { key: window.AB_CACHE?.key, A:(window.AB_CACHE?.A||[]).length, B:(window.AB_CACHE?.B||[]).length });
+    return { len: arr?.length ?? 0, cache: window.AB_CACHE };
+  } else {
+    console.log('Using new API-based overlay system');
+    console.log('Chart state:', window.__chartState);
+    return { len: arr?.length ?? 0, overlay: 'API-based' };
+  }
 };
 
 // Probe a specific ISO time you care about (e.g. the vertical line)
@@ -5277,18 +5306,20 @@ window.AB_probeISO = function(iso) {
   }
 };
 
-// =========================
-// RUNTIME HOOKS
-// =========================
-// When minute data is loaded or symbol/exchange changes, keep rawData mirrored
-// and (re)compute the A/B cache once.
-(function waitForMinuteData(){
-  const mins = getMinuteArrayForAB();
-  if (mins && mins.length) {
-    ensureABCacheUpToDate();
-    installABMarkerInterceptor(); // ensures markers include cached A/B on any timeframe
-    return;
-  }
-  setTimeout(waitForMinuteData, 400);
-})();
+if (window.FE_USE_LEGACY_AB) {
+  // =========================
+  // RUNTIME HOOKS
+  // =========================
+  // When minute data is loaded or symbol/exchange changes, keep rawData mirrored
+  // and (re)compute the A/B cache once.
+  (function waitForMinuteData(){
+    const mins = getMinuteArrayForAB();
+    if (mins && mins.length) {
+      ensureABCacheUpToDate();
+      installABMarkerInterceptor(); // ensures markers include cached A/B on any timeframe
+      return;
+    }
+    setTimeout(waitForMinuteData, 400);
+  })();
+}
 
