@@ -34,62 +34,48 @@
     }));
   }
 
-  // Ensure dedicated invisible series for A and B markers so both can render on the same bar
-  function getOrCreateOverlaySeries(key){
-    const chart = window.chart || null;
-    if (!chart) return null;
-    const storeKey = key === 'A' ? '__overlaySeriesA' : '__overlaySeriesB';
-    if (window[storeKey]) return window[storeKey];
-    try {
-      const priceScaleId = key === 'A' ? 'overlayA' : 'overlayB';
-      const s = chart.addLineSeries({
-        color: 'transparent',
-        lineWidth: 0,
-        priceScaleId,
-        lastValueVisible: false,
-        priceLineVisible: false,
-        crosshairMarkerVisible: false,
-      });
-      try {
-        chart.priceScale(priceScaleId).applyOptions({
-          visible: false,
-          scaleMargins: { top: 0.02, bottom: 0.02 },
-          mode: LightweightCharts.PriceScaleMode.Normal,
-          autoScale: true,
-        });
-      } catch(_) {}
-      window[storeKey] = s;
-      return s;
-    } catch (e) {
-      log('failed to create overlay series', e);
-      return null;
-    }
-  }
-
+  // Place markers directly on the price series (so they are anchored to candles)
   function setSeriesMarkers(markersA, markersB){
-    const sA = getOrCreateOverlaySeries('A');
-    const sB = getOrCreateOverlaySeries('B');
-    let ok = false;
-    try { if (sA && typeof sA.setMarkers === 'function') { sA.setMarkers(markersA || []); ok = true; } } catch(_) {}
-    try { if (sB && typeof sB.setMarkers === 'function') { sB.setMarkers(markersB || []); ok = true; } } catch(_) {}
-    if (ok) return true;
-    // Fallback: single-series (might drop duplicates on same bar)
-    const s = window.__priceSeries || window.seriesPrice || window.priceSeries || (window.series && window.series.price) || null;
-    if (s && typeof s.setMarkers === 'function') {
-      const merged = ([]).concat(markersA || [], markersB || []);
-      s.setMarkers(merged);
-      try { s._markers = merged; } catch(_) {}
-      return true;
+    const s =
+      window.__priceSeries ||
+      window.seriesPrice ||
+      window.priceSeries ||
+      (window.series && window.series.price) || null;
+    if (!s || typeof s.setMarkers !== 'function') {
+      log('price series not ready');
+      return false;
     }
-    log('no series available to set markers');
-    return false;
-  }
 
-  function setOverlaySeriesData(series, times, baseValue){
-    if (!series || typeof series.setData !== 'function') return;
-    if (!Array.isArray(times) || times.length === 0) { try { series.setData([]); } catch(_){} return; }
-    const data = times.map(t => ({ time: Number(t), value: baseValue }));
-    try { series.setData(data); } catch(_) {}
+    // Merge markers, and if A and B share the same time, create a single combined marker
+    const byTime = new Map();
+    for (const m of (markersA || [])) byTime.set(m.time, { A: m, B: null });
+    for (const m of (markersB || [])) {
+      const cur = byTime.get(m.time);
+      if (cur) cur.B = m; else byTime.set(m.time, { A: null, B: m });
+    }
+    const merged = [];
+    for (const [t, pair] of byTime.entries()) {
+      if (pair.A && pair.B) {
+        // Combined marker: show both A and B on the same bar
+        merged.push({
+          time: t,
+          position: 'inBar',
+          shape: 'text',
+          color: '#e0e7ff', // neutral light to contrast both
+          text: 'A·B',
+        });
+      } else if (pair.A) {
+        merged.push(pair.A);
+      } else if (pair.B) {
+        merged.push(pair.B);
+      }
+    }
+    // Sort by time just in case
+    merged.sort((a,b) => a.time - b.time);
+
+    s.setMarkers(merged);
+    try { s._markers = merged; } catch(_) {}
+    return true;
   }
 
   async function drawOnce(){
@@ -103,11 +89,6 @@
     const markersB = ENABLED.B ? toMarkers(data.B, STYLE.B) : [];
 
     const ok = setSeriesMarkers(markersA, markersB);
-    // Ensure overlay series have anchor data at marker times so markers are visible
-    const sA = getOrCreateOverlaySeries('A');
-    const sB = getOrCreateOverlaySeries('B');
-    setOverlaySeriesData(sA, markersA.map(m => m.time), 1);
-    setOverlaySeriesData(sB, markersB.map(m => m.time), 2);
     log("markers set:", ok ? (markersA.length + markersB.length) : 0);
   }
 
