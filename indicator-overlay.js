@@ -34,19 +34,42 @@
     }));
   }
 
-  function setSeriesMarkers(markers){
+  function setSeriesMarkersAnchored(markersA, markersB){
     const s =
       window.__priceSeries ||
       window.seriesPrice ||
       window.priceSeries ||
       (window.series && window.series.price) || null;
-    if (s && typeof s.setMarkers === "function") {
-      s.setMarkers(markers);
-      try { s._markers = markers; } catch(_) {}
-      return true;
+    if (!s || typeof s.setMarkers !== 'function') {
+      log('price series not ready');
+      return false;
     }
-    log("price series not ready");
-    return false;
+    const byTime = new Map();
+    for (const m of (markersA || [])) byTime.set(m.time, { A: m, B: null });
+    for (const m of (markersB || [])) {
+      const cur = byTime.get(m.time);
+      if (cur) cur.B = m; else byTime.set(m.time, { A: null, B: m });
+    }
+    const merged = [];
+    for (const [t, pair] of byTime.entries()) {
+      if (pair.A && pair.B) {
+        merged.push({
+          time: t,
+          position: 'inBar',
+          shape: 'text',
+          color: '#e0e7ff',
+          text: 'A·B',
+        });
+      } else if (pair.A) {
+        merged.push(pair.A);
+      } else if (pair.B) {
+        merged.push(pair.B);
+      }
+    }
+    merged.sort((a,b) => a.time - b.time);
+    s.setMarkers(merged);
+    try { s._markers = merged; } catch(_) {}
+    return true;
   }
 
   async function drawOnce(){
@@ -56,12 +79,10 @@
     try { data = await fetchIndicators(ex, sym); }
     catch(e){ log("fetch failed:", e); return; }
 
-    let out = [];
-    if (ENABLED.A) out = out.concat(toMarkers(data.A, STYLE.A));
-    if (ENABLED.B) out = out.concat(toMarkers(data.B, STYLE.B));
-
-    const ok = setSeriesMarkers(out);
-    log("markers set:", ok ? out.length : 0);
+    const markersA = ENABLED.A ? toMarkers(data.A, STYLE.A) : [];
+    const markersB = ENABLED.B ? toMarkers(data.B, STYLE.B) : [];
+    const ok = setSeriesMarkersAnchored(markersA, markersB);
+    log("markers set:", ok ? (markersA.length + markersB.length) : 0);
   }
 
   window.__IndicatorOverlay = {
