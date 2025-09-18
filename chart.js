@@ -857,9 +857,9 @@ function createVolumeSeries() {
   try {
     // CRITICAL: Use main chart but with separate 'volume' price scale
     volumeBidsSeries = chart.addAreaSeries({
-      topColor: 'rgba(255, 215, 0, 0.4)', // Gold for bids with subtle opacity
-      bottomColor: 'rgba(255, 215, 0, 0.1)',
-      lineColor: '#FFD700', // Gold line
+      topColor: 'rgba(0, 200, 83, 0.4)', // Green for bids with subtle opacity
+      bottomColor: 'rgba(0, 200, 83, 0.1)',
+      lineColor: '#00C853', // Green line
       lineWidth: 1.0, // Thin, elegant lines
       priceScaleId: 'volume', // CRITICAL: Separate price scale for volume
       priceFormat: { type: 'volume' },
@@ -868,9 +868,9 @@ function createVolumeSeries() {
     });
 
     volumeAsksSeries = chart.addAreaSeries({
-      topColor: 'rgba(255, 255, 255, 0.4)', // White for asks with subtle opacity
-      bottomColor: 'rgba(255, 255, 255, 0.1)', 
-      lineColor: '#FFFFFF', // White line
+      topColor: 'rgba(244, 67, 54, 0.4)', // Red for asks with subtle opacity
+      bottomColor: 'rgba(244, 67, 54, 0.1)', 
+      lineColor: '#F44336', // Red line
       lineWidth: 1.0, // Thin, elegant lines
       priceScaleId: 'volume', // CRITICAL: Same volume price scale
       priceFormat: { type: 'volume' },
@@ -924,9 +924,9 @@ function createIndicator2Series() {
   try {
     // Create two series for bids and asks like volume but averaged by timeframe
     indicator2BidsSeries = chart.addAreaSeries({
-      topColor: 'rgba(255, 215, 0, 0.3)', // Gold for bids with less opacity
-      bottomColor: 'rgba(255, 215, 0, 0.05)',
-      lineColor: '#FFD700',
+      topColor: 'rgba(0, 200, 83, 0.3)', // Green for bids with less opacity
+      bottomColor: 'rgba(0, 200, 83, 0.05)',
+      lineColor: '#00C853',
       lineWidth: 1.0,
       priceScaleId: 'indicator2',
       priceFormat: { type: 'volume' },
@@ -937,9 +937,9 @@ function createIndicator2Series() {
     });
 
     indicator2AsksSeries = chart.addAreaSeries({
-      topColor: 'rgba(255, 255, 255, 0.3)', // White for asks with less opacity
-      bottomColor: 'rgba(255, 255, 255, 0.05)',
-      lineColor: '#FFFFFF',
+      topColor: 'rgba(244, 67, 54, 0.3)', // Red for asks with less opacity
+      bottomColor: 'rgba(244, 67, 54, 0.05)',
+      lineColor: '#F44336',
       lineWidth: 1.0,
       priceScaleId: 'indicator2',
       priceFormat: { type: 'volume' },
