@@ -41,14 +41,23 @@
     const storeKey = key === 'A' ? '__overlaySeriesA' : '__overlaySeriesB';
     if (window[storeKey]) return window[storeKey];
     try {
+      const priceScaleId = key === 'A' ? 'overlayA' : 'overlayB';
       const s = chart.addLineSeries({
         color: 'transparent',
         lineWidth: 0,
-        priceScaleId: 'right',
+        priceScaleId,
         lastValueVisible: false,
         priceLineVisible: false,
         crosshairMarkerVisible: false,
       });
+      try {
+        chart.priceScale(priceScaleId).applyOptions({
+          visible: false,
+          scaleMargins: { top: 0.02, bottom: 0.02 },
+          mode: LightweightCharts.PriceScaleMode.Normal,
+          autoScale: true,
+        });
+      } catch(_) {}
       window[storeKey] = s;
       return s;
     } catch (e) {
@@ -76,6 +85,13 @@
     return false;
   }
 
+  function setOverlaySeriesData(series, times, baseValue){
+    if (!series || typeof series.setData !== 'function') return;
+    if (!Array.isArray(times) || times.length === 0) { try { series.setData([]); } catch(_){} return; }
+    const data = times.map(t => ({ time: Number(t), value: baseValue }));
+    try { series.setData(data); } catch(_) {}
+  }
+
   async function drawOnce(){
     const { ex, sym } = getChartState();
     if (!ex || !sym) { log("missing chart state"); return; }
@@ -87,6 +103,11 @@
     const markersB = ENABLED.B ? toMarkers(data.B, STYLE.B) : [];
 
     const ok = setSeriesMarkers(markersA, markersB);
+    // Ensure overlay series have anchor data at marker times so markers are visible
+    const sA = getOrCreateOverlaySeries('A');
+    const sB = getOrCreateOverlaySeries('B');
+    setOverlaySeriesData(sA, markersA.map(m => m.time), 1);
+    setOverlaySeriesData(sB, markersB.map(m => m.time), 2);
     log("markers set:", ok ? (markersA.length + markersB.length) : 0);
   }
 
