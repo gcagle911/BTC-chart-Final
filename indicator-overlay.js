@@ -34,18 +34,45 @@
     }));
   }
 
-  function setSeriesMarkers(markers){
-    const s =
-      window.__priceSeries ||
-      window.seriesPrice ||
-      window.priceSeries ||
-      (window.series && window.series.price) || null;
-    if (s && typeof s.setMarkers === "function") {
-      s.setMarkers(markers);
-      try { s._markers = markers; } catch(_) {}
+  // Ensure dedicated invisible series for A and B markers so both can render on the same bar
+  function getOrCreateOverlaySeries(key){
+    const chart = window.chart || null;
+    if (!chart) return null;
+    const storeKey = key === 'A' ? '__overlaySeriesA' : '__overlaySeriesB';
+    if (window[storeKey]) return window[storeKey];
+    try {
+      const s = chart.addLineSeries({
+        color: 'transparent',
+        lineWidth: 0,
+        priceScaleId: 'right',
+        lastValueVisible: false,
+        priceLineVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      window[storeKey] = s;
+      return s;
+    } catch (e) {
+      log('failed to create overlay series', e);
+      return null;
+    }
+  }
+
+  function setSeriesMarkers(markersA, markersB){
+    const sA = getOrCreateOverlaySeries('A');
+    const sB = getOrCreateOverlaySeries('B');
+    let ok = false;
+    try { if (sA && typeof sA.setMarkers === 'function') { sA.setMarkers(markersA || []); ok = true; } } catch(_) {}
+    try { if (sB && typeof sB.setMarkers === 'function') { sB.setMarkers(markersB || []); ok = true; } } catch(_) {}
+    if (ok) return true;
+    // Fallback: single-series (might drop duplicates on same bar)
+    const s = window.__priceSeries || window.seriesPrice || window.priceSeries || (window.series && window.series.price) || null;
+    if (s && typeof s.setMarkers === 'function') {
+      const merged = ([]).concat(markersA || [], markersB || []);
+      s.setMarkers(merged);
+      try { s._markers = merged; } catch(_) {}
       return true;
     }
-    log("price series not ready");
+    log('no series available to set markers');
     return false;
   }
 
@@ -56,12 +83,11 @@
     try { data = await fetchIndicators(ex, sym); }
     catch(e){ log("fetch failed:", e); return; }
 
-    let out = [];
-    if (ENABLED.A) out = out.concat(toMarkers(data.A, STYLE.A));
-    if (ENABLED.B) out = out.concat(toMarkers(data.B, STYLE.B));
+    const markersA = ENABLED.A ? toMarkers(data.A, STYLE.A) : [];
+    const markersB = ENABLED.B ? toMarkers(data.B, STYLE.B) : [];
 
-    const ok = setSeriesMarkers(out);
-    log("markers set:", ok ? out.length : 0);
+    const ok = setSeriesMarkers(markersA, markersB);
+    log("markers set:", ok ? (markersA.length + markersB.length) : 0);
   }
 
   window.__IndicatorOverlay = {
